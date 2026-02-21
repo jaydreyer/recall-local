@@ -1,0 +1,7 @@
+trafilatura
+qdrant-client
+httpx
+python-dotenv
+pdfplumber
+tiktoken
+rich

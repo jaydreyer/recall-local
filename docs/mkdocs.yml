@@ -1,0 +1,11 @@
+site_name: Recall.local Artifacts
+theme:
+  name: material
+  palette:
+    primary: indigo
+nav:
+  - Home: index.md
+  - Artifacts:
+      - Meetings: artifacts/meetings/index.md
+      - Evaluations: artifacts/evals/index.md
+      - Ingestion: artifacts/ingestion/index.md
