@@ -11,6 +11,10 @@ from pathlib import Path
 import httpx
 from dotenv import load_dotenv
 
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 
 def check(name: str, fn):
     try:
@@ -66,7 +70,7 @@ def main() -> int:
     checks.append(check("SQLite", _sqlite))
 
     def _llm_client() -> str:
-        from scripts import llm_client  # type: ignore
+        import scripts.llm_client as llm_client  # type: ignore
 
         return f"provider={llm_client.PROVIDER}"
 

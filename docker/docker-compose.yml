@@ -1,8 +1,6 @@
 # Recall.local - Additional Services (Approach B)
 # Existing Ollama/Qdrant/n8n/Open WebUI services stay as-is.
 
-version: "3.8"
-
 services:
   mkdocs:
     image: squidfunk/mkdocs-material:latest
