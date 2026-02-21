@@ -1,0 +1,23 @@
+# Data files (don't commit actual documents)
+data/incoming/*
+data/processed/*
+data/artifacts/*
+!data/**/.gitkeep
+
+# Environment files with secrets
+docker/.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# n8n local data (runtime state, not workflow exports)
+n8n/data/
+
+# SQLite databases
+*.db
+*.sqlite
+
+# OS
+.DS_Store
