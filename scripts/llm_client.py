@@ -138,7 +138,7 @@ def _openai_generate(prompt: str, system: str, temperature: float, max_tokens: i
 
 def _gemini_generate(prompt: str, system: str, temperature: float, max_tokens: int) -> str:
     api_key = _require_env("GEMINI_API_KEY")
-    model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
     text = prompt if not system else f"System instructions:\n{system}\n\nUser prompt:\n{prompt}"
     payload = {
@@ -151,7 +151,7 @@ def _gemini_generate(prompt: str, system: str, temperature: float, max_tokens: i
 
     response = httpx.post(
         f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-        params={"key": api_key},
+        headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
         json=payload,
         timeout=120,
     )

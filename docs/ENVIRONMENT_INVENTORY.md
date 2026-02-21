@@ -59,7 +59,11 @@ Last updated: 2026-02-21
   - `ANTHROPIC_API_KEY`
   - `OPENAI_API_KEY`
   - `GEMINI_API_KEY`
-- Current status: placeholders still present (cloud fallback not yet validated).
+- Validation status on `ai-lab`:
+  - Anthropic: pass
+  - OpenAI: pass
+  - Gemini: pass after model update to `gemini-2.5-flash`
+- `.env.example` default Gemini model: `gemini-2.5-flash`
 
 ## Skills Baseline (local Codex)
 
@@ -72,4 +76,3 @@ Last updated: 2026-02-21
 ## Update Rule
 
 Whenever services, ports, paths, provider config, or deployment topology changes, update this file in the same commit.
-

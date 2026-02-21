@@ -1,5 +1,32 @@
 # Recall.local Implementation Log
 
+## 2026-02-21 - Cloud provider validation and Gemini model update
+
+### What was executed
+
+- Ran provider checks on `ai-lab` (`/home/jaydreyer/recall-local`):
+  - `RECALL_LLM_PROVIDER=anthropic python3 scripts/llm_client.py`
+  - `RECALL_LLM_PROVIDER=openai python3 scripts/llm_client.py`
+  - `RECALL_LLM_PROVIDER=gemini python3 scripts/llm_client.py`
+
+### Results
+
+- Anthropic: pass
+- OpenAI: pass
+- Gemini: initial fail with `404 Not Found` for `gemini-2.0-flash`
+
+### Root cause and fix
+
+- Gemini API response indicated `models/gemini-2.0-flash` is unavailable for new users.
+- Updated default Gemini model to a currently available model:
+  - `GEMINI_MODEL=gemini-2.5-flash`
+- Updated client request to send Gemini API key in `x-goog-api-key` header instead of query string to reduce risk of key leakage in exception URLs.
+
+### Files changed
+
+- `docker/.env.example`
+- `scripts/llm_client.py`
+
 ## 2026-02-21 - Project bootstrap, repo setup, and Phase 0 baseline
 
 ### Scope
@@ -82,4 +109,3 @@
 - Add real API keys for Anthropic/OpenAI/Gemini in server `docker/.env`.
 - Run provider validation for cloud fallback.
 - Optional: install `python3-venv` on server later to use isolated `.venv` path instead of user-site fallback.
-
