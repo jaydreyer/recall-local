@@ -1,5 +1,21 @@
 # Recall.local Implementation Log
 
+## 2026-02-22 - Published standalone context-kickoff kit repository
+
+### Goal
+
+- Make the context-kickoff sharing package available as a standalone public repository.
+
+### Outcome
+
+- Created and published:
+  - [https://github.com/jaydreyer/codex-context-kickoff-kit](https://github.com/jaydreyer/codex-context-kickoff-kit)
+- Repository contents include:
+  - root `README.md`
+  - `CONTEXT_KICKOFF_SHARING_GUIDE.md`
+  - `LICENSE` (MIT)
+  - `context-kickoff/` skill folder with script, references, and UI metadata
+
 ## 2026-02-22 - Context-kickoff sharing kit prepared
 
 ### Goal
