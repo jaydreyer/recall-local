@@ -1,5 +1,24 @@
 # Recall.local Implementation Log
 
+## 2026-02-22 - Linked companion repos and aligned public metadata
+
+### Goal
+
+- Tie `codex-context-kickoff-kit` and `codex-project-startup-kit` together for discoverability and combined usage.
+
+### Outcome
+
+- Updated README in both repos with:
+  - `Companion Repo` section (reciprocal links)
+  - `Use Together` workflow steps
+- Updated GitHub About descriptions in both repos to include companion references.
+- Added aligned topic tags across both repos (codex/context-engineering/workflow/docs/productivity set).
+
+### Repo links
+
+- [https://github.com/jaydreyer/codex-context-kickoff-kit](https://github.com/jaydreyer/codex-context-kickoff-kit)
+- [https://github.com/jaydreyer/codex-project-startup-kit](https://github.com/jaydreyer/codex-project-startup-kit)
+
 ## 2026-02-22 - Published standalone project startup kit repository
 
 ### Goal
