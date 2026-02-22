@@ -1,5 +1,37 @@
 # Recall.local Implementation Log
 
+## 2026-02-22 - Unified ingestion webhook verified on n8n
+
+### Goal
+
+- Satisfy Phase 0 criterion: unified ingestion webhook accepts a test payload.
+
+### Actions performed on `ai-lab`
+
+- Verified that `POST /webhook/recall-ingest` initially returned 404 because the webhook route was not registered.
+- Imported a minimal n8n workflow with:
+  - Webhook trigger (`POST`, path `recall-ingest`)
+  - Code node response/ack payload
+- Activated/published workflow and restarted n8n to load production webhook routes.
+- Re-ran webhook test payload against local n8n endpoint.
+
+### Result
+
+- Webhook endpoint now responds successfully:
+  - Endpoint: `http://localhost:5678/webhook/recall-ingest`
+  - Result: `HTTP 200`
+  - Sample response body: JSON ack with `received=true`
+
+### Notes
+
+- n8n instance is configured with:
+  - `N8N_PATH=/n8n/`
+  - `N8N_BASIC_AUTH_ACTIVE=true`
+- Production webhook registration is on `/webhook/...` for local direct calls.
+- Two Recall webhook workflows exist in DB history:
+  - `aOyMgFwit2mS82pP` (`Recall Ingest Webhook`) inactive
+  - `qKMhxYULZoPwXnDI` (`Recall Ingest Webhook v2`) active
+
 ## 2026-02-21 - Cloud provider validation and Gemini model update
 
 ### What was executed

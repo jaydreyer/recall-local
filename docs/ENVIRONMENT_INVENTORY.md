@@ -1,6 +1,6 @@
 # Recall.local Environment Inventory
 
-Last updated: 2026-02-21
+Last updated: 2026-02-22
 
 ## Decision Snapshot
 
@@ -64,6 +64,18 @@ Last updated: 2026-02-21
   - OpenAI: pass
   - Gemini: pass after model update to `gemini-2.5-flash`
 - `.env.example` default Gemini model: `gemini-2.5-flash`
+
+## n8n Ingestion Webhook
+
+- Unified webhook endpoint (local on server): `http://localhost:5678/webhook/recall-ingest`
+- Validation status: `HTTP 200` for test payload (verified 2026-02-22)
+- Backing workflow:
+  - Active: `qKMhxYULZoPwXnDI` (`Recall Ingest Webhook v2`)
+  - Inactive legacy: `aOyMgFwit2mS82pP` (`Recall Ingest Webhook`)
+
+## Phase Status
+
+- Phase 0: complete (all baseline checks and ingestion webhook validation done)
 
 ## Skills Baseline (local Codex)
 
