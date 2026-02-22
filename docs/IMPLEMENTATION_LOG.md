@@ -1,5 +1,22 @@
 # Recall.local Implementation Log
 
+## 2026-02-22 - Published standalone project startup kit repository
+
+### Goal
+
+- Open-source the reusable project startup pattern (separate from context-kickoff skill package).
+
+### Outcome
+
+- Created and published:
+  - [https://github.com/jaydreyer/codex-project-startup-kit](https://github.com/jaydreyer/codex-project-startup-kit)
+- Repository contents include:
+  - `PROJECT_BOOTSTRAP_PROMPT.md`
+  - `DAILY_KICKOFF_PROMPT.md`
+  - canonical docs templates in `templates/docs/`
+  - scaffold script `scripts/init-docs.sh`
+  - `README.md` and `LICENSE`
+
 ## 2026-02-22 - Published standalone context-kickoff kit repository
 
 ### Goal
