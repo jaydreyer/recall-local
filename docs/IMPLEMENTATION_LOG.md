@@ -1,5 +1,29 @@
 # Recall.local Implementation Log
 
+## 2026-02-22 - Context-kickoff sharing kit prepared
+
+### Goal
+
+- Package the context-kickoff pattern so it can be shared and reused across other projects/users.
+
+### What was added
+
+- Share guide:
+  - `docs/CONTEXT_KICKOFF_SHARING_GUIDE.md`
+- Shareable kit folder:
+  - `docs/context-kickoff-kit/README.md`
+  - `docs/context-kickoff-kit/context-kickoff/SKILL.md`
+  - `docs/context-kickoff-kit/context-kickoff/agents/openai.yaml`
+  - `docs/context-kickoff-kit/context-kickoff/references/file-priority.md`
+  - `docs/context-kickoff-kit/context-kickoff/scripts/discover_context.sh`
+- Docs index updated:
+  - `docs/README.md`
+
+### Notes
+
+- The packaged skill removes user-specific absolute paths and uses `CODEX_HOME` / `~/.codex` conventions.
+- The guide includes copy-paste prompts, before/after framing, troubleshooting, and redaction guidance for public sharing.
+
 ## 2026-02-22 - Unified ingestion webhook verified on n8n
 
 ### Goal

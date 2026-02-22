@@ -1,0 +1,4 @@
+interface:
+  display_name: "Context Kickoff"
+  short_description: "Bootstrap project context for new Codex chats"
+  default_prompt: "Summarize current project state, constraints, blockers, and next steps from canonical docs and live checks."

@@ -11,6 +11,11 @@ This folder is the source of truth for what has been planned, implemented, and c
 
 - `IMPLEMENTATION_LOG.md`: Chronological record of what was changed, when, and why.
 - `ENVIRONMENT_INVENTORY.md`: Current state snapshot (services, ports, models, setup decisions).
+- `CONTEXT_KICKOFF_SHARING_GUIDE.md`: Shareable guide for adopting the context-kickoff pattern across projects.
+
+## Shareable Kit
+
+- `context-kickoff-kit/`: Public-ready starter package containing a sanitized `context-kickoff` skill folder and install notes.
 
 ## Documentation Policy
 
@@ -19,4 +24,3 @@ For every meaningful setup or implementation change:
 1. Add a new dated entry in `IMPLEMENTATION_LOG.md`.
 2. Update `ENVIRONMENT_INVENTORY.md` if the live state changed.
 3. Include exact file paths, hostnames, ports, and commands where useful.
-
