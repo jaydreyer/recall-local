@@ -1,0 +1,57 @@
+{
+  "name": "Recall Phase1B - Gmail Forward Ingest",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "mailbox": "INBOX",
+        "downloadAttachments": true,
+        "postProcessAction": "nothing",
+        "options": {}
+      },
+      "id": "node-email-trigger",
+      "name": "Email Trigger (IMAP)",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2,
+      "position": [
+        280,
+        280
+      ],
+      "notesInFlow": true,
+      "notes": "Configure IMAP credentials for the Recall ingest inbox before activating."
+    },
+    {
+      "parameters": {
+        "command": "python3 /home/jaydreyer/recall-local/scripts/phase1/ingest_channel_payload.py --channel gmail-forward --payload-base64 \"={{ Buffer.from(JSON.stringify($json)).toString('base64') }}\""
+      },
+      "id": "node-exec-ingest-gmail",
+      "name": "Execute Ingest Gmail",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        600,
+        280
+      ]
+    }
+  ],
+  "connections": {
+    "Email Trigger (IMAP)": {
+      "main": [
+        [
+          {
+            "node": "Execute Ingest Gmail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

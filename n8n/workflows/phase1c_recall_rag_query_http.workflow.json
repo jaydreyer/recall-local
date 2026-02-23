@@ -1,0 +1,60 @@
+{
+  "name": "Recall Phase1C - Cited RAG Query (HTTP Bridge)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "recall-query",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "node-webhook-recall-query",
+      "name": "Webhook Recall Query",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        280,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://100.116.103.78:8090/query/rag",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.body }}",
+        "options": {}
+      },
+      "id": "node-http-rag-query",
+      "name": "HTTP RAG Query",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        540,
+        260
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Recall Query": {
+      "main": [
+        [
+          {
+            "node": "HTTP RAG Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

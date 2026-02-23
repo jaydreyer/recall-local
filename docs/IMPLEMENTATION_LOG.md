@@ -1,5 +1,355 @@
 # Recall.local Implementation Log
 
+## 2026-02-23 - Workflow 02 IDK eval gate green on live webhook
+
+### Outcome
+
+- Verified live webhook end-to-end pass after sync/redeploy:
+  - run_id: `0ee745eada024070815f249d85d3337e`
+  - backend: `webhook`
+  - webhook URL: `http://100.116.103.78:5678/webhook/recall-query`
+  - result: `15/15 PASS`
+  - unanswerable: `5/5 PASS`
+  - artifact: `/home/jaydreyer/recall-local/data/artifacts/evals/20260223T000357Z_0ee745eada024070815f249d85d3337e.md`
+
+### Notes
+
+- This confirms the unanswerable guardrail hardening for Workflow 02 is effective in production path (n8n webhook + HTTP bridge).
+- The earlier `0/15` run was transient during sync/restart and is superseded by this run.
+
+## 2026-02-22 - Workflow 02 unanswerable hardening (IDK gate)
+
+### Goal
+
+- Prevent Workflow 02 from failing hard on unanswerable prompts and enforce explicit abstention for low-confidence output.
+
+### What was changed
+
+- `scripts/phase1/rag_query.py`:
+  - Added canonical abstention constants and phrase matching.
+  - Added low-confidence normalization that rewrites non-abstaining low-confidence answers to explicit abstention.
+  - Added citation backfill from `sources[]` when needed.
+  - Changed validation-failure path to return structured fallback instead of raising.
+  - Added fallback audit fields so artifacts record why fallback logic was used.
+- `scripts/eval/run_eval.py`:
+  - Expanded unanswerable phrase patterns (`not explicitly stated` included).
+  - Updated unanswerable scoring to focus on abstention behavior even if citations are empty.
+
+### Verification run in this thread
+
+- Local runtime checks (monkeypatched retrieval/LLM) confirmed:
+  - low-confidence direct answers are normalized to explicit abstention,
+  - citation-empty abstention no longer crashes the runner.
+- Webhook eval against ai-lab still reflects pre-sync behavior (`10/15`), which indicates ai-lab is running older script versions.
+
+### Deployment note
+
+- Sync updated scripts to ai-lab, recreate bridge, then rerun eval:
+  - `docker compose -f /home/jaydreyer/recall-local/docker/phase1b-ingest-bridge.compose.yml up -d --force-recreate`
+  - `python3 /home/jaydreyer/recall-local/scripts/eval/run_eval.py --backend webhook --webhook-url http://100.116.103.78:5678/webhook/recall-query`
+
+## 2026-02-22 - Added \"I Don't Know\" eval bank (unanswerable gate)
+
+### Goal
+
+- Add explicit hallucination-resistance checks by introducing trick/unanswerable eval cases that require abstention.
+
+### What was added
+
+- Eval harness logic updates:
+  - `scripts/eval/run_eval.py` now supports case flag `expect_unanswerable` and reports:
+    - `unanswerable_passed`
+    - `unanswerable_total`
+  - Unanswerable case pass criteria:
+    - explicit uncertainty/refusal language in answer
+    - `confidence_level=low`
+    - citation pair validity still enforced
+- Eval case bank expanded:
+  - `scripts/eval/eval_cases.json` now includes 5 trick/unanswerable questions.
+- Prompt hardening updates:
+  - `prompts/workflow_02_rag_answer.md`
+  - `prompts/workflow_02_rag_answer_retry.md`
+  - both now explicitly instruct abstention when context is insufficient.
+
+### Current result snapshot
+
+- Expanded eval run:
+  - run_id: `acc53692280540cfb02d1476d89119ef`
+  - result: `10/15 PASS`
+  - unanswerable: `0/5 PASS`
+  - artifact: `data/artifacts/evals/20260222T234255Z_acc53692280540cfb02d1476d89119ef.md`
+- Interpretation:
+  - The new gate is working as intended (it catches hallucination/refusal weaknesses).
+  - Next hardening target is improving Workflow 02 behavior on unanswerable questions.
+
+## 2026-02-22 - Phase 1D completed: eval gate green
+
+### Outcome
+
+- Implemented and ran eval harness against live Workflow 02 webhook with persisted results and Markdown artifact output.
+- Full suite passed:
+  - run_id: `310287389df24e58aa1899a859ad2dcf`
+  - backend: `webhook`
+  - webhook URL: `http://100.116.103.78:5678/webhook/recall-query`
+  - result: `10/10 PASS`
+- Generated eval artifact:
+  - `data/artifacts/evals/20260222T233323Z_310287389df24e58aa1899a859ad2dcf.md`
+
+### What was validated
+
+- Citation presence per case.
+- Citation/doc-chunk pair validity against returned `sources[]`.
+- Latency threshold enforcement with run-level pass/fail exit behavior.
+- SQLite persistence to `eval_results`.
+
+## 2026-02-22 - Phase 1D kickoff: eval harness + execution-first runbook
+
+### Goal
+
+- Start Phase 1D by shipping a runnable eval harness for Workflow 02 with persistence, artifact output, and a strict troubleshooting protocol.
+
+### What was added
+
+- Eval harness and default suite:
+  - `scripts/eval/run_eval.py`
+  - `scripts/eval/eval_cases.json`
+- Eval runbook:
+  - `docs/Recall_local_Phase1D_Eval_Guide.md`
+- Phase guide + docs index updates:
+  - `docs/Recall_local_Phase1_Guide.md` marks `1D` in progress and lists 1D kickoff deliverables.
+  - `docs/README.md` links to the 1D eval guide.
+
+### Notes
+
+- Eval checks enforce citation presence, citation/source pair validity, and latency thresholds.
+- Webhook-mode troubleshooting order is now documented as execution-first (n8n Executions -> failed node details -> bridge health -> webhook retest).
+
+## 2026-02-22 - Workflow 02 stabilized: execution-first n8n debugging notes
+
+### Outcome
+
+- Confirmed production Workflow 02 webhook is live with cited response payload:
+  - `POST http://100.116.103.78:5678/webhook/recall-query` -> `HTTP 200` with `workflow_02_rag_query` result.
+- Confirmed bridge endpoint is live:
+  - `POST http://100.116.103.78:8090/query/rag?dry_run=true` -> `HTTP 200`.
+
+### Key lessons captured for next thread
+
+- Use n8n `Executions` as primary diagnostic source; failed node + stack trace is the fastest path to root cause.
+- In this n8n deployment, `Execute Command` cannot run Workflow 02 Python scripts (`python3` missing in container image).
+- Workflow 02 should use HTTP bridge node with payload expression `={{ $json.body }}`.
+- Distinguish host scope for connectivity checks:
+  - MacBook to ai-lab: `http://100.116.103.78:<port>`
+  - ai-lab shell: `http://localhost:<port>`
+
+## 2026-02-22 - Workflow 02 n8n deployment assets prepared
+
+### Goal
+
+- Ship import-ready n8n workflow files for Workflow 02 so `/webhook/recall-query` can be activated immediately in authenticated n8n.
+
+### What was added
+
+- Workflow 02 n8n exports:
+  - `n8n/workflows/phase1c_recall_rag_query.workflow.json`
+  - `n8n/workflows/phase1c_recall_rag_query_http.workflow.json`
+- Workflow 02 runbook:
+  - `n8n/workflows/PHASE1C_WORKFLOW02_WIRING.md`
+- HTTP bridge update (to support Workflow 02 requests):
+  - `scripts/phase1/ingest_bridge_api.py` now supports `POST /query/rag`
+- RAG payload runner enhancement:
+  - `scripts/phase1/rag_from_payload.py` now accepts `--payload-base64`
+- Bridge compose env update:
+  - `docker/phase1b-ingest-bridge.compose.yml` adds `DATA_ARTIFACTS`
+
+### Notes
+
+- n8n REST API on `ai-lab` is reachable but still requires authenticated session (`401 Unauthorized` from unauthenticated calls).
+- Workflow files are ready for immediate import + activation in n8n UI.
+
+## 2026-02-22 - Phase 1C completed: live cited RAG verification
+
+### Outcome
+
+- Executed Workflow 02 against live endpoints (`Ollama 100.116.103.78:11434`, `Qdrant 100.116.103.78:6333`) and validated three demo queries with citation-safe output.
+- Confirmed citation validation enforced real retrieved pairs (`doc_id` + `chunk_id`) with no fabricated citations across runs:
+  - `e9310c04d1194383b39c7e5a68f5cbc8`
+  - `1ced94ff0d8e4e9db6630a07fe6f70d4`
+  - `a889edf87498486ab9b5923fb8acc107`
+- Verified non-dry-run execution writes run metadata and artifact output:
+  - run: `610b129b66754422996c3cb177a84973`
+  - artifact: `data/artifacts/rag/20260222T223255Z_610b129b66754422996c3cb177a84973.json`
+
+### Compatibility fix
+
+- Updated `scripts/phase1/retrieval.py` to support both legacy `qdrant-client.search(...)` and current `qdrant-client.query_points(...)` APIs.
+
+## 2026-02-22 - Phase 1C kickoff: cited RAG workflow + validation
+
+### Goal
+
+- Start Phase 1C by implementing Workflow 02 query path with retrieval, structured citation output validation, and retry behavior.
+
+### What was added
+
+- Workflow 02 retrieval + query execution scripts:
+  - `scripts/phase1/retrieval.py`
+  - `scripts/phase1/rag_query.py`
+  - `scripts/phase1/rag_from_payload.py`
+- Structured response validator:
+  - `scripts/validate_output.py`
+- Versioned prompt templates:
+  - `prompts/workflow_02_rag_answer.md`
+  - `prompts/workflow_02_rag_answer_retry.md`
+- Payload example:
+  - `n8n/workflows/payload_examples/rag_query_payload_example.json`
+- Phase guide updates:
+  - `docs/Recall_local_Phase1_Guide.md` now marks `1C` as in progress and includes 1C smoke commands/deliverables.
+
+### Notes
+
+- Workflow 02 now enforces citation pair checks against retrieved context (`doc_id` + `chunk_id`) and retries once with a stricter prompt on validation failure.
+- Phase 1C exit criteria remain open until three demo queries are validated end-to-end against live indexed data.
+
+## 2026-02-22 - Phase 1B completed
+
+### Outcome
+
+- Confirmed successful ingestion through active n8n HTTP-bridge workflows.
+- Verified webhook route and ingest response payload included a completed run.
+- Verified Qdrant point growth after final webhook ingest:
+  - `recall_docs` points: `5 -> 6`
+
+### Phase 1B exit criteria status
+
+- PDF drop searchable in `recall_docs`: complete
+- Shared URL searchable in `recall_docs`: complete
+- Forwarded email attachment searchable in `recall_docs`: complete
+
+## 2026-02-22 - Phase 1B live backend verification + workflow export files
+
+### Goal
+
+- Produce import-ready n8n workflow exports and run live backend ingestion checks for the three 1B channels.
+
+### What was added
+
+- n8n workflow JSON exports:
+  - `n8n/workflows/phase1b_recall_ingest_webhook.workflow.json`
+  - `n8n/workflows/phase1b_gmail_forward_ingest.workflow.json`
+  - `n8n/workflows/phase1b_recall_ingest_webhook_http.workflow.json`
+  - `n8n/workflows/phase1b_gmail_forward_ingest_http.workflow.json`
+- HTTP bridge fallback (for n8n environments without Execute Command):
+  - `scripts/phase1/ingest_bridge_api.py`
+  - `docker/phase1b-ingest-bridge.compose.yml`
+- Runbook update:
+  - `n8n/workflows/PHASE1B_CHANNEL_WIRING.md` now includes workflow import instructions.
+
+### Live verification performed
+
+- Target runtime endpoints:
+  - Ollama: `http://100.116.103.78:11434`
+  - Qdrant: `http://100.116.103.78:6333`
+- File/PDF ingestion (folder path) succeeded via:
+  - `scripts/phase1/ingest_incoming_once.py`
+- iOS URL-share payload ingestion succeeded via:
+  - `scripts/phase1/ingest_channel_payload.py --channel ios-share`
+- Gmail body + attachment payload ingestion succeeded via:
+  - `scripts/phase1/ingest_channel_payload.py --channel gmail-forward`
+- Qdrant collection growth observed:
+  - `recall_docs` points: `0` -> `5`
+
+### Evidence snapshot
+
+- Qdrant payloads now include channel markers:
+  - `ingestion_channel=folder-watcher` with `source_type=file` (PDF drop)
+  - `ingestion_channel=ios-shortcut` with `source_type=url`
+  - `ingestion_channel=gmail-forward` with `source_type=email` and `source_type=file` (attachment)
+- SQLite ingestion log (local test DB) includes completed rows for all three channels.
+
+### Blocker
+
+- n8n REST/editor deployment on `ai-lab` remains blocked from this session due authentication constraints (`401 Unauthorized` API and SSH auth denied).
+- Workflow JSON exports are ready for import once authenticated n8n access is available.
+
+## 2026-02-22 - Phase 1B kickoff: channel adapters and n8n wiring runbook
+
+### Goal
+
+- Start Phase 1B by wiring practical channel integration assets for webhook, iOS share, and Gmail forward inputs.
+
+### What was added
+
+- Channel normalization + ingestion runner:
+  - `scripts/phase1/channel_adapters.py`
+  - `scripts/phase1/ingest_channel_payload.py`
+- n8n channel wiring runbook with command-ready node configuration:
+  - `n8n/workflows/PHASE1B_CHANNEL_WIRING.md`
+- n8n import-ready workflow exports:
+  - `n8n/workflows/phase1b_recall_ingest_webhook.workflow.json`
+  - `n8n/workflows/phase1b_gmail_forward_ingest.workflow.json`
+- Channel payload examples:
+  - `shortcuts/ios_send_to_recall_payload_example.json`
+  - `n8n/workflows/payload_examples/gmail_forward_payload_example.json`
+
+### Notes
+
+- This is a Phase 1B kickoff increment and sets integration contracts.
+- Final 1B exit criteria still require live end-to-end indexing for PDF drop, shared URL, and Gmail attachment flows.
+
+## 2026-02-22 - Phase 1 plan broken into sub-phases
+
+### Goal
+
+- Convert Phase 1 from a broad milestone into explicit execution slices with measurable gates.
+
+### Outcome
+
+- Updated `docs/Recall_local_Phase1_Guide.md` with sub-phases:
+  - `1A` Ingestion Core (completed)
+  - `1B` Channel Wiring (in progress)
+  - `1C` Cited RAG (pending)
+  - `1D` Eval Gate (pending)
+- Added explicit Phase 1 completion criteria tied to ingestion channels, citation validity, and eval green status.
+
+## 2026-02-22 - Phase 1 started with Workflow 01 ingestion scripts
+
+### Goal
+
+- Begin Phase 1 implementation by committing the core ingestion code path required for multi-source indexing.
+
+### What was added
+
+- Phase 1 ingestion scripts:
+  - `scripts/phase1/ingestion_pipeline.py`
+  - `scripts/phase1/ingest_from_payload.py`
+  - `scripts/phase1/ingest_incoming_once.py`
+- Phase 1 kickoff guide:
+  - `docs/Recall_local_Phase1_Guide.md`
+- Docs index update:
+  - `docs/README.md`
+
+### Scope in this increment
+
+- Unified ingestion code path for:
+  - `file`
+  - `url`
+  - `text`
+  - `email` (body + optional attachment fan-out via payload entrypoint)
+  - `gdoc` (URL-backed)
+- Processing steps now implemented in code:
+  - source extraction (PDF/text file, URL via Trafilatura, inline text/email body)
+  - heading-aware token chunking
+  - embedding generation through `scripts/llm_client.py`
+  - Qdrant upsert to `recall_docs`
+  - SQLite logging to `runs` + `ingestion_log`
+  - file move from incoming to processed for file-based ingestion
+
+### Notes
+
+- This starts Phase 1 but does not complete it.
+- Workflow 02 (RAG with citations), eval harness, iOS shortcut packaging, and full Gmail automation remain pending.
+
 ## 2026-02-22 - Linked companion repos and aligned public metadata
 
 ### Goal

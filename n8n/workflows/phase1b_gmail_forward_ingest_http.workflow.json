@@ -1,0 +1,62 @@
+{
+  "name": "Recall Phase1B - Gmail Forward Ingest (HTTP Bridge)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "mailbox": "INBOX",
+        "downloadAttachments": true,
+        "postProcessAction": "nothing",
+        "options": {}
+      },
+      "id": "node-email-trigger",
+      "name": "Email Trigger (IMAP)",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2,
+      "position": [
+        280,
+        260
+      ],
+      "notesInFlow": true,
+      "notes": "Configure IMAP credentials for the Recall ingest inbox before activating."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://recall-ingest-bridge:8090/ingest/gmail-forward",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "node-http-ingest-gmail",
+      "name": "HTTP Ingest Gmail",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        560,
+        260
+      ]
+    }
+  ],
+  "connections": {
+    "Email Trigger (IMAP)": {
+      "main": [
+        [
+          {
+            "node": "HTTP Ingest Gmail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

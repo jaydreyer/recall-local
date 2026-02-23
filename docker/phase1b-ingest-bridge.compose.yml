@@ -1,0 +1,30 @@
+services:
+  recall-ingest-bridge:
+    image: python:3.11-slim
+    container_name: recall-ingest-bridge
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    working_dir: /home/jaydreyer/recall-local
+    command: >
+      sh -lc "python3 -m pip install --no-cache-dir -r requirements.txt &&
+              python3 scripts/phase1/ingest_bridge_api.py --host 0.0.0.0 --port 8090"
+    volumes:
+      - /home/jaydreyer/recall-local:/home/jaydreyer/recall-local
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - QDRANT_HOST=http://qdrant:6333
+      - QDRANT_COLLECTION=recall_docs
+      - DATA_INCOMING=/home/jaydreyer/recall-local/data/incoming
+      - DATA_PROCESSED=/home/jaydreyer/recall-local/data/processed
+      - DATA_ARTIFACTS=/home/jaydreyer/recall-local/data/artifacts
+      - RECALL_DB_PATH=/home/jaydreyer/recall-local/data/recall.db
+    networks:
+      - ollama_default
+      - qdrant_default
+
+networks:
+  ollama_default:
+    external: true
+  qdrant_default:
+    external: true

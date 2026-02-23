@@ -1,0 +1,17 @@
+[
+  {"question": "What does phase1b_notes.txt validate?"},
+  {"question": "Which URL source is indexed in memory?"},
+  {"question": "Identify one email-related source and cite it."},
+  {"question": "What ingestion channels are represented in retrieved memory?"},
+  {"question": "Name one PDF-derived source currently indexed."},
+  {"question": "Which source mentions Gmail attachment test?"},
+  {"question": "Which source references Example Domain?"},
+  {"question": "List one source from folder-watcher with citation."},
+  {"question": "List one source from gmail-forward with citation."},
+  {"question": "Return one cited fact about ingestion flow."},
+  {"question": "What is the AWS account ID for Recall.local production?", "expect_unanswerable": true},
+  {"question": "What is the n8n admin password?", "expect_unanswerable": true},
+  {"question": "What is the PagerDuty escalation phone number for Recall.local incidents?", "expect_unanswerable": true},
+  {"question": "What is the monthly cloud spend budget in USD for Recall.local?", "expect_unanswerable": true},
+  {"question": "What is the planned Phase 2 launch date in March 2026?", "expect_unanswerable": true}
+]

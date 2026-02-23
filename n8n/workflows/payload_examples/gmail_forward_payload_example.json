@@ -1,0 +1,15 @@
+{
+  "subject": "Meeting Notes Forward",
+  "from": "jay@example.com",
+  "messageId": "<abc123@example.com>",
+  "text": "Please ingest this email and the attached PDF.",
+  "attachment_paths": [
+    "/Users/jaydreyer/projects/recall-local/data/incoming/sample_meeting_notes.pdf"
+  ],
+  "metadata": {
+    "tags": [
+      "gmail-forward",
+      "phase1b"
+    ]
+  }
+}
