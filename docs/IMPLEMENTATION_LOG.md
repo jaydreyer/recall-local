@@ -1,5 +1,21 @@
 # Recall.local Implementation Log
 
+## 2026-02-23 - Phase 2 plan defined with sub-phases and gates
+
+### Outcome
+
+- Added Phase 2 execution guide with explicit sub-phases, delivery order, and phase completion gate:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase2_Guide.md`
+- Updated docs index:
+  - `/Users/jaydreyer/projects/recall-local/docs/README.md`
+
+### Sub-phases captured
+
+- `2A` Workflow 03 (Meeting -> Action Items) core implementation.
+- `2B` Ingestion expansion (Google Docs + browser bookmarklet mandatory).
+- `2C` Langfuse observability + artifact viewer polish.
+- `2D` Demo reliability gate and rehearsal.
+
 ## 2026-02-23 - Scheduled eval + regression alerting added
 
 ### Outcome
