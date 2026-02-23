@@ -17,6 +17,7 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `../n8n/workflows/payload_examples/rag_query_job_search_payload_example.json`: Sample Workflow 02 payload for `mode=job-search` with `filter_tags`.
 - `../n8n/workflows/payload_examples/rag_query_learning_payload_example.json`: Sample Workflow 02 payload for `mode=learning` with learning-focused `filter_tags`.
 - `../scripts/eval/job_search_eval_cases.json`: Dedicated job-search eval suite for shared eval harness.
+- `../scripts/eval/learning_eval_cases.json`: Dedicated learning-mode eval suite for shared eval harness.
 - `../prompts/job_search_coach.md`: Workflow 02 job-search prompt profile used by `mode=job-search`.
 - `../prompts/learning_coach.md`: Workflow 02 learning prompt profile used by `mode=learning`.
 - `../scripts/phase2/ingest_job_search_manifest.py`: Batch ingest runner for job-search corpus from one manifest file.

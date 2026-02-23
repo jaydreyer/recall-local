@@ -135,6 +135,9 @@ def embed(text: str, trace_metadata: dict[str, Any] | None = None) -> List[float
 def _ollama_generate(prompt: str, system: str, temperature: float) -> str:
     host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
     model = os.getenv("OLLAMA_MODEL", "llama3:8b")
+    retries = _int_env("RECALL_GENERATE_RETRIES", default=3, minimum=1)
+    backoff_seconds = _float_env("RECALL_GENERATE_BACKOFF_SECONDS", default=1.5, minimum=0.0)
+    timeout_seconds = _float_env("RECALL_OLLAMA_GENERATE_TIMEOUT_SECONDS", default=180.0, minimum=30.0)
 
     payload = {
         "model": model,
@@ -145,9 +148,25 @@ def _ollama_generate(prompt: str, system: str, temperature: float) -> str:
     if system:
         payload["system"] = system
 
-    response = httpx.post(f"{host}/api/generate", json=payload, timeout=120)
-    response.raise_for_status()
-    return response.json()["response"].strip()
+    last_error: Exception | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            response = httpx.post(
+                f"{host}/api/generate",
+                json=payload,
+                timeout=timeout_seconds,
+            )
+            response.raise_for_status()
+            return str(response.json()["response"]).strip()
+        except Exception as exc:  # noqa: BLE001
+            last_error = exc
+            if attempt >= retries:
+                break
+            time.sleep(backoff_seconds * attempt)
+
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("Generation call failed without an error response")
 
 
 def _anthropic_generate(prompt: str, system: str, temperature: float, max_tokens: int) -> str:

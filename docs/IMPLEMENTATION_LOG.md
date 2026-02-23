@@ -1,5 +1,24 @@
 # Recall.local Implementation Log
 
+## 2026-02-23 - Added learning eval suite and scheduled execution wiring
+
+### Outcome
+
+- Added dedicated learning eval cases:
+  - `/Users/jaydreyer/projects/recall-local/scripts/eval/learning_eval_cases.json`
+  - 8 cases total (6 answerable + 2 unanswerable)
+  - all cases run Workflow 02 with:
+    - `mode=learning`
+    - `filter_tags=["learning","genai-docs"]`
+- Extended scheduled eval runner to execute three suites:
+  - core: `/Users/jaydreyer/projects/recall-local/scripts/eval/eval_cases.json`
+  - job-search: `/Users/jaydreyer/projects/recall-local/scripts/eval/job_search_eval_cases.json`
+  - learning: `/Users/jaydreyer/projects/recall-local/scripts/eval/learning_eval_cases.json`
+  - implementation: `/Users/jaydreyer/projects/recall-local/scripts/eval/scheduled_eval.sh`
+- Added scheduling docs/env var for learning suite:
+  - `RECALL_EVAL_LEARNING_CASES_FILE`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Eval_Scheduling.md`
+
 ## 2026-02-23 - Learning mode + corpus-lane manifest controls
 
 ### Outcome

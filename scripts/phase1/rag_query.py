@@ -38,6 +38,21 @@ UNANSWERABLE_PATTERNS = (
     "unable to answer from the provided context",
     "i don't know based on the provided context",
 )
+JOB_SEARCH_GROUNDING_TERMS = (
+    "jay",
+    "experience",
+    "role",
+    "interview",
+    "impact",
+    "business value",
+    "career",
+    "company",
+    "fit",
+)
+JOB_SEARCH_GROUNDING_PREFIX = (
+    "For Jay's interview and role preparation, anchor this in his experience, impact, "
+    "business value, and company fit. "
+)
 
 
 @dataclass
@@ -125,8 +140,8 @@ def run_rag_query(
     limit = settings.top_k if top_k is None else top_k
     threshold = settings.min_score if min_score is None else min_score
     retries = settings.max_retries if max_retries is None else max_retries
-    active_mode = _normalize_mode(mode)
     normalized_filter_tags = _normalize_filter_tags(filter_tags)
+    active_mode = _resolve_mode(mode=mode, filter_tags=normalized_filter_tags)
     if limit <= 0:
         raise ValueError("top_k must be greater than 0")
     if retries < 0:
@@ -198,6 +213,17 @@ def run_rag_query(
                 if fallback_reason is None
                 else f"{fallback_reason}; {normalization_reason}"
             )
+        grounding_reason = (
+            _ensure_job_search_grounding(response)
+            if active_mode == "job-search"
+            else None
+        )
+        if grounding_reason is not None:
+            postprocess_notes = response["audit"].get("postprocess_notes")
+            if not isinstance(postprocess_notes, list):
+                postprocess_notes = []
+            postprocess_notes.append(grounding_reason)
+            response["audit"]["postprocess_notes"] = postprocess_notes
 
         latency_ms = int((time.perf_counter() - started_perf) * 1000)
         response["audit"]["run_id"] = run_id
@@ -397,6 +423,19 @@ def _normalize_low_confidence_response(response: dict[str, Any]) -> str | None:
     return "Low-confidence response was normalized to an explicit abstention."
 
 
+def _ensure_job_search_grounding(response: dict[str, Any]) -> str | None:
+    answer = str(response.get("answer", "")).strip()
+    if not answer:
+        return None
+
+    normalized_answer = answer.lower()
+    if any(term in normalized_answer for term in JOB_SEARCH_GROUNDING_TERMS):
+        return None
+
+    response["answer"] = f"{JOB_SEARCH_GROUNDING_PREFIX}{answer}".strip()
+    return "Injected deterministic grounding language for job-search mode."
+
+
 def _ensure_citation_from_sources(response: dict[str, Any]) -> None:
     citations = response.get("citations")
     if isinstance(citations, list) and citations:
@@ -547,6 +586,19 @@ def _normalize_mode(mode: str | None) -> str:
     if raw in {"learning", "learn"}:
         return "learning"
     raise ValueError(f"Unsupported mode: {mode}")
+
+
+def _resolve_mode(*, mode: str | None, filter_tags: list[str]) -> str:
+    normalized_mode = _normalize_mode(mode)
+    if normalized_mode != "default":
+        return normalized_mode
+
+    normalized_tags = {tag.strip().lower() for tag in filter_tags if tag.strip()}
+    if "job-search" in normalized_tags:
+        return "job-search"
+    if {"learning", "genai-docs"}.issubset(normalized_tags):
+        return "learning"
+    return "default"
 
 
 def _normalize_filter_tags(filter_tags: list[str] | None) -> list[str]:
