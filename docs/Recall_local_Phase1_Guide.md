@@ -80,6 +80,13 @@ python3 /Users/jaydreyer/projects/recall-local/scripts/phase1/rag_from_payload.p
   --payload-json '{"query":"Summarize ingestion channels and cite sources.","top_k":5,"min_score":0.2}'
 ```
 
+Run Workflow 02 in job-search mode with tag filter:
+
+```bash
+python3 /Users/jaydreyer/projects/recall-local/scripts/phase1/rag_from_payload.py \
+  --payload-json '{"query":"What should I emphasize for an SE interview?","mode":"job-search","filter_tags":["job-search"],"top_k":5,"min_score":0.2}'
+```
+
 ## Folder-drop guidance for tag-scoped retrieval
 
 When ingestion does not come through webhook payloads, tag-sensitive domains must be ingested with explicit tags:

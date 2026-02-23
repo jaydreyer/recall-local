@@ -1,5 +1,46 @@
 # Recall.local Implementation Log
 
+## 2026-02-23 - Phase 2C: tag-scoped retrieval + job-search mode + eval suite
+
+### Outcome
+
+- Added optional Workflow 02 retrieval tag filtering (`filter_tags`) end-to-end:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/retrieval.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/rag_query.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/rag_from_payload.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py`
+- Added Workflow 02 job-search prompt profile:
+  - `/Users/jaydreyer/projects/recall-local/prompts/job_search_coach.md`
+  - selected via payload/CLI `mode=job-search`
+- Added optional Langfuse instrumentation hooks for `generate()` and `embed()`:
+  - `/Users/jaydreyer/projects/recall-local/scripts/llm_client.py`
+  - `/Users/jaydreyer/projects/recall-local/requirements.txt` now includes `langfuse`
+  - traces include workflow/mode metadata when supplied by callers
+- Extended Workflow 02 audit/sources metadata:
+  - `sources[].tags`
+  - `audit.mode`, `audit.filter_tags`, `audit.prompt_profile`
+- Added dedicated job-search eval suite on shared harness:
+  - `/Users/jaydreyer/projects/recall-local/scripts/eval/job_search_eval_cases.json`
+  - `/Users/jaydreyer/projects/recall-local/scripts/eval/run_eval.py`
+  - added checks for required grounding terms and required source tags
+- Updated scheduled eval runner to execute both core and job-search suites:
+  - `/Users/jaydreyer/projects/recall-local/scripts/eval/scheduled_eval.sh`
+- Added payload examples and runbook updates:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/payload_examples/rag_query_job_search_payload_example.json`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/payload_examples/rag_query_payload_example.json`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/PHASE1C_WORKFLOW02_WIRING.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Eval_Scheduling.md`
+
+### Verification in this thread
+
+- `python3 -m compileall scripts` (passes)
+- retrieval/filter parsing smoke checks pass for:
+  - `filter_tags` normalization
+  - `mode`/`filter_tags` payload parsing
+- eval harness updates compile and emit expanded per-case fields for:
+  - `required_terms_ok`
+  - `source_tags_ok`
+
 ## 2026-02-23 - Bridge TLS trust fix for HTTPS URL ingestion
 
 ### Outcome

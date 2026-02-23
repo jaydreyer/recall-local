@@ -105,6 +105,37 @@ Operational rule for job-search corpus:
 - `job-search` tag is mandatory at ingestion time.
 - Mutable job-search sources (JDs/prep docs) should ingest with `replace_existing=true` and stable `source_key`.
 
+## 2C Domain-scoped RAG controls (implemented)
+
+- Workflow 02 retrieval now supports optional tag filtering:
+  - payload field: `filter_tags` (array or comma-separated string)
+  - retrieval filter behavior: when present, Qdrant query restricts results to matching tags
+  - implementation:
+    - `/Users/jaydreyer/projects/recall-local/scripts/phase1/retrieval.py`
+    - `/Users/jaydreyer/projects/recall-local/scripts/phase1/rag_query.py`
+    - `/Users/jaydreyer/projects/recall-local/scripts/phase1/rag_from_payload.py`
+    - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py`
+- Workflow 02 prompt mode now supports:
+  - `mode=default` -> `/Users/jaydreyer/projects/recall-local/prompts/workflow_02_rag_answer.md`
+  - `mode=job-search` -> `/Users/jaydreyer/projects/recall-local/prompts/job_search_coach.md`
+- Workflow 02 response/audit now includes:
+  - `sources[].tags`
+  - `audit.mode`
+  - `audit.filter_tags`
+  - `audit.prompt_profile`
+- Job-search eval suite added to shared harness:
+  - `/Users/jaydreyer/projects/recall-local/scripts/eval/job_search_eval_cases.json`
+  - `/Users/jaydreyer/projects/recall-local/scripts/eval/run_eval.py`
+  - includes checks for required source tags and required grounding terms
+- Scheduled eval runner now executes both suites:
+  - core: `/Users/jaydreyer/projects/recall-local/scripts/eval/eval_cases.json`
+  - job-search: `/Users/jaydreyer/projects/recall-local/scripts/eval/job_search_eval_cases.json`
+  - script: `/Users/jaydreyer/projects/recall-local/scripts/eval/scheduled_eval.sh`
+- Optional Langfuse instrumentation hooks added in LLM client:
+  - `/Users/jaydreyer/projects/recall-local/scripts/llm_client.py`
+  - enabled with `RECALL_LANGFUSE_ENABLED=true` and Langfuse keys
+  - trace metadata includes workflow/mode context when passed by callers (for example Workflow 02)
+
 ## Risks and guardrails
 
 - Keep n8n for orchestration only; heavy logic remains in Python scripts.

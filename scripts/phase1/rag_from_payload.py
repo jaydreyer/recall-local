@@ -62,6 +62,8 @@ def main() -> int:
         top_k = payload.get("top_k")
         min_score = payload.get("min_score")
         max_retries = payload.get("max_retries")
+        mode = payload.get("mode")
+        filter_tags = _normalize_filter_tags(payload.get("filter_tags"))
 
         if top_k is not None:
             top_k = int(top_k)
@@ -75,6 +77,8 @@ def main() -> int:
             top_k=top_k,
             min_score=min_score,
             max_retries=max_retries,
+            filter_tags=filter_tags,
+            mode=str(mode) if mode is not None else None,
             dry_run=args.dry_run,
         )
     except Exception as exc:  # noqa: BLE001
@@ -83,6 +87,21 @@ def main() -> int:
 
     print(json.dumps(result, indent=2))
     return 0
+
+
+def _normalize_filter_tags(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [part.strip() for part in value.split(",") if part.strip()]
+    if isinstance(value, list):
+        tags: list[str] = []
+        for item in value:
+            tag = str(item).strip()
+            if tag:
+                tags.append(tag)
+        return tags
+    raise ValueError("Payload filter_tags must be an array or comma-separated string.")
 
 
 if __name__ == "__main__":

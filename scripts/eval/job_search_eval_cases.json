@@ -1,0 +1,72 @@
+[
+  {
+    "question": "What should I emphasize for a solutions engineer interview at Anthropic?",
+    "mode": "job-search",
+    "filter_tags": ["job-search"],
+    "required_terms": ["jay", "experience", "interview", "role"],
+    "required_source_tags": ["job-search"]
+  },
+  {
+    "question": "How should I explain the Gap custom GPT project to a non-technical VP?",
+    "mode": "job-search",
+    "filter_tags": ["job-search"],
+    "required_terms": ["business", "value", "jay", "experience"],
+    "required_source_tags": ["job-search"]
+  },
+  {
+    "question": "What is a strong response for why I am leaving Gap?",
+    "mode": "job-search",
+    "filter_tags": ["job-search"],
+    "required_terms": ["jay", "career", "role", "impact"],
+    "required_source_tags": ["job-search"]
+  },
+  {
+    "question": "Which parts of my background map best to discovery work?",
+    "mode": "job-search",
+    "filter_tags": ["job-search"],
+    "required_terms": ["discovery", "customer", "experience", "jay"],
+    "required_source_tags": ["job-search"]
+  },
+  {
+    "question": "How should I explain embeddings to a non-technical audience in an interview?",
+    "mode": "job-search",
+    "filter_tags": ["job-search"],
+    "required_terms": ["interview", "example", "explain", "audience"],
+    "required_source_tags": ["job-search"]
+  },
+  {
+    "question": "What are my strongest projects to highlight for an SE portfolio?",
+    "mode": "job-search",
+    "filter_tags": ["job-search"],
+    "required_terms": ["project", "impact", "jay", "experience"],
+    "required_source_tags": ["job-search"]
+  },
+  {
+    "question": "What objections might an interviewer raise about my background and how should I respond?",
+    "mode": "job-search",
+    "filter_tags": ["job-search"],
+    "required_terms": ["interviewer", "background", "response", "jay"],
+    "required_source_tags": ["job-search"]
+  },
+  {
+    "question": "What priorities should I set for target companies and why?",
+    "mode": "job-search",
+    "filter_tags": ["job-search"],
+    "required_terms": ["company", "priority", "role", "fit"],
+    "required_source_tags": ["job-search"]
+  },
+  {
+    "question": "What is the exact private salary number for the Anthropic role?",
+    "mode": "job-search",
+    "filter_tags": ["job-search"],
+    "expect_unanswerable": true,
+    "required_source_tags": ["job-search"]
+  },
+  {
+    "question": "Which secret interviewer scorecard did I receive last week?",
+    "mode": "job-search",
+    "filter_tags": ["job-search"],
+    "expect_unanswerable": true,
+    "required_source_tags": ["job-search"]
+  }
+]

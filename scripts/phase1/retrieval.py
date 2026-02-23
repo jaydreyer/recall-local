@@ -38,6 +38,7 @@ class RetrievedChunk:
     score: float
     source_type: str
     ingestion_channel: str
+    tags: list[str]
 
 
 def load_settings() -> RetrievalSettings:
@@ -62,6 +63,7 @@ def retrieve_chunks(
     *,
     top_k: int | None = None,
     min_score: float | None = None,
+    filter_tags: list[str] | None = None,
 ) -> list[RetrievedChunk]:
     normalized_query = query.strip()
     if not normalized_query:
@@ -70,19 +72,31 @@ def retrieve_chunks(
     settings = load_settings()
     limit = settings.top_k if top_k is None else top_k
     threshold = settings.min_score if min_score is None else min_score
+    normalized_tags = _normalize_filter_tags(filter_tags)
     if limit <= 0:
         raise ValueError("top_k must be greater than 0")
 
     llm_client = _import_llm_client()
     qdrant = qdrant_client_from_env(settings.qdrant_host)
 
-    query_embedding = llm_client.embed(normalized_query)
+    try:
+        query_embedding = llm_client.embed(
+            normalized_query,
+            trace_metadata={
+                "workflow": "workflow_02_rag_query",
+                "operation": "query_embedding",
+                "filter_tags": normalized_tags,
+            },
+        )
+    except TypeError:
+        query_embedding = llm_client.embed(normalized_query)
     points = _search_points(
         qdrant=qdrant,
         collection=settings.qdrant_collection,
         query_embedding=query_embedding,
         top_k=limit,
         min_score=threshold,
+        filter_tags=normalized_tags,
     )
 
     chunks: list[RetrievedChunk] = []
@@ -108,6 +122,7 @@ def retrieve_chunks(
                 score=score,
                 source_type=str(payload.get("source_type", "unknown")).strip() or "unknown",
                 ingestion_channel=str(payload.get("ingestion_channel", "unknown")).strip() or "unknown",
+                tags=_normalize_payload_tags(payload.get("tags")),
             )
         )
 
@@ -121,7 +136,10 @@ def _search_points(
     query_embedding: list[float],
     top_k: int,
     min_score: float,
+    filter_tags: list[str],
 ) -> list[Any]:
+    query_filter = _build_tag_filter(filter_tags)
+
     if hasattr(qdrant, "search"):
         kwargs = {
             "collection_name": collection,
@@ -129,19 +147,31 @@ def _search_points(
             "limit": top_k,
             "with_payload": True,
         }
+        if query_filter is not None:
+            kwargs["query_filter"] = query_filter
         try:
             return qdrant.search(score_threshold=min_score, **kwargs)
         except TypeError:
+            if "query_filter" in kwargs:
+                kwargs["filter"] = kwargs.pop("query_filter")
             return qdrant.search(**kwargs)
 
     if hasattr(qdrant, "query_points"):
-        response = qdrant.query_points(
-            collection_name=collection,
-            query=query_embedding,
-            limit=top_k,
-            with_payload=True,
-            score_threshold=min_score,
-        )
+        kwargs: dict[str, Any] = {
+            "collection_name": collection,
+            "query": query_embedding,
+            "limit": top_k,
+            "with_payload": True,
+            "score_threshold": min_score,
+        }
+        if query_filter is not None:
+            kwargs["query_filter"] = query_filter
+        try:
+            response = qdrant.query_points(**kwargs)
+        except TypeError:
+            if "query_filter" in kwargs:
+                kwargs["filter"] = kwargs.pop("query_filter")
+            response = qdrant.query_points(**kwargs)
         points = getattr(response, "points", None)
         if isinstance(points, list):
             return points
@@ -158,18 +188,77 @@ def _import_llm_client():
     return llm_client
 
 
+def _normalize_filter_tags(filter_tags: list[str] | None) -> list[str]:
+    if not filter_tags:
+        return []
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw in filter_tags:
+        tag = str(raw).strip()
+        if not tag or tag in seen:
+            continue
+        seen.add(tag)
+        normalized.append(tag)
+    return normalized
+
+
+def _normalize_payload_tags(value: Any) -> list[str]:
+    if isinstance(value, list):
+        tags: list[str] = []
+        for item in value:
+            tag = str(item).strip()
+            if tag:
+                tags.append(tag)
+        return tags
+    if isinstance(value, str):
+        return [part.strip() for part in value.split(",") if part.strip()]
+    return []
+
+
+def _build_tag_filter(filter_tags: list[str]):
+    if not filter_tags:
+        return None
+    models = _import_qdrant_models()
+    return models.Filter(
+        must=[
+            models.FieldCondition(
+                key="tags",
+                match=models.MatchAny(any=filter_tags),
+            )
+        ]
+    )
+
+
+def _import_qdrant_models():
+    try:
+        from qdrant_client import models  # noqa: PLC0415
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("Missing qdrant-client models import. Install with: pip install -r requirements.txt") from exc
+    return models
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Retrieve top-k chunks from Qdrant for a query.")
     parser.add_argument("--query", required=True, help="User query to embed and retrieve against.")
     parser.add_argument("--top-k", type=int, default=None, help="Override retrieval top-k.")
     parser.add_argument("--min-score", type=float, default=None, help="Override minimum score threshold.")
+    parser.add_argument(
+        "--filter-tags",
+        default="",
+        help="Comma-separated tags for retrieval filtering (optional).",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
     try:
-        chunks = retrieve_chunks(args.query, top_k=args.top_k, min_score=args.min_score)
+        chunks = retrieve_chunks(
+            args.query,
+            top_k=args.top_k,
+            min_score=args.min_score,
+            filter_tags=[part.strip() for part in args.filter_tags.split(",") if part.strip()],
+        )
     except Exception as exc:  # noqa: BLE001
         print(f"Retrieval failed: {exc}", file=sys.stderr)
         return 1

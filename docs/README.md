@@ -14,6 +14,9 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `../n8n/workflows/payload_examples/meeting_action_items_payload_example.json`: Sample payload for Workflow 03 (`2A`) webhook testing.
 - `../n8n/workflows/payload_examples/bookmarklet_ingest_payload_example.json`: Sample payload for bookmarklet ingestion with source-based replacement.
 - `../n8n/workflows/payload_examples/gdoc_ingest_payload_example.json`: Sample payload for Google Docs ingestion with source-based replacement.
+- `../n8n/workflows/payload_examples/rag_query_job_search_payload_example.json`: Sample Workflow 02 payload for `mode=job-search` with `filter_tags`.
+- `../scripts/eval/job_search_eval_cases.json`: Dedicated job-search eval suite for shared eval harness.
+- `../prompts/job_search_coach.md`: Workflow 02 job-search prompt profile used by `mode=job-search`.
 
 ## Operational Documentation
 

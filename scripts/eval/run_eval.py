@@ -50,6 +50,10 @@ class EvalCase:
     expected_doc_id: str | None
     max_latency_ms: int | None
     expect_unanswerable: bool
+    mode: str | None
+    filter_tags: list[str]
+    required_terms: list[str]
+    required_source_tags: list[str]
 
 
 @dataclass
@@ -61,6 +65,8 @@ class CaseResult:
     actual_doc_id: str | None
     citation_valid: bool
     unanswerable_ok: bool | None
+    required_terms_ok: bool | None
+    source_tags_ok: bool | None
     latency_ms: int
     passed: bool
     notes: str
@@ -173,12 +179,21 @@ def load_cases(path: Path) -> list[EvalCase]:
         max_latency_raw = item.get("max_latency_ms")
         max_latency_ms = int(max_latency_raw) if max_latency_raw is not None else None
         expect_unanswerable = bool(item.get("expect_unanswerable", False))
+        mode_raw = item.get("mode")
+        mode = str(mode_raw).strip() if isinstance(mode_raw, str) and mode_raw.strip() else None
+        filter_tags = _normalize_string_list(item.get("filter_tags"))
+        required_terms = _normalize_string_list(item.get("required_terms"))
+        required_source_tags = _normalize_string_list(item.get("required_source_tags"))
         cases.append(
             EvalCase(
                 question=question,
                 expected_doc_id=expected_doc_id,
                 max_latency_ms=max_latency_ms,
                 expect_unanswerable=expect_unanswerable,
+                mode=mode,
+                filter_tags=filter_tags,
+                required_terms=required_terms,
+                required_source_tags=required_source_tags,
             )
         )
     return cases
@@ -205,9 +220,19 @@ def run_case(
             top_k=top_k,
             min_score=min_score,
             max_retries=max_retries,
+            mode=case.mode,
+            filter_tags=case.filter_tags,
         )
         latency_ms = int((time.perf_counter() - started) * 1000)
-        passed, citation_valid, actual_doc_id, unanswerable_ok, notes = _evaluate_payload(
+        (
+            passed,
+            citation_valid,
+            actual_doc_id,
+            unanswerable_ok,
+            required_terms_ok,
+            source_tags_ok,
+            notes,
+        ) = _evaluate_payload(
             case=case,
             payload=payload,
             latency_ms=latency_ms,
@@ -219,6 +244,8 @@ def run_case(
         citation_valid = False
         actual_doc_id = None
         unanswerable_ok = None
+        required_terms_ok = None
+        source_tags_ok = None
         notes = f"Execution error: {exc}"
 
     return CaseResult(
@@ -229,6 +256,8 @@ def run_case(
         actual_doc_id=actual_doc_id,
         citation_valid=citation_valid,
         unanswerable_ok=unanswerable_ok,
+        required_terms_ok=required_terms_ok,
+        source_tags_ok=source_tags_ok,
         latency_ms=latency_ms,
         passed=passed,
         notes=notes,
@@ -243,11 +272,21 @@ def _execute_query(
     top_k: int,
     min_score: float,
     max_retries: int,
+    mode: str | None,
+    filter_tags: list[str],
 ) -> dict[str, Any]:
     if backend == "direct":
         from scripts.phase1.rag_query import run_rag_query  # noqa: PLC0415
 
-        return run_rag_query(question, top_k=top_k, min_score=min_score, max_retries=max_retries, dry_run=True)
+        return run_rag_query(
+            question,
+            top_k=top_k,
+            min_score=min_score,
+            max_retries=max_retries,
+            filter_tags=filter_tags,
+            mode=mode,
+            dry_run=True,
+        )
 
     request_body = {
         "query": question,
@@ -255,6 +294,10 @@ def _execute_query(
         "min_score": min_score,
         "max_retries": max_retries,
     }
+    if mode:
+        request_body["mode"] = mode
+    if filter_tags:
+        request_body["filter_tags"] = filter_tags
     response = httpx.post(webhook_url, json=request_body, timeout=90)
     response.raise_for_status()
 
@@ -274,7 +317,7 @@ def _evaluate_payload(
     payload: dict[str, Any],
     latency_ms: int,
     default_max_latency_ms: int,
-) -> tuple[bool, bool, str | None, bool | None, str]:
+) -> tuple[bool, bool, str | None, bool | None, bool | None, bool | None, str]:
     answer = str(payload.get("answer", "")).strip()
     confidence_level = str(payload.get("confidence_level", "")).strip().lower()
     citations = payload.get("citations")
@@ -282,9 +325,9 @@ def _evaluate_payload(
     if not isinstance(citations, list):
         return False, False, None, None, "Response missing citations array"
     if not isinstance(sources, list):
-        return False, False, None, None, "Response missing sources array"
+        return False, False, None, None, None, None, "Response missing sources array"
     if not answer:
-        return False, False, None, None, "Response missing answer text"
+        return False, False, None, None, None, None, "Response missing answer text"
 
     valid_pairs = {
         (str(source.get("doc_id", "")).strip(), str(source.get("chunk_id", "")).strip())
@@ -295,11 +338,11 @@ def _evaluate_payload(
     citation_pairs: list[tuple[str, str]] = []
     for citation in citations:
         if not isinstance(citation, dict):
-            return False, False, None, None, "Citation entry is not an object"
+            return False, False, None, None, None, None, "Citation entry is not an object"
         doc_id = str(citation.get("doc_id", "")).strip()
         chunk_id = str(citation.get("chunk_id", "")).strip()
         if not doc_id or not chunk_id:
-            return False, False, None, None, "Citation missing doc_id or chunk_id"
+            return False, False, None, None, None, None, "Citation missing doc_id or chunk_id"
         citation_pairs.append((doc_id, chunk_id))
 
     invalid_pairs = [pair for pair in citation_pairs if pair not in valid_pairs]
@@ -315,6 +358,8 @@ def _evaluate_payload(
 
     notes: list[str] = []
     unanswerable_ok: bool | None = None
+    required_terms_ok: bool | None = None
+    source_tags_ok: bool | None = None
     if not citations and not case.expect_unanswerable:
         notes.append("Response returned zero citations")
     if not citation_valid:
@@ -332,6 +377,18 @@ def _evaluate_payload(
         if not expected_ok:
             notes.append(f"Expected doc_id {case.expected_doc_id}, got {actual_doc_id}")
 
+    if case.required_terms:
+        normalized_answer = answer.lower()
+        matched_terms = [term for term in case.required_terms if term.lower() in normalized_answer]
+        required_terms_ok = bool(matched_terms)
+        if not required_terms_ok:
+            notes.append(f"Answer missing required grounding terms: {case.required_terms}")
+
+    if case.required_source_tags:
+        source_tags_ok = _sources_match_required_tags(sources=sources, required_tags=case.required_source_tags)
+        if not source_tags_ok:
+            notes.append(f"Sources did not satisfy required tags: {case.required_source_tags}")
+
     if not latency_ok:
         notes.append(f"Latency {latency_ms}ms exceeded threshold {max_latency}ms")
 
@@ -339,12 +396,61 @@ def _evaluate_payload(
         passed = citation_valid and bool(unanswerable_ok) and latency_ok
     else:
         passed = citation_valid and expected_ok and latency_ok
-    return passed, citation_valid, actual_doc_id, unanswerable_ok, "; ".join(notes) if notes else "ok"
+    if required_terms_ok is False:
+        passed = False
+    if source_tags_ok is False:
+        passed = False
+    return (
+        passed,
+        citation_valid,
+        actual_doc_id,
+        unanswerable_ok,
+        required_terms_ok,
+        source_tags_ok,
+        "; ".join(notes) if notes else "ok",
+    )
 
 
 def _has_unanswerable_phrase(answer: str) -> bool:
     normalized = " ".join(answer.lower().split())
     return any(pattern in normalized for pattern in UNANSWERABLE_PATTERNS)
+
+
+def _sources_match_required_tags(*, sources: list[Any], required_tags: list[str]) -> bool:
+    required = {tag.strip().lower() for tag in required_tags if tag.strip()}
+    if not required:
+        return True
+    if not sources:
+        return False
+    for source in sources:
+        if not isinstance(source, dict):
+            return False
+        source_tags_raw = source.get("tags")
+        source_tags = {
+            str(tag).strip().lower()
+            for tag in (
+                source_tags_raw if isinstance(source_tags_raw, list) else [source_tags_raw]
+            )
+            if str(tag).strip()
+        }
+        if not required.issubset(source_tags):
+            return False
+    return True
+
+
+def _normalize_string_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [part.strip() for part in value.split(",") if part.strip()]
+    if isinstance(value, list):
+        items: list[str] = []
+        for item in value:
+            normalized = str(item).strip()
+            if normalized:
+                items.append(normalized)
+        return items
+    raise ValueError("Case fields expecting list values must be array or comma-separated string.")
 
 
 def write_results(
@@ -393,13 +499,13 @@ def write_markdown_artifact(*, artifact_path: Path, results: list[CaseResult], r
         f"- Unanswerable Cases: `{unanswerable_passed}/{unanswerable_total}`",
         f"- Generated: `{_now_iso()}`",
         "",
-        "| # | Type | Result | Latency (ms) | Citation Valid | Unanswerable OK | Expected Doc | Actual Doc | Question | Notes |",
-        "|---|---|---|---:|---|---|---|---|---|---|",
+        "| # | Type | Result | Latency (ms) | Citation Valid | Unanswerable OK | Terms OK | Source Tags OK | Expected Doc | Actual Doc | Question | Notes |",
+        "|---|---|---|---:|---|---|---|---|---|---|---|---|",
     ]
 
     for index, row in enumerate(results, start=1):
         lines.append(
-            "| {index} | {case_type} | {result} | {latency} | {citation_valid} | {unanswerable_ok} | {expected} | {actual} | {question} | {notes} |".format(
+            "| {index} | {case_type} | {result} | {latency} | {citation_valid} | {unanswerable_ok} | {required_terms_ok} | {source_tags_ok} | {expected} | {actual} | {question} | {notes} |".format(
                 index=index,
                 case_type="unanswerable" if row.expect_unanswerable else "answerable",
                 result="PASS" if row.passed else "FAIL",
@@ -409,6 +515,16 @@ def write_markdown_artifact(*, artifact_path: Path, results: list[CaseResult], r
                     "n/a"
                     if row.unanswerable_ok is None
                     else ("yes" if row.unanswerable_ok else "no")
+                ),
+                required_terms_ok=(
+                    "n/a"
+                    if row.required_terms_ok is None
+                    else ("yes" if row.required_terms_ok else "no")
+                ),
+                source_tags_ok=(
+                    "n/a"
+                    if row.source_tags_ok is None
+                    else ("yes" if row.source_tags_ok else "no")
                 ),
                 expected=(row.expected_doc_id or "-"),
                 actual=(row.actual_doc_id or "-"),
@@ -547,6 +663,7 @@ def main() -> int:
         summary = {
             "run_id": run_id,
             "status": "pass" if pass_count == total else "fail",
+            "cases_file": str(cases_file),
             "backend": args.backend,
             "webhook_url": webhook_url if args.backend == "webhook" else None,
             "passed": pass_count,

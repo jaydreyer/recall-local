@@ -18,6 +18,20 @@ Example payload:
 ```json
 {
   "query": "Identify one URL-based item and one email-related item with citations.",
+  "mode": "default",
+  "top_k": 5,
+  "min_score": 0.15,
+  "max_retries": 1
+}
+```
+
+Job-search mode payload example:
+
+```json
+{
+  "query": "What should I emphasize for a solutions engineer interview at Anthropic?",
+  "mode": "job-search",
+  "filter_tags": ["job-search"],
   "top_k": 5,
   "min_score": 0.15,
   "max_retries": 1
@@ -86,6 +100,8 @@ Expected response shape:
 - nested RAG output includes:
   - `answer`
   - `citations[]` with `doc_id` + `chunk_id`
+  - `sources[]` with retrieval metadata including `tags[]`
+  - `audit.mode` and `audit.filter_tags`
   - `audit` metadata
 
 ## Notes
@@ -93,6 +109,10 @@ Expected response shape:
 - Workflow 02 code path:
   - `/home/jaydreyer/recall-local/scripts/phase1/rag_query.py`
   - `/home/jaydreyer/recall-local/scripts/phase1/rag_from_payload.py`
+  - `/home/jaydreyer/recall-local/scripts/phase1/retrieval.py`
   - `/home/jaydreyer/recall-local/scripts/validate_output.py`
+- Prompt profiles:
+  - default: `/home/jaydreyer/recall-local/prompts/workflow_02_rag_answer.md`
+  - job-search: `/home/jaydreyer/recall-local/prompts/job_search_coach.md`
 - Artifact outputs (non-dry-run):
   - `/home/jaydreyer/recall-local/data/artifacts/rag/`

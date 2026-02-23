@@ -12,6 +12,10 @@ Purpose: run automated Workflow 02 eval checks on a schedule and alert on regres
 
 - `RECALL_EVAL_WEBHOOK_URL` (optional)
   - default: `http://100.116.103.78:5678/webhook/recall-query`
+- `RECALL_EVAL_CORE_CASES_FILE` (optional)
+  - default: `/home/jaydreyer/recall-local/scripts/eval/eval_cases.json`
+- `RECALL_EVAL_JOB_SEARCH_CASES_FILE` (optional)
+  - default: `/home/jaydreyer/recall-local/scripts/eval/job_search_eval_cases.json`
 - `RECALL_ALERT_WEBHOOK_URL` (optional)
   - Slack/Teams-compatible incoming webhook URL.
   - If unset, regressions still fail the job and write logs, but no webhook is sent.
@@ -46,8 +50,8 @@ Add daily and weekly checks:
 
 - Pass case:
   - exits `0`
-  - writes eval JSON artifact to scheduled log dir.
+  - writes core + job-search eval JSON artifacts to scheduled log dir.
 - Regression/failure:
   - exits non-zero
-  - prints summary with run_id + pass stats
+  - prints summary with run_id + pass stats for both suites
   - posts alert webhook if `RECALL_ALERT_WEBHOOK_URL` is set.

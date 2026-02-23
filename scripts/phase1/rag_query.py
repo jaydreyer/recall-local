@@ -46,6 +46,7 @@ class RagSettings:
     artifacts_dir: Path
     prompt_path: Path
     retry_prompt_path: Path
+    job_search_prompt_path: Path
     top_k: int
     min_score: float
     max_retries: int
@@ -78,6 +79,7 @@ def load_settings() -> RagSettings:
         artifacts_dir=artifacts_root / "rag",
         prompt_path=ROOT / "prompts" / "workflow_02_rag_answer.md",
         retry_prompt_path=ROOT / "prompts" / "workflow_02_rag_answer_retry.md",
+        job_search_prompt_path=ROOT / "prompts" / "job_search_coach.md",
         top_k=top_k,
         min_score=min_score,
         max_retries=max_retries,
@@ -113,12 +115,16 @@ def run_rag_query(
     top_k: int | None = None,
     min_score: float | None = None,
     max_retries: int | None = None,
+    filter_tags: list[str] | None = None,
+    mode: str | None = None,
     dry_run: bool = False,
 ) -> dict[str, Any]:
     settings = load_settings()
     limit = settings.top_k if top_k is None else top_k
     threshold = settings.min_score if min_score is None else min_score
     retries = settings.max_retries if max_retries is None else max_retries
+    active_mode = _normalize_mode(mode)
+    normalized_filter_tags = _normalize_filter_tags(filter_tags)
     if limit <= 0:
         raise ValueError("top_k must be greater than 0")
     if retries < 0:
@@ -139,11 +145,21 @@ def run_rag_query(
         _insert_run_started(conn=conn, run_id=run_id, query=question, started_at=started_at)
 
     try:
-        retrieved = retrieve_chunks(question, top_k=limit, min_score=threshold)
+        retrieved = retrieve_chunks(
+            question,
+            top_k=limit,
+            min_score=threshold,
+            filter_tags=normalized_filter_tags,
+        )
         fallback_reason: str | None = None
         if not retrieved:
             # Retry once with relaxed threshold to avoid hard failures on sparse / niche queries.
-            retrieved = retrieve_chunks(question, top_k=limit, min_score=-1.0)
+            retrieved = retrieve_chunks(
+                question,
+                top_k=limit,
+                min_score=-1.0,
+                filter_tags=normalized_filter_tags,
+            )
             if not retrieved:
                 fallback_reason = "No retrieval results available for query."
 
@@ -155,7 +171,9 @@ def run_rag_query(
                     max_retries=retries,
                     temperature=settings.temperature,
                     prompt_path=settings.prompt_path,
+                    job_search_prompt_path=settings.job_search_prompt_path,
                     retry_prompt_path=settings.retry_prompt_path,
+                    mode=active_mode,
                 )
             except Exception as exc:  # noqa: BLE001
                 fallback_reason = f"Validation/generation fallback: {exc}"
@@ -188,6 +206,9 @@ def run_rag_query(
         response["audit"]["latency_ms"] = latency_ms
         response["audit"]["top_k"] = limit
         response["audit"]["min_score"] = threshold
+        response["audit"]["filter_tags"] = normalized_filter_tags
+        response["audit"]["mode"] = active_mode
+        response["audit"]["prompt_profile"] = _prompt_profile_name(active_mode)
         response["audit"]["retrieved_count"] = len(retrieved)
         response["audit"]["dry_run"] = dry_run
         if fallback_reason is not None or bool(response["audit"].get("fallback_used")):
@@ -234,13 +255,16 @@ def _generate_validated_answer(
     max_retries: int,
     temperature: float,
     prompt_path: Path,
+    job_search_prompt_path: Path,
     retry_prompt_path: Path,
+    mode: str,
 ) -> tuple[dict[str, Any], int]:
     allowed_pairs = {(item.doc_id, item.chunk_id) for item in retrieved}
     context = _build_context(retrieved)
 
+    selected_primary_prompt = job_search_prompt_path if mode == "job-search" else prompt_path
     primary_template = _load_prompt(
-        prompt_path,
+        selected_primary_prompt,
         fallback=(
             "Answer the question using only the provided context. Return strict JSON with "
             "answer, citations[], confidence_level, assumptions[] and no markdown."
@@ -274,6 +298,12 @@ def _generate_validated_answer(
         raw_response = llm_client.generate(
             prompt=prompt,
             temperature=0.1 if is_retry else temperature,
+            trace_metadata={
+                "workflow": "workflow_02_rag_query",
+                "mode": mode,
+                "prompt_profile": _prompt_profile_name(mode),
+                "is_retry": is_retry,
+            },
         )
         validation = validate_rag_output(raw_response, valid_citation_pairs=allowed_pairs)
         if validation.valid:
@@ -392,6 +422,7 @@ def _source_rows(retrieved: list[RetrievedChunk]) -> list[dict[str, Any]]:
             "source": item.source,
             "source_type": item.source_type,
             "ingestion_channel": item.ingestion_channel,
+            "tags": item.tags,
             "score": round(item.score, 6),
             "excerpt": _truncate(item.text, 220),
         }
@@ -407,6 +438,7 @@ def _build_context(chunks: list[RetrievedChunk]) -> str:
         lines.append(f"chunk_id: {chunk.chunk_id}")
         lines.append(f"title: {chunk.title}")
         lines.append(f"source: {chunk.source}")
+        lines.append(f"tags: {', '.join(chunk.tags) if chunk.tags else '-'}")
         lines.append(f"score: {chunk.score:.6f}")
         lines.append("text:")
         lines.append(chunk.text)
@@ -497,6 +529,35 @@ def _active_model_name(provider: str) -> str:
     return os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 
 
+def _normalize_mode(mode: str | None) -> str:
+    raw = (mode or "").strip().lower()
+    if raw in {"", "rag", "default"}:
+        return "default"
+    if raw in {"job-search", "job_search", "jobsearch"}:
+        return "job-search"
+    raise ValueError(f"Unsupported mode: {mode}")
+
+
+def _normalize_filter_tags(filter_tags: list[str] | None) -> list[str]:
+    if not filter_tags:
+        return []
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for raw in filter_tags:
+        tag = str(raw).strip()
+        if not tag or tag in seen:
+            continue
+        seen.add(tag)
+        deduped.append(tag)
+    return deduped
+
+
+def _prompt_profile_name(mode: str) -> str:
+    if mode == "job-search":
+        return "job_search_coach"
+    return "workflow_02_default"
+
+
 def _truncate(text: str, max_chars: int) -> str:
     compact = " ".join(text.split())
     if len(compact) <= max_chars:
@@ -520,6 +581,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--top-k", type=int, default=None, help="Override retrieval top-k.")
     parser.add_argument("--min-score", type=float, default=None, help="Override retrieval score threshold.")
     parser.add_argument("--max-retries", type=int, default=None, help="Override validation retry count.")
+    parser.add_argument(
+        "--filter-tags",
+        default="",
+        help="Comma-separated tags for retrieval filtering (optional).",
+    )
+    parser.add_argument(
+        "--mode",
+        default="default",
+        help="Prompt mode: default|job-search (aliases: rag, job_search).",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Skip SQLite writes and artifact file creation.")
     return parser.parse_args()
 
@@ -540,6 +611,8 @@ def main() -> int:
             top_k=args.top_k,
             min_score=args.min_score,
             max_retries=args.max_retries,
+            filter_tags=[part.strip() for part in args.filter_tags.split(",") if part.strip()],
+            mode=args.mode,
             dry_run=args.dry_run,
         )
     except Exception as exc:  # noqa: BLE001

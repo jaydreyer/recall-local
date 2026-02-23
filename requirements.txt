@@ -6,3 +6,4 @@ pdfplumber
 tiktoken
 rich
 lxml_html_clean
+langfuse

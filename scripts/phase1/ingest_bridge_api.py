@@ -116,10 +116,14 @@ class IngestBridgeHandler(BaseHTTPRequestHandler):
         top_k = payload.get("top_k")
         min_score = payload.get("min_score")
         max_retries = payload.get("max_retries")
+        mode = payload.get("mode")
+        filter_tags = payload.get("filter_tags")
         try:
             top_k_value = int(top_k) if top_k is not None else None
             min_score_value = float(min_score) if min_score is not None else None
             max_retries_value = int(max_retries) if max_retries is not None else None
+            mode_value = str(mode) if mode is not None else None
+            filter_tags_value = _normalize_tag_filter(filter_tags)
         except (TypeError, ValueError) as exc:
             self._send_json(400, {"error": f"Invalid RAG options: {exc}"})
             return
@@ -130,6 +134,8 @@ class IngestBridgeHandler(BaseHTTPRequestHandler):
                 top_k=top_k_value,
                 min_score=min_score_value,
                 max_retries=max_retries_value,
+                filter_tags=filter_tags_value,
+                mode=mode_value,
                 dry_run=dry_run,
             )
         except Exception as exc:  # noqa: BLE001
@@ -213,6 +219,21 @@ def _query_bool(values: list[str] | None) -> bool:
         return False
     value = values[0].strip().lower()
     return value in {"1", "true", "yes", "on"}
+
+
+def _normalize_tag_filter(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [part.strip() for part in value.split(",") if part.strip()]
+    if isinstance(value, list):
+        tags: list[str] = []
+        for item in value:
+            tag = str(item).strip()
+            if tag:
+                tags.append(tag)
+        return tags
+    raise ValueError("filter_tags must be an array or comma-separated string.")
 
 
 def parse_args() -> argparse.Namespace:
