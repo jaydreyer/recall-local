@@ -9,6 +9,8 @@ LOG_DIR="${RECALL_EVAL_LOG_DIR:-$ROOT_DIR/data/artifacts/evals/scheduled}"
 CORE_CASES_FILE="${RECALL_EVAL_CORE_CASES_FILE:-$ROOT_DIR/scripts/eval/eval_cases.json}"
 JOB_SEARCH_CASES_FILE="${RECALL_EVAL_JOB_SEARCH_CASES_FILE:-$ROOT_DIR/scripts/eval/job_search_eval_cases.json}"
 LEARNING_CASES_FILE="${RECALL_EVAL_LEARNING_CASES_FILE:-$ROOT_DIR/scripts/eval/learning_eval_cases.json}"
+RETRY_ON_FAIL="${RECALL_EVAL_RETRY_ON_FAIL:-true}"
+RETRY_DELAY_SECONDS="${RECALL_EVAL_RETRY_DELAY_SECONDS:-5}"
 
 mkdir -p "$LOG_DIR"
 
@@ -20,28 +22,42 @@ JOB_STDERR_LOG="$LOG_DIR/${STAMP}_job_search_eval.stderr.log"
 LEARNING_RESULT_JSON="$LOG_DIR/${STAMP}_learning_eval.json"
 LEARNING_STDERR_LOG="$LOG_DIR/${STAMP}_learning_eval.stderr.log"
 
-set +e
-"$PYTHON_BIN" "$ROOT_DIR/scripts/eval/run_eval.py" \
-  --cases-file "$CORE_CASES_FILE" \
-  --backend webhook \
-  --webhook-url "$WEBHOOK_URL" \
-  >"$CORE_RESULT_JSON" 2>"$CORE_STDERR_LOG"
-CORE_EXIT=$?
+run_suite() {
+  local cases_file="$1"
+  local result_json="$2"
+  local stderr_log="$3"
 
-"$PYTHON_BIN" "$ROOT_DIR/scripts/eval/run_eval.py" \
-  --cases-file "$JOB_SEARCH_CASES_FILE" \
-  --backend webhook \
-  --webhook-url "$WEBHOOK_URL" \
-  >"$JOB_RESULT_JSON" 2>"$JOB_STDERR_LOG"
-JOB_EXIT=$?
+  set +e
+  "$PYTHON_BIN" "$ROOT_DIR/scripts/eval/run_eval.py" \
+    --cases-file "$cases_file" \
+    --backend webhook \
+    --webhook-url "$WEBHOOK_URL" \
+    >"$result_json" 2>"$stderr_log"
+  local exit_code=$?
+  set -e
 
-"$PYTHON_BIN" "$ROOT_DIR/scripts/eval/run_eval.py" \
-  --cases-file "$LEARNING_CASES_FILE" \
-  --backend webhook \
-  --webhook-url "$WEBHOOK_URL" \
-  >"$LEARNING_RESULT_JSON" 2>"$LEARNING_STDERR_LOG"
-LEARNING_EXIT=$?
-set -e
+  if [[ "$exit_code" -ne 0 && "${RETRY_ON_FAIL,,}" == "true" ]]; then
+    sleep "$RETRY_DELAY_SECONDS"
+    set +e
+    "$PYTHON_BIN" "$ROOT_DIR/scripts/eval/run_eval.py" \
+      --cases-file "$cases_file" \
+      --backend webhook \
+      --webhook-url "$WEBHOOK_URL" \
+      >"$result_json" 2>"$stderr_log"
+    exit_code=$?
+    set -e
+  fi
+
+  return "$exit_code"
+}
+
+CORE_EXIT=0
+JOB_EXIT=0
+LEARNING_EXIT=0
+
+run_suite "$CORE_CASES_FILE" "$CORE_RESULT_JSON" "$CORE_STDERR_LOG" || CORE_EXIT=$?
+run_suite "$JOB_SEARCH_CASES_FILE" "$JOB_RESULT_JSON" "$JOB_STDERR_LOG" || JOB_EXIT=$?
+run_suite "$LEARNING_CASES_FILE" "$LEARNING_RESULT_JSON" "$LEARNING_STDERR_LOG" || LEARNING_EXIT=$?
 
 "$PYTHON_BIN" "$ROOT_DIR/scripts/eval/notify_regression.py" \
   --result-json "$CORE_RESULT_JSON" \

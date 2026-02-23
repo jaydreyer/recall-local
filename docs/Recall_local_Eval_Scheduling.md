@@ -18,6 +18,12 @@ Purpose: run automated Workflow 02 eval checks on a schedule and alert on regres
   - default: `/home/jaydreyer/recall-local/scripts/eval/job_search_eval_cases.json`
 - `RECALL_EVAL_LEARNING_CASES_FILE` (optional)
   - default: `/home/jaydreyer/recall-local/scripts/eval/learning_eval_cases.json`
+- `RECALL_EVAL_RETRY_ON_FAIL` (optional)
+  - default: `true`
+  - when `true`, each suite is retried once before alert/fail handling.
+- `RECALL_EVAL_RETRY_DELAY_SECONDS` (optional)
+  - default: `5`
+  - sleep duration between first attempt and retry.
 - `RECALL_ALERT_WEBHOOK_URL` (optional)
   - Slack/Teams-compatible incoming webhook URL.
   - If unset, regressions still fail the job and write logs, but no webhook is sent.

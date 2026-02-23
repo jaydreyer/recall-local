@@ -1,5 +1,17 @@
 # Recall.local Implementation Log
 
+## 2026-02-23 - Scheduled eval retry guard for flaky webhook/model runs
+
+### Outcome
+
+- Hardened scheduled evaluator to retry each suite once before emitting regression alerts:
+  - `/Users/jaydreyer/projects/recall-local/scripts/eval/scheduled_eval.sh`
+- Added new env controls:
+  - `RECALL_EVAL_RETRY_ON_FAIL` (default `true`)
+  - `RECALL_EVAL_RETRY_DELAY_SECONDS` (default `5`)
+- Updated scheduling documentation:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Eval_Scheduling.md`
+
 ## 2026-02-23 - Added learning eval suite and scheduled execution wiring
 
 ### Outcome
