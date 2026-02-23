@@ -1,5 +1,36 @@
 # Recall.local Implementation Log
 
+## 2026-02-23 - Phase 2 implementation checklists added
+
+### Outcome
+
+- Added actionable Phase 2 checklists covering `2B` and `2C` workstreams:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase2_Checklists.md`
+- Linked checklist from Phase 2 guide and docs index:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase2_Guide.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/README.md`
+
+### Notes
+
+- Checklist includes file-level implementation tasks and verification gates for:
+  - ingestion expansion + source-based replacement policy
+  - Workflow 02 `filter_tags`
+  - job-search prompt mode with strict JSON/citation contract
+  - shared-harness job-search eval suite
+
+## 2026-02-23 - Phase 2 plan updated for job-search domain mode
+
+### Outcome
+
+- Updated Phase 2 execution guide to incorporate the Job Search addendum as scoped Phase 2 work:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase2_Guide.md`
+
+### Planning changes captured
+
+- `2B` now includes corpus hygiene requirements for mutable sources (source-based replacement policy) alongside ingestion expansion.
+- `2C` now explicitly includes Workflow 02 tag-scoped retrieval (`filter_tags`), Job Search prompt profile, and a dedicated job-search eval case suite using the shared eval harness.
+- `2D` now requires both core and job-search eval suites to pass for demo reliability gate completion.
+
 ## 2026-02-23 - Phase 2 plan defined with sub-phases and gates
 
 ### Outcome

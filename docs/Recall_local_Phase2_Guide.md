@@ -4,18 +4,19 @@ Purpose: execute Phase 2 as a demo-ready hardening pass after Phase 1 completion
 
 ## Phase 2 goal
 
-Deliver a reliable end-to-end demo flow that adds meeting action extraction, stronger ingestion coverage, observability, and polished artifact/audit visibility.
+Deliver a reliable end-to-end demo flow that adds meeting action extraction, stronger ingestion coverage, domain-scoped RAG personas, observability, and polished artifact/audit visibility.
 
 Source of truth: `/Users/jaydreyer/projects/recall-local/docs/Recall_local_PRD.md` (Phase 2 section).
+Execution checklist: `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase2_Checklists.md`.
 
 ## Phase 2 sub-phases
 
 | Sub-phase | Scope | Exit criteria |
 |---|---|---|
 | `2A` Workflow 03 Core | Implement Meeting -> Action Items pipeline with strict structured validation and artifact output. | Transcript webhook returns validated structured output; Markdown artifact saved under `/data/artifacts/meetings/`; meeting summary indexed in `recall_docs`; run logged in SQLite. |
-| `2B` Ingestion Expansion | Add Google Docs ingestion via n8n Google Docs node and ship browser bookmarklet ingestion path. | Google Doc URL/ID ingestion and browser bookmarklet ingestion both work end-to-end and are searchable in Qdrant; metadata includes source + channel; run/audit records present. |
-| `2C` Observability + Artifact Polish | Integrate Langfuse tracing in `llm_client.py`; ensure artifact viewer presents ingestion, RAG, meetings, and eval outputs consistently. | Every `generate()` and `embed()` call visible in Langfuse with latency/tokens; artifacts browseable from a single index; audit fields visible on every response payload. |
-| `2D` Demo Reliability Gate | Rehearse and harden the 10-minute demo script with failure handling and known-good fixtures. | Full script runs without failure; at least 3 channels ingest successfully in the same rehearsal; RAG and meeting outputs validated; eval run is green at end of rehearsal. |
+| `2B` Ingestion Expansion + Corpus Hygiene | Add Google Docs ingestion via n8n Google Docs node and ship browser bookmarklet ingestion path; standardize tagging and re-ingestion rules for high-churn job-search sources. | Google Doc URL/ID ingestion and browser bookmarklet ingestion both work end-to-end and are searchable in Qdrant; metadata includes source + channel + tags; source-based replacement policy is defined and tested for mutable sources (for example job descriptions). |
+| `2C` Domain-Scoped RAG + Observability | Add Workflow 02 optional tag-scoped retrieval (`filter_tags`), ship job-search prompt profile, integrate Langfuse tracing in `llm_client.py`, and keep artifact viewer output consistent. | `filter_tags` works end-to-end via Workflow 02 payload and Open WebUI template; job-search prompt returns valid Workflow 02 JSON with citation pairs; every `generate()` and `embed()` call visible in Langfuse with latency/tokens; artifacts browseable from a single index. |
+| `2D` Demo Reliability Gate | Rehearse and harden the 10-minute demo script with failure handling, known-good fixtures, and domain eval gates. | Full script runs without failure; at least 3 channels ingest successfully in the same rehearsal; general RAG + meeting outputs validated; both core eval and job-search eval suites are green at end of rehearsal. |
 
 ## What we are going to build
 
@@ -30,28 +31,39 @@ Source of truth: `/Users/jaydreyer/projects/recall-local/docs/Recall_local_PRD.m
    - Browser bookmarklet posts page URL/content into unified webhook ingestion path.
    - Normalize into existing ingestion payload model and reuse Workflow 01 internals.
    - Preserve provenance metadata for citations/auditability.
+   - Define and enforce source-based replacement for mutable job-search corpus inputs (JDs, prep notes) so stale versions do not accumulate.
 
-3. **Observability layer (demo polish + debugging power):**
+3. **Domain-scoped RAG persona layer (job search use case on shared stack):**
+   - Add optional Workflow 02 `filter_tags` parameter and retrieval filter behavior.
+   - Add an Open WebUI Job Search template that sets `filter_tags: ["job-search"]`.
+   - Add `/prompts/job_search_coach.md` while preserving strict Workflow 02 JSON output contract (`answer`, `citations[]`, `confidence_level`, `assumptions`).
+   - Add job-search eval cases as a separate case file executed by the same eval harness.
+
+4. **Observability layer (demo polish + debugging power):**
    - Self-hosted Langfuse deployment in Docker stack.
    - Instrument all LLM calls centrally in `scripts/llm_client.py`.
    - Trace retrieval -> prompt assembly -> generation -> validation for demos and debugging.
 
-4. **Demo reliability and presentation:**
+5. **Demo reliability and presentation:**
    - Single artifact-view path for evals, RAG responses, meeting outputs, ingest logs.
    - Rehearsed script with known-good inputs and fallback settings.
-   - Explicit regression checks before each demo run.
+   - Explicit regression checks before each demo run, including job-search suite.
 
 ## Suggested implementation order
 
 1. Build `2A` first: meeting extraction workflow and output contract.
-2. Add `2B` next: Google Docs and browser bookmarklet ingestion paths.
-3. Add `2C`: Langfuse and artifact polish once new workflows are stable.
-4. Finish with `2D`: scripted rehearsal and reliability gate.
+2. Add `2B` next: Google Docs and browser bookmarklet ingestion paths plus source-based replacement policy for mutable sources.
+3. Add `2C`: tag-scoped retrieval, job-search prompt profile, and job-search eval cases.
+4. Continue `2C` with observability tasks: Langfuse and artifact polish once domain-scoped RAG is stable.
+5. Finish with `2D`: scripted rehearsal and reliability gate.
 
 ## Risks and guardrails
 
 - Keep n8n for orchestration only; heavy logic remains in Python scripts.
 - Reuse existing validation and retry patterns from Workflow 02.
+- Keep a single `recall_docs` collection; use optional tag filtering instead of collection sprawl.
+- Keep one eval harness implementation; add domain suites as additional case files rather than forked evaluators.
+- Enforce strict JSON output contract for all prompt profiles, including job-search mode.
 - Enforce strict non-goals: no dashboard rewrite, no intent-router complexity.
 - Require a green eval run as part of phase closeout.
 
@@ -61,6 +73,10 @@ Phase 2 is complete only when all of the following are true:
 
 1. Workflow 03 produces validated meeting action artifacts from transcript input.
 2. Google Docs and browser bookmarklet ingestion both work and indexed content is queryable via Workflow 02.
-3. Langfuse traces are live for all LLM calls.
-4. Artifact browsing covers ingestion, RAG, meetings, and eval reports.
-5. The full 10-minute demo script runs clean end-to-end.
+3. Workflow 02 supports optional `filter_tags` and Open WebUI Job Search mode routes requests with `filter_tags=["job-search"]`.
+4. Source-based replacement policy is implemented for mutable corpus items (for example job descriptions), preventing stale duplicates from polluting retrieval.
+5. Job-search prompt profile is live and passes strict JSON + citation validation contract.
+6. Core eval suite and job-search eval suite both run green using the shared eval harness.
+7. Langfuse traces are live for all LLM calls.
+8. Artifact browsing covers ingestion, RAG, meetings, and eval reports.
+9. The full 10-minute demo script runs clean end-to-end.
