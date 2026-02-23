@@ -1,0 +1,165 @@
+{
+  "defaults": {
+    "source": "job-search-batch",
+    "tags": [
+      "job-search"
+    ],
+    "replace_existing": true
+  },
+  "items": [
+    {
+      "type": "file",
+      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/Jay-Dreyer-Resume.docx",
+      "title": "Jay Dreyer Resume",
+      "tags": ["job-search", "resume", "jay"],
+      "source_key": "resume:jay:current"
+    },
+    {
+      "type": "file",
+      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/SE_Guide.docx",
+      "title": "SE Guide",
+      "tags": ["job-search", "reference", "se-guide"],
+      "source_key": "reference:se-guide"
+    },
+    {
+      "type": "file",
+      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/AI_Career_Acceleration_Plan.md",
+      "title": "AI Career Acceleration Plan",
+      "tags": ["job-search", "reference", "career-plan"],
+      "source_key": "reference:career-acceleration-plan"
+    },
+    {
+      "type": "file",
+      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/Recall_local_PRD.md",
+      "title": "Recall.local PRD",
+      "tags": ["job-search", "project", "recall-local"],
+      "source_key": "project:recall-local:prd"
+    },
+    {
+      "type": "file",
+      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/Recall_local_PRD_Addendum_JobSearch.md",
+      "title": "Recall.local PRD Addendum Job Search",
+      "tags": ["job-search", "project", "recall-local", "job-search-addendum"],
+      "source_key": "project:recall-local:prd-addendum-job-search"
+    },
+    {
+      "type": "file",
+      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/agentic-ai-interview-questions.pdf",
+      "title": "Agentic AI Interview Questions",
+      "tags": ["job-search", "interview", "agentic-ai"],
+      "source_key": "reference:agentic-ai-interview-questions"
+    },
+    {
+      "type": "file",
+      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/multi-agentic-interview-que-latest.pdf",
+      "title": "Multi Agentic Interview Questions",
+      "tags": ["job-search", "interview", "agentic-ai"],
+      "source_key": "reference:multi-agentic-interview-questions"
+    },
+    {
+      "type": "file",
+      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/genai-interview-questions.pdf",
+      "title": "GenAI Interview Questions",
+      "tags": ["job-search", "interview", "genai"],
+      "source_key": "reference:genai-interview-questions"
+    },
+    {
+      "type": "file",
+      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/rag-with-code-advance-system-design-interview-guide.pdf",
+      "title": "RAG With Code Advanced System Design Interview Guide",
+      "tags": ["job-search", "interview", "rag", "system-design"],
+      "source_key": "reference:rag-system-design-interview-guide"
+    },
+    {
+      "type": "file",
+      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/vector-embeddings-guide.pdf",
+      "title": "Vector Embeddings Guide",
+      "tags": ["job-search", "reference", "embeddings", "rag"],
+      "source_key": "reference:vector-embeddings-guide"
+    },
+    {
+      "type": "url",
+      "content": "https://www.anthropic.com/company",
+      "title": "Anthropic Company",
+      "tags": ["job-search", "company", "anthropic"],
+      "source_key": "company:anthropic:about"
+    },
+    {
+      "type": "url",
+      "content": "https://www.anthropic.com/constitution",
+      "title": "Anthropic Constitution",
+      "tags": ["job-search", "company", "anthropic"],
+      "source_key": "company:anthropic:constitution"
+    },
+    {
+      "type": "url",
+      "content": "https://claude.com/product/overview",
+      "title": "Claude Product Overview",
+      "tags": ["job-search", "product", "anthropic"],
+      "source_key": "product:anthropic:claude-overview"
+    },
+    {
+      "type": "url",
+      "content": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/overview#prompt-engineering-tutorial",
+      "title": "Claude Prompt Engineering Overview",
+      "tags": ["job-search", "reference", "anthropic", "prompt-engineering"],
+      "source_key": "docs:anthropic:prompt-engineering-overview"
+    },
+    {
+      "type": "url",
+      "content": "https://cohere.com/about",
+      "title": "Cohere About",
+      "tags": ["job-search", "company", "cohere"],
+      "source_key": "company:cohere:about"
+    },
+    {
+      "type": "url",
+      "content": "https://cohere.com/north",
+      "title": "Cohere North",
+      "tags": ["job-search", "company", "cohere"],
+      "source_key": "company:cohere:north"
+    },
+    {
+      "type": "url",
+      "content": "https://cohere.com/compass",
+      "title": "Cohere Compass",
+      "tags": ["job-search", "company", "cohere"],
+      "source_key": "company:cohere:compass"
+    },
+    {
+      "type": "url",
+      "content": "https://www.glean.com/about",
+      "title": "Glean About",
+      "tags": ["job-search", "company", "glean"],
+      "source_key": "company:glean:about"
+    },
+    {
+      "type": "url",
+      "content": "https://www.glean.com/product/overview",
+      "title": "Glean Product Overview",
+      "tags": ["job-search", "product", "glean"],
+      "source_key": "product:glean:overview"
+    },
+    {
+      "type": "url",
+      "content": "https://openai.com/about/",
+      "title": "OpenAI About",
+      "tags": ["job-search", "company", "openai"],
+      "source_key": "company:openai:about"
+    },
+    {
+      "type": "url",
+      "content": "https://openai.com/charter/",
+      "title": "OpenAI Charter",
+      "tags": ["job-search", "company", "openai"],
+      "source_key": "company:openai:charter"
+    },
+    {
+      "type": "url",
+      "content": "https://openai.com/interview-guide/",
+      "title": "OpenAI Interview Guide",
+      "tags": ["job-search", "interview", "openai"],
+      "source_key": "interview:openai:guide"
+    }
+  ]
+}

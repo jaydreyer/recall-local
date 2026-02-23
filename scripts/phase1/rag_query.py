@@ -47,6 +47,7 @@ class RagSettings:
     prompt_path: Path
     retry_prompt_path: Path
     job_search_prompt_path: Path
+    learning_prompt_path: Path
     top_k: int
     min_score: float
     max_retries: int
@@ -80,6 +81,7 @@ def load_settings() -> RagSettings:
         prompt_path=ROOT / "prompts" / "workflow_02_rag_answer.md",
         retry_prompt_path=ROOT / "prompts" / "workflow_02_rag_answer_retry.md",
         job_search_prompt_path=ROOT / "prompts" / "job_search_coach.md",
+        learning_prompt_path=ROOT / "prompts" / "learning_coach.md",
         top_k=top_k,
         min_score=min_score,
         max_retries=max_retries,
@@ -172,6 +174,7 @@ def run_rag_query(
                     temperature=settings.temperature,
                     prompt_path=settings.prompt_path,
                     job_search_prompt_path=settings.job_search_prompt_path,
+                    learning_prompt_path=settings.learning_prompt_path,
                     retry_prompt_path=settings.retry_prompt_path,
                     mode=active_mode,
                 )
@@ -256,13 +259,19 @@ def _generate_validated_answer(
     temperature: float,
     prompt_path: Path,
     job_search_prompt_path: Path,
+    learning_prompt_path: Path,
     retry_prompt_path: Path,
     mode: str,
 ) -> tuple[dict[str, Any], int]:
     allowed_pairs = {(item.doc_id, item.chunk_id) for item in retrieved}
     context = _build_context(retrieved)
 
-    selected_primary_prompt = job_search_prompt_path if mode == "job-search" else prompt_path
+    if mode == "job-search":
+        selected_primary_prompt = job_search_prompt_path
+    elif mode == "learning":
+        selected_primary_prompt = learning_prompt_path
+    else:
+        selected_primary_prompt = prompt_path
     primary_template = _load_prompt(
         selected_primary_prompt,
         fallback=(
@@ -535,6 +544,8 @@ def _normalize_mode(mode: str | None) -> str:
         return "default"
     if raw in {"job-search", "job_search", "jobsearch"}:
         return "job-search"
+    if raw in {"learning", "learn"}:
+        return "learning"
     raise ValueError(f"Unsupported mode: {mode}")
 
 
@@ -555,6 +566,8 @@ def _normalize_filter_tags(filter_tags: list[str] | None) -> list[str]:
 def _prompt_profile_name(mode: str) -> str:
     if mode == "job-search":
         return "job_search_coach"
+    if mode == "learning":
+        return "learning_coach"
     return "workflow_02_default"
 
 
@@ -589,7 +602,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--mode",
         default="default",
-        help="Prompt mode: default|job-search (aliases: rag, job_search).",
+        help="Prompt mode: default|job-search|learning (aliases: rag, job_search, learn).",
     )
     parser.add_argument("--dry-run", action="store_true", help="Skip SQLite writes and artifact file creation.")
     return parser.parse_args()

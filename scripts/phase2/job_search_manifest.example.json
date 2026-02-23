@@ -1,0 +1,33 @@
+{
+  "defaults": {
+    "source": "job-search-batch",
+    "tags": ["job-search"],
+    "replace_existing": true
+  },
+  "items": [
+    {
+      "type": "file",
+      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/jay_resume.pdf",
+      "title": "Jay Resume",
+      "tags": ["job-search", "resume"],
+      "source_key": "resume:jay:current"
+    },
+    {
+      "type": "url",
+      "content": "https://example.com/",
+      "title": "Anthropic SE Job Description",
+      "tags": ["job-search", "jd", "anthropic"],
+      "source_key": "jd:anthropic:se"
+    },
+    {
+      "type": "gdoc",
+      "content": {
+        "doc_id": "1EXAMPLE_DOC_ID",
+        "url": "https://docs.google.com/document/d/1EXAMPLE_DOC_ID/edit",
+        "title": "Interview Prep Notes"
+      },
+      "tags": ["job-search", "prep", "anthropic"],
+      "source_key": "gdoc:prep:interview-notes"
+    }
+  ]
+}

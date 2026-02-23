@@ -44,6 +44,16 @@ TRACKING_QUERY_KEYS = {
     "utm_term",
 }
 
+DEFAULT_URL_FETCH_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/122.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
 
 @dataclass
 class Settings:
@@ -258,6 +268,8 @@ def extract_text_from_file(file_path: Path) -> str:
     suffix = file_path.suffix.lower()
     if suffix == ".pdf":
         return _extract_text_from_pdf(file_path)
+    if suffix == ".docx":
+        return _extract_text_from_docx(file_path)
 
     raw = file_path.read_bytes()
     try:
@@ -280,14 +292,38 @@ def extract_text_from_url(url: str) -> str:
 
     verify_tls = _bool_env("RECALL_URL_VERIFY_TLS", default=True)
     allow_insecure_fallback = _bool_env("RECALL_URL_ALLOW_INSECURE_FALLBACK", default=False)
+    allow_reader_proxy = _bool_env("RECALL_URL_ALLOW_READER_PROXY", default=True)
 
     try:
-        response = httpx.get(url, follow_redirects=True, timeout=30, verify=verify_tls)
+        response = httpx.get(
+            url,
+            follow_redirects=True,
+            timeout=30,
+            verify=verify_tls,
+            headers=DEFAULT_URL_FETCH_HEADERS,
+        )
         response.raise_for_status()
         downloaded = response.text
     except Exception as exc:  # noqa: BLE001
         if verify_tls and allow_insecure_fallback and _is_tls_verify_error(exc):
-            response = httpx.get(url, follow_redirects=True, timeout=30, verify=False)
+            response = httpx.get(
+                url,
+                follow_redirects=True,
+                timeout=30,
+                verify=False,
+                headers=DEFAULT_URL_FETCH_HEADERS,
+            )
+            response.raise_for_status()
+            downloaded = response.text
+        elif allow_reader_proxy and _is_http_status_error(exc, status_code=403):
+            proxy_url = _reader_proxy_url(url)
+            response = httpx.get(
+                proxy_url,
+                follow_redirects=True,
+                timeout=45,
+                verify=verify_tls,
+                headers=DEFAULT_URL_FETCH_HEADERS,
+            )
             response.raise_for_status()
             downloaded = response.text
         else:
@@ -382,6 +418,28 @@ def _extract_text_from_pdf(file_path: Path) -> str:
     text = "\n\n".join(pages).strip()
     if not text:
         raise ValueError(f"No readable text extracted from PDF: {file_path}")
+    return text
+
+
+def _extract_text_from_docx(file_path: Path) -> str:
+    docx_module = _require_module("docx", "pip install -r requirements.txt")
+    document = docx_module.Document(str(file_path))
+
+    blocks: list[str] = []
+    for paragraph in document.paragraphs:
+        text = paragraph.text.strip()
+        if text:
+            blocks.append(text)
+
+    for table in document.tables:
+        for row in table.rows:
+            cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+            if cells:
+                blocks.append(" | ".join(cells))
+
+    text = "\n\n".join(blocks).strip()
+    if not text:
+        raise ValueError(f"No readable text extracted from DOCX: {file_path}")
     return text
 
 
@@ -652,6 +710,9 @@ def _build_source_identity_filter(*, models_module: Any, source_identity: str):
 
 
 def maybe_move_to_processed(*, settings: Settings, request: IngestRequest, doc_id: str) -> str | None:
+    if not _bool_env("RECALL_MOVE_INCOMING_TO_PROCESSED", default=True):
+        return None
+
     if request.source_type != "file":
         return None
 
@@ -797,6 +858,15 @@ def _bool_env(name: str, *, default: bool) -> bool:
 def _is_tls_verify_error(exc: Exception) -> bool:
     message = str(exc).lower()
     return "certificate verify failed" in message or "self signed certificate" in message
+
+
+def _is_http_status_error(exc: Exception, *, status_code: int) -> bool:
+    response = getattr(exc, "response", None)
+    return getattr(response, "status_code", None) == status_code
+
+
+def _reader_proxy_url(url: str) -> str:
+    return f"https://r.jina.ai/{url}"
 
 
 def _now_iso() -> str:

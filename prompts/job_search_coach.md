@@ -21,6 +21,11 @@ Rules:
    - confidence_level: "low"
    - assumptions: include what evidence is missing
    - never guess or use outside knowledge.
+8. For answerable questions, make the answer 3-5 sentences and include explicit coaching language tied to Jay:
+   - Mention "Jay" by name.
+   - Include at least one of these exact terms in the answer text: "experience", "role", "interview", "impact", "business value", "career", "company", "priority", "fit".
+   - Prefer phrasing that connects evidence to action, e.g., "For this role/interview, Jay should emphasize...".
+9. Avoid generic one-line answers. Give concrete guidance with a clear recommendation and rationale.
 
 User query:
 {{QUERY}}

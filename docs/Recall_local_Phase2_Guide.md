@@ -118,6 +118,7 @@ Operational rule for job-search corpus:
 - Workflow 02 prompt mode now supports:
   - `mode=default` -> `/Users/jaydreyer/projects/recall-local/prompts/workflow_02_rag_answer.md`
   - `mode=job-search` -> `/Users/jaydreyer/projects/recall-local/prompts/job_search_coach.md`
+  - `mode=learning` -> `/Users/jaydreyer/projects/recall-local/prompts/learning_coach.md`
 - Workflow 02 response/audit now includes:
   - `sources[].tags`
   - `audit.mode`
@@ -135,6 +136,10 @@ Operational rule for job-search corpus:
   - `/Users/jaydreyer/projects/recall-local/scripts/llm_client.py`
   - enabled with `RECALL_LANGFUSE_ENABLED=true` and Langfuse keys
   - trace metadata includes workflow/mode context when passed by callers (for example Workflow 02)
+- Batch ingest helper for job-search corpus (reduces repeated curl usage):
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase2/ingest_job_search_manifest.py`
+  - manifest template: `/Users/jaydreyer/projects/recall-local/scripts/phase2/job_search_manifest.example.json`
+  - optional CLI flag `--ensure-tag` for explicit tag enforcement when desired
 
 ## Risks and guardrails
 

@@ -1,5 +1,39 @@
 # Recall.local Implementation Log
 
+## 2026-02-23 - Learning mode + corpus-lane manifest controls
+
+### Outcome
+
+- Added Workflow 02 learning prompt profile:
+  - `/Users/jaydreyer/projects/recall-local/prompts/learning_coach.md`
+  - selected via payload/CLI `mode=learning`
+- Extended Workflow 02 mode routing:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/rag_query.py`
+  - `mode=learning` now maps to `audit.prompt_profile=learning_coach`
+- Added payload example for learning lane queries:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/payload_examples/rag_query_learning_payload_example.json`
+- Added learning corpus manifest for non-interview AI training docs:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase2/learning_manifest.genieincodebottle.ai-lab.json`
+- Generalized manifest ingest helper behavior:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase2/ingest_job_search_manifest.py`
+  - removed implicit `job-search` tag injection
+  - added optional `--ensure-tag` for explicit tag enforcement
+
+## 2026-02-23 - Added native DOCX ingestion extraction
+
+### Outcome
+
+- Updated file extraction path to support `.docx` directly in Workflow 01 ingestion:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingestion_pipeline.py`
+  - new extractor: `_extract_text_from_docx(...)` (paragraph + table cell text)
+- Added dependency:
+  - `/Users/jaydreyer/projects/recall-local/requirements.txt` now includes `python-docx`
+
+### Notes
+
+- PDF extraction remains unchanged.
+- In environments where bridge container runs `pip install -r requirements.txt` on startup, DOCX support activates after bridge recreate.
+
 ## 2026-02-23 - Phase 2C: tag-scoped retrieval + job-search mode + eval suite
 
 ### Outcome
@@ -30,6 +64,9 @@
   - `/Users/jaydreyer/projects/recall-local/n8n/workflows/payload_examples/rag_query_payload_example.json`
   - `/Users/jaydreyer/projects/recall-local/n8n/workflows/PHASE1C_WORKFLOW02_WIRING.md`
   - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Eval_Scheduling.md`
+- Added batch ingest helper to reduce repetitive curl ingestion commands for job-search corpus:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase2/ingest_job_search_manifest.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase2/job_search_manifest.example.json`
 
 ### Verification in this thread
 

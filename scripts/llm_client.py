@@ -82,16 +82,40 @@ def embed(text: str, trace_metadata: dict[str, Any] | None = None) -> List[float
     error_text: str | None = None
     host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
     model = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+    retries = _int_env("RECALL_EMBED_RETRIES", default=3, minimum=1)
+    backoff_seconds = _float_env("RECALL_EMBED_BACKOFF_SECONDS", default=1.5, minimum=0.0)
+    max_chars = _int_env("RECALL_EMBED_MAX_CHARS", default=3500, minimum=256)
+    min_chars = _int_env("RECALL_EMBED_MIN_CHARS", default=384, minimum=128)
 
     try:
-        response = httpx.post(
-            f"{host}/api/embeddings",
-            json={"model": model, "prompt": text},
-            timeout=60,
-        )
-        response.raise_for_status()
-        response_vector = response.json()["embedding"]
-        return response_vector
+        prompt = _sanitize_embed_text(text)
+        if len(prompt) > max_chars:
+            prompt = prompt[:max_chars]
+
+        last_error: Exception | None = None
+        for attempt in range(1, retries + 1):
+            try:
+                response = httpx.post(
+                    f"{host}/api/embeddings",
+                    json={"model": model, "prompt": prompt},
+                    timeout=60,
+                )
+                response.raise_for_status()
+                response_vector = response.json()["embedding"]
+                return response_vector
+            except Exception as exc:  # noqa: BLE001
+                last_error = exc
+                if _is_http_status_error(exc, status_code=500) and len(prompt) > min_chars:
+                    # Some extracted PDF chunks can trigger Ollama embedding failures;
+                    # progressively shrink the prompt and retry.
+                    next_len = max(min_chars, int(len(prompt) * 0.7))
+                    prompt = prompt[:next_len]
+                if attempt >= retries:
+                    break
+                time.sleep(backoff_seconds * attempt)
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("Embedding call failed without an error response")
     except Exception as exc:
         error_text = str(exc)
         raise
@@ -225,6 +249,47 @@ def _active_generation_model(provider: str) -> str:
     if normalized == "gemini":
         return os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     return os.getenv("OLLAMA_MODEL", "llama3.2:3b")
+
+
+def _sanitize_embed_text(text: str) -> str:
+    cleaned_chars: list[str] = []
+    for ch in text:
+        codepoint = ord(ch)
+        if codepoint == 0 or 0xD800 <= codepoint <= 0xDFFF:
+            continue
+        if codepoint < 32 and ch not in {"\n", "\t", "\r"}:
+            cleaned_chars.append(" ")
+            continue
+        cleaned_chars.append(ch)
+    cleaned = "".join(cleaned_chars).strip()
+    return cleaned or "empty"
+
+
+def _int_env(name: str, *, default: int, minimum: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        parsed = int(raw)
+    except ValueError:
+        return default
+    return max(parsed, minimum)
+
+
+def _float_env(name: str, *, default: float, minimum: float) -> float:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        parsed = float(raw)
+    except ValueError:
+        return default
+    return max(parsed, minimum)
+
+
+def _is_http_status_error(exc: Exception, *, status_code: int) -> bool:
+    response = getattr(exc, "response", None)
+    return getattr(response, "status_code", None) == status_code
 
 
 def _emit_langfuse_trace(

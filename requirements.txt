@@ -3,6 +3,7 @@ qdrant-client
 httpx
 python-dotenv
 pdfplumber
+python-docx
 tiktoken
 rich
 lxml_html_clean

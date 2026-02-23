@@ -1,0 +1,11 @@
+{
+  "query": "Summarize key tradeoffs between managed and self-hosted RAG architectures.",
+  "mode": "learning",
+  "filter_tags": [
+    "learning",
+    "genai-docs"
+  ],
+  "top_k": 5,
+  "min_score": 0.2,
+  "max_retries": 0
+}
