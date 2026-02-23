@@ -10,6 +10,7 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `Recall_local_Phase1D_Eval_Guide.md`: Eval harness runbook and troubleshooting protocol.
 - `Recall_local_Phase2_Guide.md`: Phase 2 sub-phases, execution order, and completion gate.
 - `Recall_local_Phase2_Checklists.md`: Actionable implementation checklist for Phase 2 (`2B` and `2C`) including job-search domain mode tasks.
+- `Recall_local_RAG_Tuning_Playbook.md`: System-level RAG tuning summary (ingestion, retrieval, prompts, guardrails, reliability, evals).
 - `Recall_local_Eval_Scheduling.md`: Daily/weekly eval scheduling and regression alert setup.
 - `../n8n/workflows/payload_examples/meeting_action_items_payload_example.json`: Sample payload for Workflow 03 (`2A`) webhook testing.
 - `../n8n/workflows/payload_examples/bookmarklet_ingest_payload_example.json`: Sample payload for bookmarklet ingestion with source-based replacement.
