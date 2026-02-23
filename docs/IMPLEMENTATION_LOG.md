@@ -1,5 +1,18 @@
 # Recall.local Implementation Log
 
+## 2026-02-23 - Added Phase 2 demo rehearsal runbook and helper script
+
+### Outcome
+
+- Added instruction doc for running and logging a full clean end-to-end Phase 2 rehearsal:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase2_Demo_Rehearsal_Runbook.md`
+- Added one-command rehearsal runner script:
+  - `/Users/jaydreyer/projects/recall-local/scripts/rehearsal/run_phase2_demo_rehearsal.sh`
+  - writes timestamped logs under:
+    - `/home/jaydreyer/recall-local/data/artifacts/rehearsals/`
+- Updated docs index links:
+  - `/Users/jaydreyer/projects/recall-local/docs/README.md`
+
 ## 2026-02-23 - Scheduled eval retry guard for flaky webhook/model runs
 
 ### Outcome
