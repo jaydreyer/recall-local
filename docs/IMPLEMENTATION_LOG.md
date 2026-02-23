@@ -1,5 +1,21 @@
 # Recall.local Implementation Log
 
+## 2026-02-23 - Scheduled eval + regression alerting added
+
+### Outcome
+
+- Added cron-ready scheduled eval execution against live Workflow 02 webhook:
+  - `/Users/jaydreyer/projects/recall-local/scripts/eval/scheduled_eval.sh`
+- Added regression alert helper with optional webhook notification:
+  - `/Users/jaydreyer/projects/recall-local/scripts/eval/notify_regression.py`
+- Added scheduling runbook:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Eval_Scheduling.md`
+
+### Notes
+
+- Supports daily/weekly cron schedules on ai-lab.
+- Regressions produce non-zero exit code and optional Slack/Teams webhook alerts when configured.
+
 ## 2026-02-23 - Workflow 02 IDK eval gate green on live webhook
 
 ### Outcome

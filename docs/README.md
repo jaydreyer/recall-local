@@ -8,6 +8,7 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `Recall_local_Phase0_Guide.md`: Phase 0 implementation instructions.
 - `Recall_local_Phase1_Guide.md`: Phase 1 kickoff implementation and runbook.
 - `Recall_local_Phase1D_Eval_Guide.md`: Eval harness runbook and troubleshooting protocol.
+- `Recall_local_Eval_Scheduling.md`: Daily/weekly eval scheduling and regression alert setup.
 
 ## Operational Documentation
 
