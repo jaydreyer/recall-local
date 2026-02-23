@@ -1,0 +1,60 @@
+{
+  "name": "Recall Phase2A - Meeting Action Items (HTTP Bridge)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "recall-meeting-actions",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "node-webhook-recall-meeting-actions",
+      "name": "Webhook Recall Meeting Actions",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        280,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://100.116.103.78:8090/meeting/action-items",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.body }}",
+        "options": {}
+      },
+      "id": "node-http-meeting-actions",
+      "name": "HTTP Meeting Action Items",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        560,
+        260
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Recall Meeting Actions": {
+      "main": [
+        [
+          {
+            "node": "HTTP Meeting Action Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "url": "https://example.com/?utm_source=bookmarklet",
+  "title": "Solutions Engineer Job Description",
+  "text": "Role overview and requirements copied from the page.",
+  "tags": [
+    "job-search",
+    "jd",
+    "exampleco"
+  ],
+  "replace_existing": true,
+  "source_key": "job:exampleco:solutions-engineer",
+  "source": "bookmarklet"
+}

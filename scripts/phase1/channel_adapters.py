@@ -13,6 +13,10 @@ def normalize_payload(raw_payload: dict[str, Any], channel: str) -> dict[str, An
     normalized_channel = channel.strip().lower()
     if normalized_channel == "webhook":
         return _normalize_webhook(raw_payload)
+    if normalized_channel == "bookmarklet":
+        payload = _normalize_webhook(raw_payload)
+        payload["source"] = str(raw_payload.get("source", "bookmarklet")).strip() or "bookmarklet"
+        return payload
     if normalized_channel == "ios-share":
         return _normalize_ios_share(raw_payload)
     if normalized_channel == "gmail-forward":
@@ -24,23 +28,91 @@ def _normalize_webhook(raw_payload: dict[str, Any]) -> dict[str, Any]:
     if _is_unified_payload(raw_payload):
         payload = dict(raw_payload)
         payload["source"] = str(payload.get("source", "webhook")).strip() or "webhook"
+        metadata = _ensure_metadata(payload.get("metadata"))
+        _merge_webhook_metadata(raw_payload=raw_payload, metadata=metadata)
+        payload["metadata"] = metadata
+        if "replace_existing" in raw_payload and "replace_existing" not in payload:
+            payload["replace_existing"] = raw_payload.get("replace_existing")
+        source_key = _first_non_empty(
+            raw_payload.get("source_key"),
+            raw_payload.get("canonical_source_key"),
+            raw_payload.get("source_identity"),
+        )
+        if source_key and "source_key" not in payload:
+            payload["source_key"] = source_key
         return payload
 
     # Fallback inference for webhook callers that post raw content without type.
+    metadata = _ensure_metadata(raw_payload.get("metadata"))
+    _merge_webhook_metadata(raw_payload=raw_payload, metadata=metadata)
+
+    source_type = str(raw_payload.get("type", "")).strip().lower()
     content = raw_payload.get("content")
+
+    if not source_type:
+        if _looks_like_gdoc_payload(raw_payload):
+            source_type = "gdoc"
+        elif isinstance(content, str):
+            source_type = "url" if URL_RE.match(content.strip()) else "text"
+
+    if source_type == "gdoc":
+        if content is None:
+            content = {
+                "url": _first_non_empty(
+                    raw_payload.get("url"),
+                    raw_payload.get("gdoc_url"),
+                    raw_payload.get("document_url"),
+                ),
+                "doc_id": _first_non_empty(
+                    raw_payload.get("doc_id"),
+                    raw_payload.get("document_id"),
+                    raw_payload.get("id"),
+                    raw_payload.get("gdoc_id"),
+                ),
+                "text": _first_non_empty(
+                    raw_payload.get("text"),
+                    raw_payload.get("document_text"),
+                    raw_payload.get("body"),
+                ),
+                "title": _first_non_empty(raw_payload.get("title"), raw_payload.get("name")),
+            }
+    elif content is None:
+        inferred_url = _first_non_empty(raw_payload.get("url"), raw_payload.get("page_url"), raw_payload.get("shared_url"))
+        inferred_text = _first_non_empty(
+            raw_payload.get("text"),
+            raw_payload.get("shared_text"),
+            raw_payload.get("selection"),
+            raw_payload.get("excerpt"),
+            raw_payload.get("body"),
+        )
+        if inferred_url:
+            source_type = source_type or "url"
+            content = inferred_url
+        elif inferred_text:
+            source_type = source_type or ("url" if URL_RE.match(inferred_text) else "text")
+            content = inferred_text
+
     if content is None:
-        raise ValueError("Webhook payload requires either unified shape or a 'content' field.")
+        raise ValueError("Webhook payload requires either unified shape or a content/url/text field.")
+    if not source_type:
+        source_type = "text"
 
-    source_type = "text"
-    if isinstance(content, str) and URL_RE.match(content.strip()):
-        source_type = "url"
-
-    return {
+    payload = {
         "type": source_type,
         "content": content,
         "source": str(raw_payload.get("source", "webhook")).strip() or "webhook",
-        "metadata": _ensure_metadata(raw_payload.get("metadata")),
+        "metadata": metadata,
     }
+    if "replace_existing" in raw_payload:
+        payload["replace_existing"] = raw_payload.get("replace_existing")
+    source_key = _first_non_empty(
+        raw_payload.get("source_key"),
+        raw_payload.get("canonical_source_key"),
+        raw_payload.get("source_identity"),
+    )
+    if source_key:
+        payload["source_key"] = source_key
+    return payload
 
 
 def _normalize_ios_share(raw_payload: dict[str, Any]) -> dict[str, Any]:
@@ -180,3 +252,22 @@ def _ensure_metadata(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return dict(value)
     return {}
+
+
+def _merge_webhook_metadata(*, raw_payload: dict[str, Any], metadata: dict[str, Any]) -> None:
+    title = _first_non_empty(raw_payload.get("title"), raw_payload.get("page_title"), raw_payload.get("name"))
+    if title and "title" not in metadata:
+        metadata["title"] = title
+    tags = raw_payload.get("tags")
+    if tags is not None and "tags" not in metadata:
+        metadata["tags"] = tags
+
+
+def _looks_like_gdoc_payload(payload: dict[str, Any]) -> bool:
+    type_hint = str(payload.get("type", "")).strip().lower()
+    if type_hint == "gdoc":
+        return True
+    if any(key in payload for key in ("doc_id", "document_id", "gdoc_id")):
+        return True
+    url = _first_non_empty(payload.get("url"), payload.get("gdoc_url"), payload.get("document_url"))
+    return isinstance(url, str) and "docs.google.com/document" in url.lower()

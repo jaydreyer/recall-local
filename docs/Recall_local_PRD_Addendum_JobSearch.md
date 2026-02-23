@@ -36,7 +36,7 @@ The following documents should be ingested into `recall_docs` with `tags: ["job-
 
 **Ingestion tagging requirement:** Every job search document must be tagged `job-search` at ingestion time. Use the existing `tags[]` field in the `recall_docs` Qdrant payload. Additional specificity tags are optional but useful (e.g., `anthropic`, `jd`, `resume`, `prep`).
 
-**Re-ingestion policy:** Job descriptions and prep notes change frequently. When a document is updated, delete the old chunks by `doc_id` before re-ingesting. Do not allow stale JDs to accumulate — retrieved results from an old JD will silently degrade answer quality.
+**Re-ingestion policy:** Job descriptions and prep notes change frequently. When a document is updated, replace old chunks by stable source identity (`source_key`/canonical source) before re-ingesting. Do not allow stale JDs to accumulate — retrieved results from an old JD will silently degrade answer quality.
 
 ---
 

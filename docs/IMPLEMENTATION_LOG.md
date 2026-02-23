@@ -1,5 +1,144 @@
 # Recall.local Implementation Log
 
+## 2026-02-23 - Bridge TLS trust fix for HTTPS URL ingestion
+
+### Outcome
+
+- Updated bridge compose startup command to install CA certificates before running Python ingestion service:
+  - `/Users/jaydreyer/projects/recall-local/docker/phase1b-ingest-bridge.compose.yml`
+- Added URL ingestion TLS fallback controls for environments with custom/intercepted cert chains:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingestion_pipeline.py`
+  - env flags:
+    - `RECALL_URL_VERIFY_TLS` (default `true`)
+    - `RECALL_URL_ALLOW_INSECURE_FALLBACK` (default `false`)
+  - bridge compose sets fallback enabled to keep bookmarklet ingestion operational when cert trust fails in container runtime.
+
+### Why
+
+- Bookmarklet URL ingestion test hit SSL verification failure inside `recall-ingest-bridge` container:
+  - `[SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer certificate`
+- Installing `ca-certificates` resolves HTTPS trust for URL extraction calls.
+
+## 2026-02-23 - Phase 2B ingestion controls: gdoc/bookmarklet normalization + source-based replacement
+
+### Outcome
+
+- Extended unified ingestion normalization to support browser bookmarklet channel and richer webhook fallback mapping:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/channel_adapters.py`
+  - added channel: `bookmarklet`
+  - webhook fallback now maps `url/text/title/tags` and optional replacement controls
+- Added payload-level replacement controls in Workflow 01 request parser:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_from_payload.py`
+  - supported fields: `replace_existing`, `source_key`, top-level `tags`
+- Implemented source-identity replacement policy in ingestion backend:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingestion_pipeline.py`
+  - computes canonical `source_identity` (URL canonicalization + optional override key)
+  - optional delete-before-upsert (`replace_existing=true`)
+  - persists `source_identity` and replacement metadata in Qdrant payload
+  - returns replacement audit fields in ingestion result (`replaced_points`, `replacement_status`)
+- Added Google Docs payload support improvements:
+  - accepts gdoc payload object containing URL/doc_id and optional extracted text
+  - source extraction path now supports `gdoc` content dictionaries
+- Bridge/channel runner updates:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py` supports `/ingest/bookmarklet`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_channel_payload.py` accepts `--channel bookmarklet`
+
+### Added payload examples
+
+- `/Users/jaydreyer/projects/recall-local/n8n/workflows/payload_examples/bookmarklet_ingest_payload_example.json`
+- `/Users/jaydreyer/projects/recall-local/n8n/workflows/payload_examples/gdoc_ingest_payload_example.json`
+
+### Documentation updates
+
+- `/Users/jaydreyer/projects/recall-local/n8n/workflows/PHASE1B_CHANNEL_WIRING.md`
+- `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase1_Guide.md`
+- `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase2_Guide.md`
+- `/Users/jaydreyer/projects/recall-local/docs/Recall_local_PRD_Addendum_JobSearch.md`
+- `/Users/jaydreyer/projects/recall-local/docs/README.md`
+
+### Verification in this thread
+
+- `python3 -m compileall scripts` (passes)
+- Normalization smoke checks for:
+  - bookmarklet raw payload -> unified payload
+  - gdoc payload object -> unified payload
+- Payload parser check confirms replacement controls are mapped:
+  - `replace_existing=True`, `source_key` preserved in `IngestRequest`
+- Source identity checks:
+  - URL canonicalization strips tracking params
+  - replacement guard blocks `text/email` replacement when no stable key is provided
+
+## 2026-02-23 - Phase 2A verification: non-dry-run Workflow 03 pass via bridge
+
+### Outcome
+
+- Ran Workflow 03 bridge verification in non-dry-run mode with live ai-lab dependencies:
+  - `OLLAMA_HOST=http://100.116.103.78:11434`
+  - `QDRANT_HOST=http://100.116.103.78:6333`
+- Verification script pass:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase2/verify_workflow03_bridge.py`
+  - run_id: `ef93fdf2f5c14f53befc7126f77295c4`
+  - result: `ok=true`
+- Confirmed persisted outputs:
+  - artifact exists: `/Users/jaydreyer/projects/recall-local/data/artifacts/meetings/20260223T145113Z_ef93fdf2f5c14f53befc7126f77295c4.md`
+  - SQLite run row present for workflow `workflow_03_meeting_action_items`
+
+### Additional note
+
+- Local dry-run verification also passed with model override:
+  - `OLLAMA_MODEL=llama3.2:latest`
+  - this avoided local default model mismatch (`llama3:8b` unavailable).
+
+## 2026-02-23 - Phase 2A assets: n8n wiring + bridge verification script
+
+### Outcome
+
+- Added import-ready n8n workflow exports for Workflow 03:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase2a_meeting_action_items.workflow.json`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase2a_meeting_action_items_http.workflow.json`
+- Added Workflow 03 wiring runbook:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/PHASE2A_WORKFLOW03_WIRING.md`
+- Added bridge verification script for Workflow 03 contract + persisted evidence checks:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase2/verify_workflow03_bridge.py`
+
+### Notes
+
+- Verification script validates response schema and can assert artifact + SQLite run presence on non-dry-run calls.
+- Script defaults to using:
+  - bridge URL: `http://localhost:8090/meeting/action-items`
+  - payload file: `/Users/jaydreyer/projects/recall-local/n8n/workflows/payload_examples/meeting_action_items_payload_example.json`
+
+## 2026-02-23 - Phase 2A kickoff: Workflow 03 Meeting -> Action Items core implementation
+
+### Outcome
+
+- Added Workflow 03 runner and payload entrypoint for transcript-to-action extraction:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase2/meeting_action_items.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase2/meeting_from_payload.py`
+- Added Workflow 03 prompt templates:
+  - `/Users/jaydreyer/projects/recall-local/prompts/workflow_03_meeting_extract.md`
+  - `/Users/jaydreyer/projects/recall-local/prompts/workflow_03_meeting_extract_retry.md`
+- Extended output validation utilities with meeting schema validation:
+  - `/Users/jaydreyer/projects/recall-local/scripts/validate_output.py`
+- Exposed Workflow 03 webhook route via HTTP bridge:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py`
+  - supported paths: `/meeting/action-items` (primary), `/meeting/actions`, `/query/meeting`
+- Added payload example for n8n/webhook tests:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/payload_examples/meeting_action_items_payload_example.json`
+
+### Workflow 03 behavior shipped
+
+- Validates structured output contract (`meeting_title`, `summary`, `decisions`, `action_items`, `risks`, `follow_ups`) with retry pass before fallback.
+- Writes Markdown artifacts under `/data/artifacts/meetings/` on non-dry runs.
+- Upserts a meeting summary chunk into Qdrant `recall_docs` for downstream Workflow 02 retrieval.
+- Logs run lifecycle to SQLite `runs` table with workflow id `workflow_03_meeting_action_items`.
+
+### Verification in this thread
+
+- `python3 -m compileall scripts` (passes)
+- `validate_meeting_output(...)` happy-path check (valid = true)
+- `run_meeting_action_items(..., dry_run=True)` with mocked LLM response (returns Workflow 03 payload + audit block)
+
 ## 2026-02-23 - Phase 2 implementation checklists added
 
 ### Outcome

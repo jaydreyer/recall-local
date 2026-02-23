@@ -7,7 +7,10 @@ services:
       - "8090:8090"
     working_dir: /home/jaydreyer/recall-local
     command: >
-      sh -lc "python3 -m pip install --no-cache-dir -r requirements.txt &&
+      sh -lc "apt-get update &&
+              apt-get install -y --no-install-recommends ca-certificates &&
+              rm -rf /var/lib/apt/lists/* &&
+              python3 -m pip install --no-cache-dir -r requirements.txt &&
               python3 scripts/phase1/ingest_bridge_api.py --host 0.0.0.0 --port 8090"
     volumes:
       - /home/jaydreyer/recall-local:/home/jaydreyer/recall-local
@@ -19,6 +22,8 @@ services:
       - DATA_PROCESSED=/home/jaydreyer/recall-local/data/processed
       - DATA_ARTIFACTS=/home/jaydreyer/recall-local/data/artifacts
       - RECALL_DB_PATH=/home/jaydreyer/recall-local/data/recall.db
+      - RECALL_URL_VERIFY_TLS=true
+      - RECALL_URL_ALLOW_INSECURE_FALLBACK=true
     networks:
       - ollama_default
       - qdrant_default

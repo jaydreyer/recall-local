@@ -5,7 +5,7 @@ This runbook wires channel-specific inputs into the shared ingestion backend.
 Preferred path: HTTP bridge (works when `Execute Command` is unavailable in n8n).
 
 - Bridge service script: `/home/jaydreyer/recall-local/scripts/phase1/ingest_bridge_api.py`
-- Channels supported: `webhook`, `ios-share`, `gmail-forward`
+- Channels supported: `webhook`, `bookmarklet`, `ios-share`, `gmail-forward`
 - Import-ready workflow JSON files:
   - `/home/jaydreyer/recall-local/n8n/workflows/phase1b_recall_ingest_webhook.workflow.json`
   - `/home/jaydreyer/recall-local/n8n/workflows/phase1b_gmail_forward_ingest.workflow.json`
@@ -38,6 +38,11 @@ Node sequence:
 - Send Body: `true`
 - Body Content Type: `JSON`
 - JSON Body: `={{ $json }}`
+
+This unified webhook now supports additional payload controls:
+
+- `replace_existing` (boolean): when true, deletes existing chunks for the same source identity before upsert.
+- `source_key` (string): stable canonical key used for replacement matching across updates.
 
 `Respond to Webhook` response body example:
 
@@ -90,6 +95,58 @@ iOS Shortcut can call the same webhook (`/webhook/recall-ingest`) with either:
   }
 }
 ```
+
+## Browser bookmarklet payload contract
+
+Bookmarklet should call the same webhook (`/webhook/recall-ingest`) with either a unified payload or raw shape:
+
+```json
+{
+  "url": "https://example.com/?utm_source=bookmarklet",
+  "title": "Solutions Engineer Job Description",
+  "text": "Optional selected text from the page",
+  "tags": ["job-search", "jd", "exampleco"],
+  "replace_existing": true,
+  "source_key": "job:exampleco:solutions-engineer",
+  "source": "bookmarklet"
+}
+```
+
+Sample file:
+- `/home/jaydreyer/recall-local/n8n/workflows/payload_examples/bookmarklet_ingest_payload_example.json`
+
+Direct bridge route for bookmarklet testing:
+
+```bash
+curl -sS -X POST http://localhost:8090/ingest/bookmarklet \
+  -H 'content-type: application/json' \
+  -d @/home/jaydreyer/recall-local/n8n/workflows/payload_examples/bookmarklet_ingest_payload_example.json
+```
+
+## Google Docs payload contract
+
+Google Docs ingestion supports either doc text supplied by n8n or URL/doc id fetch:
+
+```json
+{
+  "type": "gdoc",
+  "content": {
+    "doc_id": "1EXAMPLE_DOC_ID",
+    "url": "https://docs.google.com/document/d/1EXAMPLE_DOC_ID/edit",
+    "title": "Interview Prep Notes",
+    "text": "Prepared notes from Google Docs node output"
+  },
+  "source": "gdocs-sync",
+  "replace_existing": true,
+  "source_key": "gdoc:interview-prep-notes",
+  "metadata": {
+    "tags": ["job-search", "prep"]
+  }
+}
+```
+
+Sample file:
+- `/home/jaydreyer/recall-local/n8n/workflows/payload_examples/gdoc_ingest_payload_example.json`
 
 Or raw share-shape (adapter-supported):
 

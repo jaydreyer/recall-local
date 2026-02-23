@@ -18,7 +18,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 try:
     from dotenv import load_dotenv
@@ -31,6 +31,18 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 HEADING_RE = re.compile(r"^(#{1,6}\s+.+|[A-Z][A-Z0-9 _:/-]{4,})$")
+TRACKING_QUERY_KEYS = {
+    "fbclid",
+    "gclid",
+    "mc_cid",
+    "mc_eid",
+    "utm_campaign",
+    "utm_content",
+    "utm_id",
+    "utm_medium",
+    "utm_source",
+    "utm_term",
+}
 
 
 @dataclass
@@ -52,6 +64,8 @@ class IngestRequest:
     title: str | None = None
     tags: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+    replace_existing: bool = False
+    source_key: str | None = None
 
 
 @dataclass
@@ -62,8 +76,12 @@ class IngestResult:
     source_type: str
     source_ref: str
     title: str
+    source_identity: str
     chunks_created: int
     moved_to: str | None
+    replace_existing: bool
+    replaced_points: int
+    replacement_status: str
     latency_ms: int
     status: str
 
@@ -90,8 +108,9 @@ def load_settings() -> Settings:
 
 def ingest_request(request: IngestRequest, *, dry_run: bool = False) -> IngestResult:
     settings = load_settings()
-    settings.db_path.parent.mkdir(parents=True, exist_ok=True)
-    settings.processed_dir.mkdir(parents=True, exist_ok=True)
+    if not dry_run:
+        settings.db_path.parent.mkdir(parents=True, exist_ok=True)
+        settings.processed_dir.mkdir(parents=True, exist_ok=True)
 
     started_at = _now_iso()
     started_perf = time.perf_counter()
@@ -111,6 +130,10 @@ def ingest_request(request: IngestRequest, *, dry_run: bool = False) -> IngestRe
             request.content,
         )
         title = request.title or fallback_title or "Untitled source"
+        source_identity = resolve_source_identity(
+            request=request,
+            source_ref=source_ref,
+        )
         chunks = chunk_text(
             extracted_text,
             max_tokens=settings.chunk_tokens,
@@ -120,21 +143,34 @@ def ingest_request(request: IngestRequest, *, dry_run: bool = False) -> IngestRe
             raise RuntimeError("No chunks produced from source content")
 
         moved_to: str | None = None
+        replaced_points = 0
+        replacement_status = "skipped"
         if not dry_run:
+            qdrant = qdrant_client_from_env(settings.qdrant_host)
+            if request.replace_existing:
+                replaced_points = _replace_existing_source_points(
+                    qdrant=qdrant,
+                    collection_name=settings.qdrant_collection,
+                    source_identity=source_identity,
+                )
+                replacement_status = "applied"
             points = _build_qdrant_points(
                 chunks=chunks,
                 doc_id=doc_id,
                 title=title,
                 source_ref=source_ref,
+                source_identity=source_identity,
                 request=request,
+                replaced_points=replaced_points,
             )
-            qdrant = qdrant_client_from_env(settings.qdrant_host)
             qdrant.upsert(collection_name=settings.qdrant_collection, points=points)
             moved_to = maybe_move_to_processed(
                 settings=settings,
                 request=request,
                 doc_id=doc_id,
             )
+        elif request.replace_existing:
+            replacement_status = "dry_run"
 
         ended_at = _now_iso()
         latency_ms = int((time.perf_counter() - started_perf) * 1000)
@@ -164,8 +200,12 @@ def ingest_request(request: IngestRequest, *, dry_run: bool = False) -> IngestRe
             source_type=request.source_type,
             source_ref=source_ref,
             title=title,
+            source_identity=source_identity,
             chunks_created=len(chunks),
             moved_to=moved_to,
+            replace_existing=request.replace_existing,
+            replaced_points=replaced_points,
+            replacement_status=replacement_status,
             latency_ms=latency_ms,
             status=status,
         )
@@ -190,11 +230,14 @@ def extract_text(source_type: str, content: Any) -> tuple[str, str, str]:
         text = extract_text_from_file(file_path)
         return text, str(file_path.resolve()), file_path.name
 
-    if normalized in {"url", "gdoc"}:
+    if normalized == "url":
         url = str(content).strip()
         text = extract_text_from_url(url)
         host = urlparse(url).netloc or "web source"
         return text, url, host
+
+    if normalized == "gdoc":
+        return _extract_text_from_gdoc_content(content)
 
     if normalized == "text":
         text = str(content).strip()
@@ -235,11 +278,20 @@ def extract_text_from_url(url: str) -> str:
     if parsed.scheme not in {"http", "https"}:
         raise ValueError(f"Unsupported URL scheme for ingestion: {url}")
 
-    downloaded = trafilatura.fetch_url(url)
-    if not downloaded:
-        response = httpx.get(url, follow_redirects=True, timeout=30)
+    verify_tls = _bool_env("RECALL_URL_VERIFY_TLS", default=True)
+    allow_insecure_fallback = _bool_env("RECALL_URL_ALLOW_INSECURE_FALLBACK", default=False)
+
+    try:
+        response = httpx.get(url, follow_redirects=True, timeout=30, verify=verify_tls)
         response.raise_for_status()
         downloaded = response.text
+    except Exception as exc:  # noqa: BLE001
+        if verify_tls and allow_insecure_fallback and _is_tls_verify_error(exc):
+            response = httpx.get(url, follow_redirects=True, timeout=30, verify=False)
+            response.raise_for_status()
+            downloaded = response.text
+        else:
+            raise
 
     extracted = trafilatura.extract(
         downloaded,
@@ -254,6 +306,69 @@ def extract_text_from_url(url: str) -> str:
     if not cleaned:
         raise ValueError(f"No readable content extracted from URL: {url}")
     return cleaned
+
+
+def _extract_text_from_gdoc_content(content: Any) -> tuple[str, str, str]:
+    gdoc_url: str | None = None
+    gdoc_id: str | None = None
+    gdoc_title: str | None = None
+
+    if isinstance(content, dict):
+        gdoc_text = _first_non_empty(
+            content.get("text"),
+            content.get("document_text"),
+            content.get("body"),
+            content.get("content"),
+        )
+        gdoc_url = _first_non_empty(
+            content.get("url"),
+            content.get("document_url"),
+            content.get("source_url"),
+        )
+        gdoc_id = _first_non_empty(
+            content.get("doc_id"),
+            content.get("document_id"),
+            content.get("id"),
+        )
+        gdoc_title = _first_non_empty(content.get("title"), content.get("name"))
+        if gdoc_text:
+            source_ref = gdoc_url or _gdoc_url_from_id(gdoc_id) or f"gdoc:{gdoc_id or 'inline'}"
+            title = gdoc_title or (f"Google Doc {gdoc_id}" if gdoc_id else "Google Doc")
+            return gdoc_text, source_ref, title
+    else:
+        content_str = str(content).strip()
+        if not content_str:
+            raise ValueError("Google Doc content is empty")
+        if _looks_like_url(content_str):
+            gdoc_url = content_str
+        else:
+            gdoc_id = content_str
+
+    candidate_url = gdoc_url or _gdoc_export_url_from_id(gdoc_id)
+    if not candidate_url:
+        raise ValueError(
+            "Google Doc payload must include URL, doc id, or extracted text. "
+            "Preferred payload: {type:'gdoc', content:{url|doc_id|text}}."
+        )
+
+    text = extract_text_from_url(candidate_url)
+    source_ref = gdoc_url or _gdoc_url_from_id(gdoc_id) or candidate_url
+    title = gdoc_title or (f"Google Doc {gdoc_id}" if gdoc_id else "Google Doc")
+    return text, source_ref, title
+
+
+def _gdoc_export_url_from_id(doc_id: str | None) -> str | None:
+    normalized = (doc_id or "").strip()
+    if not normalized:
+        return None
+    return f"https://docs.google.com/document/d/{normalized}/export?format=txt"
+
+
+def _gdoc_url_from_id(doc_id: str | None) -> str | None:
+    normalized = (doc_id or "").strip()
+    if not normalized:
+        return None
+    return f"https://docs.google.com/document/d/{normalized}/edit"
 
 
 def _extract_text_from_pdf(file_path: Path) -> str:
@@ -377,7 +492,9 @@ def _build_qdrant_points(
     doc_id: str,
     title: str,
     source_ref: str,
+    source_identity: str,
     request: IngestRequest,
+    replaced_points: int,
 ) -> list[Any]:
     llm_client = _require_module("scripts.llm_client", "pip install -r requirements.txt")
     models_module = _require_module("qdrant_client.models", "pip install -r requirements.txt")
@@ -389,8 +506,15 @@ def _build_qdrant_points(
     for index, chunk in enumerate(chunks):
         chunk_id = f"{doc_id}:{index:04d}"
         embedding = llm_client.embed(chunk)
+        metadata = dict(request.metadata)
+        metadata["source_identity"] = source_identity
+        metadata["replacement"] = {
+            "requested": request.replace_existing,
+            "deleted_points": replaced_points,
+        }
         payload = {
             "source": source_ref,
+            "source_identity": source_identity,
             "source_type": request.source_type,
             "doc_id": doc_id,
             "chunk_id": chunk_id,
@@ -399,7 +523,7 @@ def _build_qdrant_points(
             "tags": request.tags,
             "ingestion_channel": request.source_channel,
             "text": chunk,
-            "metadata": request.metadata,
+            "metadata": metadata,
         }
         points.append(PointStruct(id=str(uuid.uuid4()), vector=embedding, payload=payload))
 
@@ -411,6 +535,120 @@ def _require_module(module_name: str, install_hint: str):
         return importlib.import_module(module_name)
     except ModuleNotFoundError as exc:
         raise RuntimeError(f"Missing dependency '{module_name}'. Install with: {install_hint}") from exc
+
+
+def resolve_source_identity(*, request: IngestRequest, source_ref: str) -> str:
+    explicit_source_key = _first_non_empty(
+        request.source_key,
+        request.metadata.get("source_key") if isinstance(request.metadata, dict) else None,
+        request.metadata.get("canonical_source_key") if isinstance(request.metadata, dict) else None,
+        request.metadata.get("source_identity") if isinstance(request.metadata, dict) else None,
+    )
+    if explicit_source_key:
+        return explicit_source_key
+
+    normalized_source_type = request.source_type.strip().lower()
+    if normalized_source_type in {"url", "gdoc"}:
+        return _canonicalize_url(source_ref)
+
+    if normalized_source_type == "file":
+        source_path = Path(source_ref).expanduser()
+        if source_path.exists():
+            return str(source_path.resolve())
+        return source_ref
+
+    if request.replace_existing and normalized_source_type in {"text", "email"}:
+        raise ValueError(
+            "replace_existing=true for text/email requires source_key (or metadata.source_key) "
+            "to avoid replacing unrelated records."
+        )
+
+    return source_ref
+
+
+def _canonicalize_url(url: str) -> str:
+    parsed = urlparse(url.strip())
+    if parsed.scheme not in {"http", "https"}:
+        return url.strip()
+
+    filtered_pairs: list[tuple[str, str]] = []
+    for key, value in parse_qsl(parsed.query, keep_blank_values=True):
+        if key.lower() in TRACKING_QUERY_KEYS:
+            continue
+        filtered_pairs.append((key, value))
+    filtered_pairs.sort(key=lambda item: (item[0], item[1]))
+
+    normalized_path = re.sub(r"/+$", "", parsed.path) or "/"
+    normalized = parsed._replace(
+        scheme=parsed.scheme.lower(),
+        netloc=parsed.netloc.lower(),
+        path=normalized_path,
+        params="",
+        query=urlencode(filtered_pairs, doseq=True),
+        fragment="",
+    )
+    return urlunparse(normalized)
+
+
+def _replace_existing_source_points(*, qdrant: Any, collection_name: str, source_identity: str) -> int:
+    models_module = _require_module("qdrant_client.models", "pip install -r requirements.txt")
+    source_filter = _build_source_identity_filter(models_module=models_module, source_identity=source_identity)
+
+    before_count = _count_points(qdrant=qdrant, collection_name=collection_name, source_filter=source_filter)
+    if before_count == 0:
+        return 0
+
+    filter_selector_cls = getattr(models_module, "FilterSelector", None)
+    points_selector = (
+        filter_selector_cls(filter=source_filter)
+        if filter_selector_cls is not None
+        else source_filter
+    )
+
+    try:
+        qdrant.delete(collection_name=collection_name, points_selector=points_selector, wait=True)
+    except TypeError:
+        qdrant.delete(collection_name=collection_name, points_selector=points_selector)
+
+    after_count = _count_points(qdrant=qdrant, collection_name=collection_name, source_filter=source_filter)
+    if before_count < 0 or after_count < 0:
+        return max(before_count, 0)
+    return max(before_count - after_count, 0)
+
+
+def _count_points(*, qdrant: Any, collection_name: str, source_filter: Any) -> int:
+    try:
+        response = qdrant.count(collection_name=collection_name, count_filter=source_filter, exact=True)
+    except TypeError:
+        try:
+            response = qdrant.count(collection_name=collection_name, filter=source_filter, exact=True)
+        except TypeError:
+            response = qdrant.count(collection_name=collection_name, count_filter=source_filter)
+    except Exception:
+        return -1
+
+    if hasattr(response, "count"):
+        try:
+            return int(response.count)
+        except (TypeError, ValueError):
+            return -1
+    if isinstance(response, dict):
+        try:
+            return int(response.get("count", -1))
+        except (TypeError, ValueError):
+            return -1
+    return -1
+
+
+def _build_source_identity_filter(*, models_module: Any, source_identity: str):
+    return models_module.Filter(
+        must=[
+            models_module.FieldCondition(
+                key="source_identity",
+                match=models_module.MatchValue(value=source_identity),
+            )
+        ]
+    )
 
 
 def maybe_move_to_processed(*, settings: Settings, request: IngestRequest, doc_id: str) -> str | None:
@@ -533,6 +771,34 @@ def _mark_ingestion_failed(*, conn: sqlite3.Connection, ingest_id: str, ended_at
     conn.commit()
 
 
+def _first_non_empty(*values: Any) -> str | None:
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _looks_like_url(value: str) -> bool:
+    parsed = urlparse(value.strip())
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def _bool_env(name: str, *, default: bool) -> bool:
+    raw = os.getenv(name, "").strip().lower()
+    if not raw:
+        return default
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _is_tls_verify_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return "certificate verify failed" in message or "self signed certificate" in message
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -550,6 +816,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--title", default=None, help="Optional source title override.")
     parser.add_argument("--tags", default="", help="Comma-separated tags.")
     parser.add_argument("--metadata-json", default="{}", help="JSON object for extra metadata.")
+    parser.add_argument(
+        "--replace-existing",
+        action="store_true",
+        help="Delete existing chunks for the same source_identity before upsert.",
+    )
+    parser.add_argument(
+        "--source-key",
+        default=None,
+        help="Optional stable source identity key for replacement behavior.",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Skip DB/Qdrant writes.")
     return parser.parse_args()
 
@@ -569,6 +845,8 @@ def main() -> int:
         title=args.title,
         tags=[part.strip() for part in args.tags.split(",") if part.strip()],
         metadata=metadata if isinstance(metadata, dict) else {},
+        replace_existing=args.replace_existing,
+        source_key=args.source_key,
     )
 
     try:

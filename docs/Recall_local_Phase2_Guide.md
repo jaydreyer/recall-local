@@ -57,6 +57,54 @@ Execution checklist: `/Users/jaydreyer/projects/recall-local/docs/Recall_local_P
 4. Continue `2C` with observability tasks: Langfuse and artifact polish once domain-scoped RAG is stable.
 5. Finish with `2D`: scripted rehearsal and reliability gate.
 
+## 2A Core Interfaces (implemented)
+
+- Runner script:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase2/meeting_action_items.py`
+- Payload runner:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase2/meeting_from_payload.py`
+- HTTP bridge endpoints:
+  - `/meeting/action-items` (primary)
+  - `/meeting/actions` (alias)
+  - `/query/meeting` (alias)
+- Prompt templates:
+  - `/Users/jaydreyer/projects/recall-local/prompts/workflow_03_meeting_extract.md`
+  - `/Users/jaydreyer/projects/recall-local/prompts/workflow_03_meeting_extract_retry.md`
+- Payload example:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/payload_examples/meeting_action_items_payload_example.json`
+- n8n wiring runbook:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/PHASE2A_WORKFLOW03_WIRING.md`
+- bridge verification helper:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase2/verify_workflow03_bridge.py`
+
+Initial contract behavior:
+- returns validated structured JSON
+- writes meeting artifact Markdown under `/data/artifacts/meetings/`
+- indexes meeting summary into `recall_docs`
+- logs run metadata in SQLite `runs`
+
+## 2B Ingestion controls (implemented)
+
+- Unified webhook normalization now supports bookmarklet + gdoc-friendly payloads and preserves tags:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/channel_adapters.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_from_payload.py`
+- Source-based replacement controls for mutable sources:
+  - request fields: `replace_existing` (boolean), `source_key` (stable key)
+  - canonical source identity persisted to Qdrant payload field `source_identity`
+  - replacement activity exposed in ingestion result fields (`replace_existing`, `replaced_points`, `replacement_status`)
+  - implementation: `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingestion_pipeline.py`
+- Bridge route supports bookmarklet path directly:
+  - `/ingest/bookmarklet`
+  - implementation: `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py`
+- Phase 2B payload/runbook assets:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/payload_examples/bookmarklet_ingest_payload_example.json`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/payload_examples/gdoc_ingest_payload_example.json`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/PHASE1B_CHANNEL_WIRING.md`
+
+Operational rule for job-search corpus:
+- `job-search` tag is mandatory at ingestion time.
+- Mutable job-search sources (JDs/prep docs) should ingest with `replace_existing=true` and stable `source_key`.
+
 ## Risks and guardrails
 
 - Keep n8n for orchestration only; heavy logic remains in Python scripts.

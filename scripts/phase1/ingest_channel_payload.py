@@ -21,11 +21,13 @@ from scripts.phase1.ingestion_pipeline import ingest_request  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Ingest a channel payload (webhook, iOS share, Gmail forward).")
+    parser = argparse.ArgumentParser(
+        description="Ingest a channel payload (webhook, bookmarklet, iOS share, Gmail forward)."
+    )
     parser.add_argument(
         "--channel",
         required=True,
-        choices=["webhook", "ios-share", "gmail-forward"],
+        choices=["webhook", "bookmarklet", "ios-share", "gmail-forward"],
         help="Input channel format to normalize.",
     )
     parser.add_argument("--payload-file", default=None, help="Path to JSON payload file.")

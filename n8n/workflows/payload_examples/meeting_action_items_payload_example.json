@@ -1,0 +1,10 @@
+{
+  "meeting_title": "Weekly Product Sync",
+  "transcript": "Alice: We will ship the onboarding fix by Friday. Bob: I will own QA sign-off by Thursday. Risk: timeline slips if API test data is delayed.",
+  "source": "webhook",
+  "source_ref": "meeting://weekly-product-sync/2026-02-23",
+  "tags": [
+    "meeting",
+    "product"
+  ]
+}

@@ -56,12 +56,18 @@ def payload_to_requests(payload: dict[str, Any]) -> list[IngestRequest]:
     if not isinstance(metadata, dict):
         raise ValueError("Payload field 'metadata' must be a JSON object if present.")
 
-    title = metadata.get("title")
-    tags = metadata.get("tags") or []
-    if isinstance(tags, str):
-        tags = [part.strip() for part in tags.split(",") if part.strip()]
-    if not isinstance(tags, list):
-        raise ValueError("Payload metadata.tags must be a list or comma-separated string.")
+    title = metadata.get("title") or payload.get("title")
+    tags = _normalize_tags(payload.get("tags"), metadata.get("tags"))
+    replace_existing = _coerce_bool(
+        payload.get("replace_existing", metadata.get("replace_existing", False))
+    )
+    source_key = _first_non_empty(
+        payload.get("source_key"),
+        payload.get("canonical_source_key"),
+        metadata.get("source_key"),
+        metadata.get("canonical_source_key"),
+        metadata.get("source_identity"),
+    )
 
     content = payload.get("content")
     if source_type in {"url", "text", "file", "gdoc"}:
@@ -75,6 +81,8 @@ def payload_to_requests(payload: dict[str, Any]) -> list[IngestRequest]:
                 title=title,
                 tags=[str(tag) for tag in tags],
                 metadata=metadata,
+                replace_existing=replace_existing,
+                source_key=source_key,
             )
         ]
 
@@ -85,6 +93,8 @@ def payload_to_requests(payload: dict[str, Any]) -> list[IngestRequest]:
             title=title,
             tags=[str(tag) for tag in tags],
             metadata=metadata,
+            replace_existing=replace_existing,
+            source_key=source_key,
         )
 
     raise ValueError(f"Unsupported payload type: {source_type}")
@@ -97,6 +107,8 @@ def _email_payload_requests(
     title: str | None,
     tags: list[str],
     metadata: dict[str, Any],
+    replace_existing: bool,
+    source_key: str | None,
 ) -> list[IngestRequest]:
     requests: list[IngestRequest] = []
 
@@ -115,6 +127,7 @@ def _email_payload_requests(
             base_metadata["email_message_id"] = message_id
 
         if body:
+            body_source_key = source_key or message_id or None
             requests.append(
                 IngestRequest(
                     source_type="email",
@@ -123,6 +136,8 @@ def _email_payload_requests(
                     title=title or subject or "Email body",
                     tags=tags,
                     metadata=base_metadata,
+                    replace_existing=replace_existing,
+                    source_key=body_source_key,
                 )
             )
 
@@ -135,6 +150,8 @@ def _email_payload_requests(
                     title=None,
                     tags=tags,
                     metadata=base_metadata,
+                    replace_existing=replace_existing,
+                    source_key=None,
                 )
             )
     else:
@@ -148,6 +165,8 @@ def _email_payload_requests(
                     title=title or "Email body",
                     tags=tags,
                     metadata=metadata,
+                    replace_existing=replace_existing,
+                    source_key=source_key,
                 )
             )
 
@@ -155,6 +174,45 @@ def _email_payload_requests(
         raise ValueError("Email payload had no body or attachment_paths to ingest.")
 
     return requests
+
+
+def _normalize_tags(primary: Any, fallback: Any) -> list[str]:
+    value = primary if primary is not None else fallback
+    if isinstance(value, str):
+        return [part.strip() for part in value.split(",") if part.strip()]
+    if isinstance(value, list):
+        tags: list[str] = []
+        for item in value:
+            tag = str(item).strip()
+            if tag:
+                tags.append(tag)
+        return tags
+    if value in {None, ""}:
+        return []
+    raise ValueError("Payload tags must be a list or comma-separated string.")
+
+
+def _coerce_bool(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off", ""}:
+            return False
+    raise ValueError("replace_existing must be a boolean-like value.")
+
+
+def _first_non_empty(*values: Any) -> str | None:
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
 
 
 def main() -> int:

@@ -11,6 +11,9 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `Recall_local_Phase2_Guide.md`: Phase 2 sub-phases, execution order, and completion gate.
 - `Recall_local_Phase2_Checklists.md`: Actionable implementation checklist for Phase 2 (`2B` and `2C`) including job-search domain mode tasks.
 - `Recall_local_Eval_Scheduling.md`: Daily/weekly eval scheduling and regression alert setup.
+- `../n8n/workflows/payload_examples/meeting_action_items_payload_example.json`: Sample payload for Workflow 03 (`2A`) webhook testing.
+- `../n8n/workflows/payload_examples/bookmarklet_ingest_payload_example.json`: Sample payload for bookmarklet ingestion with source-based replacement.
+- `../n8n/workflows/payload_examples/gdoc_ingest_payload_example.json`: Sample payload for Google Docs ingestion with source-based replacement.
 
 ## Operational Documentation
 
@@ -18,6 +21,8 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `ENVIRONMENT_INVENTORY.md`: Current state snapshot (services, ports, models, setup decisions).
 - `CONTEXT_KICKOFF_SHARING_GUIDE.md`: Shareable guide for adopting the context-kickoff pattern across projects.
 - `../n8n/workflows/PHASE1C_WORKFLOW02_WIRING.md`: Workflow 02 deployment and troubleshooting runbook.
+- `../n8n/workflows/PHASE2A_WORKFLOW03_WIRING.md`: Workflow 03 deployment and troubleshooting runbook.
+- `../scripts/phase2/verify_workflow03_bridge.py`: Workflow 03 bridge verification helper (contract + persisted evidence checks).
 
 ## Shareable Kit
 

@@ -20,6 +20,8 @@ from scripts.phase1.channel_adapters import normalize_payload  # noqa: E402
 from scripts.phase1.ingest_from_payload import payload_to_requests  # noqa: E402
 from scripts.phase1.ingestion_pipeline import ingest_request  # noqa: E402
 from scripts.phase1.rag_query import run_rag_query  # noqa: E402
+from scripts.phase2.meeting_action_items import run_meeting_action_items  # noqa: E402
+from scripts.phase2.meeting_from_payload import payload_to_meeting_kwargs  # noqa: E402
 
 
 class IngestBridgeHandler(BaseHTTPRequestHandler):
@@ -42,12 +44,16 @@ class IngestBridgeHandler(BaseHTTPRequestHandler):
             self._handle_rag_query_request(parsed)
             return
 
+        if parsed.path in {"/meeting/action-items", "/meeting/actions", "/query/meeting"}:
+            self._handle_meeting_request(parsed)
+            return
+
         self._send_json(404, {"error": "Unknown path"})
 
     def _handle_ingest_request(self, parsed) -> None:
         prefix = "/ingest/"
         channel = parsed.path[len(prefix):].strip().lower()
-        if channel not in {"webhook", "ios-share", "gmail-forward"}:
+        if channel not in {"webhook", "bookmarklet", "ios-share", "gmail-forward"}:
             self._send_json(400, {"error": f"Unsupported ingest channel: {channel}"})
             return
 
@@ -134,6 +140,37 @@ class IngestBridgeHandler(BaseHTTPRequestHandler):
             200,
             {
                 "workflow": "workflow_02_rag_query",
+                "dry_run": dry_run,
+                "result": result,
+            },
+        )
+
+    def _handle_meeting_request(self, parsed) -> None:
+        try:
+            payload = self._read_json_body()
+        except ValueError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+
+        query_args = parse_qs(parsed.query)
+        dry_run = _query_bool(query_args.get("dry_run"))
+
+        try:
+            kwargs = payload_to_meeting_kwargs(payload)
+        except Exception as exc:  # noqa: BLE001
+            self._send_json(400, {"error": f"Invalid meeting payload: {exc}"})
+            return
+
+        try:
+            result = run_meeting_action_items(**kwargs, dry_run=dry_run)
+        except Exception as exc:  # noqa: BLE001
+            self._send_json(500, {"error": f"Workflow 03 failed: {exc}"})
+            return
+
+        self._send_json(
+            200,
+            {
+                "workflow": "workflow_03_meeting_action_items",
                 "dry_run": dry_run,
                 "result": result,
             },

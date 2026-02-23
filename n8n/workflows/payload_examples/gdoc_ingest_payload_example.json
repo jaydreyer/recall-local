@@ -1,0 +1,18 @@
+{
+  "type": "gdoc",
+  "content": {
+    "doc_id": "1EXAMPLE_DOC_ID",
+    "url": "https://docs.google.com/document/d/1EXAMPLE_DOC_ID/edit",
+    "title": "Interview Prep Notes",
+    "text": "Top wins to highlight: API governance rollout, enterprise chatbot launch, and cross-team developer enablement."
+  },
+  "source": "gdocs-sync",
+  "replace_existing": true,
+  "source_key": "gdoc:interview-prep-notes",
+  "metadata": {
+    "tags": [
+      "job-search",
+      "prep"
+    ]
+  }
+}

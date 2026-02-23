@@ -7,6 +7,7 @@ Purpose: track Phase 1 execution for Workflow 01 ingestion, channel wiring, and 
 - `scripts/phase1/ingestion_pipeline.py`
   - Shared ingestion engine for `file`, `url`, `text`, `email`, and `gdoc` payload types.
   - Extracts text, performs heading-aware chunking, embeds via `scripts/llm_client.py`, upserts to Qdrant, logs to SQLite.
+  - Supports source-based replacement controls (`replace_existing`, `source_key`) for mutable sources.
   - Moves ingested files from `DATA_INCOMING` to `DATA_PROCESSED`.
 - `scripts/phase1/ingest_from_payload.py`
   - Ingests unified webhook payloads from file, stdin, or inline JSON.
@@ -38,6 +39,18 @@ python3 /Users/jaydreyer/projects/recall-local/scripts/phase1/ingestion_pipeline
   --dry-run
 ```
 
+Ingest a mutable source with replacement policy:
+
+```bash
+python3 /Users/jaydreyer/projects/recall-local/scripts/phase1/ingestion_pipeline.py \
+  --type url \
+  --content "https://example.com/" \
+  --source bookmarklet \
+  --tags "job-search,jd,exampleco" \
+  --replace-existing \
+  --source-key "job:exampleco:solutions-engineer"
+```
+
 Ingest webhook payload JSON:
 
 ```bash
@@ -66,6 +79,14 @@ Run cited RAG from webhook-style payload:
 python3 /Users/jaydreyer/projects/recall-local/scripts/phase1/rag_from_payload.py \
   --payload-json '{"query":"Summarize ingestion channels and cite sources.","top_k":5,"min_score":0.2}'
 ```
+
+## Folder-drop guidance for tag-scoped retrieval
+
+When ingestion does not come through webhook payloads, tag-sensitive domains must be ingested with explicit tags:
+
+- For job-search corpus, include `job-search` in `--tags` on ingestion commands.
+- For mutable sources (for example job descriptions), always pair `--replace-existing` with a stable `--source-key`.
+- Avoid using plain `ingest_incoming_once.py` for job-search files unless you are prepared to re-ingest with explicit tags afterward.
 
 ## Phase 1 sub-phases
 

@@ -1,0 +1,81 @@
+{
+  "name": "Recall Phase2A - Meeting Action Items",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "recall-meeting-actions",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-webhook-recall-meeting-actions",
+      "name": "Webhook Recall Meeting Actions",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        300,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "command": "python3 /home/jaydreyer/recall-local/scripts/phase2/meeting_from_payload.py --payload-base64 \"={{ Buffer.from(JSON.stringify($json)).toString('base64') }}\""
+      },
+      "id": "node-exec-meeting-actions",
+      "name": "Execute Meeting Action Items",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        560,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { received: true, workflow: 'workflow_03_meeting_action_items', meeting_result: $json } }}",
+        "options": {}
+      },
+      "id": "node-respond-meeting-actions",
+      "name": "Respond to Meeting Actions",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        860,
+        280
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Recall Meeting Actions": {
+      "main": [
+        [
+          {
+            "node": "Execute Meeting Action Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Meeting Action Items": {
+      "main": [
+        [
+          {
+            "node": "Respond to Meeting Actions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

@@ -79,6 +79,64 @@ def validate_rag_output(
     return ValidationResult(valid=not errors, errors=errors, parsed_response=parsed)
 
 
+def validate_meeting_output(raw_text: str) -> ValidationResult:
+    errors: list[str] = []
+
+    try:
+        parsed = parse_json_response(raw_text)
+    except ValueError as exc:
+        return ValidationResult(valid=False, errors=[str(exc)], parsed_response=None)
+
+    meeting_title = parsed.get("meeting_title")
+    if not isinstance(meeting_title, str) or not meeting_title.strip():
+        errors.append("Field 'meeting_title' must be a non-empty string.")
+
+    summary = parsed.get("summary")
+    if not isinstance(summary, str) or not summary.strip():
+        errors.append("Field 'summary' must be a non-empty string.")
+
+    decisions = _normalize_string_array(parsed.get("decisions"), field_name="decisions", errors=errors)
+    risks = _normalize_string_array(parsed.get("risks"), field_name="risks", errors=errors)
+    follow_ups = _normalize_string_array(parsed.get("follow_ups"), field_name="follow_ups", errors=errors)
+
+    action_items_raw = parsed.get("action_items")
+    if not isinstance(action_items_raw, list):
+        errors.append("Field 'action_items' must be an array.")
+        action_items_raw = []
+
+    action_items: list[dict[str, str]] = []
+    for index, item in enumerate(action_items_raw):
+        if not isinstance(item, dict):
+            errors.append(f"action_items[{index}] must be an object.")
+            continue
+
+        owner = str(item.get("owner", "")).strip()
+        due_date = str(item.get("due_date", "")).strip()
+        description = str(item.get("description", "")).strip()
+        if not owner:
+            errors.append(f"action_items[{index}] requires non-empty 'owner'.")
+        if not due_date:
+            errors.append(f"action_items[{index}] requires non-empty 'due_date'.")
+        if not description:
+            errors.append(f"action_items[{index}] requires non-empty 'description'.")
+
+        action_items.append(
+            {
+                "owner": owner or "unspecified",
+                "due_date": due_date or "unspecified",
+                "description": description or "unspecified",
+            }
+        )
+
+    parsed["meeting_title"] = str(meeting_title or "").strip()
+    parsed["summary"] = str(summary or "").strip()
+    parsed["decisions"] = decisions
+    parsed["action_items"] = action_items
+    parsed["risks"] = risks
+    parsed["follow_ups"] = follow_ups
+    return ValidationResult(valid=not errors, errors=errors, parsed_response=parsed)
+
+
 def parse_json_response(raw_text: str) -> dict[str, Any]:
     candidate = raw_text.strip()
     if not candidate:
@@ -104,6 +162,22 @@ def _dedupe_citations(citations: list[dict[str, str]]) -> list[dict[str, str]]:
         seen.add(key)
         deduped.append(citation)
     return deduped
+
+
+def _normalize_string_array(value: Any, *, field_name: str, errors: list[str]) -> list[str]:
+    if not isinstance(value, list):
+        errors.append(f"Field '{field_name}' must be an array of strings.")
+        return []
+
+    normalized: list[str] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, str):
+            errors.append(f"Field '{field_name}[{index}]' must be a string.")
+            continue
+        cleaned = item.strip()
+        if cleaned:
+            normalized.append(cleaned)
+    return normalized
 
 
 def _parse_relaxed_json(candidate: str) -> Any:
