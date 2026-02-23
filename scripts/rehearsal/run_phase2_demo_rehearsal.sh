@@ -3,8 +3,10 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BRIDGE_URL="${RECALL_BRIDGE_URL:-http://localhost:8090}"
-WEBHOOK_URL="${RECALL_EVAL_WEBHOOK_URL:-http://100.116.103.78:5678/webhook/recall-query}"
-N8N_HEALTH_URL="${RECALL_N8N_HEALTH_URL:-http://localhost:5678/healthz}"
+N8N_HOST="${N8N_HOST:-http://localhost:5678}"
+N8N_BASE_URL="${N8N_HOST%/}"
+WEBHOOK_URL="${RECALL_EVAL_WEBHOOK_URL:-$N8N_BASE_URL/webhook/recall-query}"
+N8N_HEALTH_URL="${RECALL_N8N_HEALTH_URL:-$N8N_BASE_URL/healthz}"
 ARTIFACT_DIR="${RECALL_REHEARSAL_ARTIFACT_DIR:-$ROOT_DIR/data/artifacts/rehearsals}"
 
 BOOKMARKLET_PAYLOAD="${RECALL_BOOKMARKLET_PAYLOAD_FILE:-$ROOT_DIR/n8n/workflows/payload_examples/bookmarklet_ingest_payload_example.json}"

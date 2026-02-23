@@ -34,6 +34,8 @@ It prints `LOG_FILE=...` at the end so you can copy the exact path into implemen
 ```bash
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 LOG="/home/jaydreyer/recall-local/data/artifacts/rehearsals/${STAMP}_phase2_demo_rehearsal.log"
+N8N_HOST="${N8N_HOST:-http://localhost:5678}"
+WEBHOOK_URL="${RECALL_EVAL_WEBHOOK_URL:-${N8N_HOST%/}/webhook/recall-query}"
 mkdir -p /home/jaydreyer/recall-local/data/artifacts/rehearsals
 exec > >(tee -a "$LOG") 2>&1
 
@@ -73,17 +75,17 @@ curl -sS -X POST "http://localhost:8090/query/rag?dry_run=true" \
 python3 /home/jaydreyer/recall-local/scripts/eval/run_eval.py \
   --cases-file /home/jaydreyer/recall-local/scripts/eval/eval_cases.json \
   --backend webhook \
-  --webhook-url http://100.116.103.78:5678/webhook/recall-query
+  --webhook-url "$WEBHOOK_URL"
 
 python3 /home/jaydreyer/recall-local/scripts/eval/run_eval.py \
   --cases-file /home/jaydreyer/recall-local/scripts/eval/job_search_eval_cases.json \
   --backend webhook \
-  --webhook-url http://100.116.103.78:5678/webhook/recall-query
+  --webhook-url "$WEBHOOK_URL"
 
 python3 /home/jaydreyer/recall-local/scripts/eval/run_eval.py \
   --cases-file /home/jaydreyer/recall-local/scripts/eval/learning_eval_cases.json \
   --backend webhook \
-  --webhook-url http://100.116.103.78:5678/webhook/recall-query
+  --webhook-url "$WEBHOOK_URL"
 
 echo "=== Phase 2 demo rehearsal end: $(date -u +%Y%m%dT%H%M%SZ) ==="
 echo "LOG_FILE=$LOG"

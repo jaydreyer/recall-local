@@ -323,7 +323,7 @@ def _evaluate_payload(
     citations = payload.get("citations")
     sources = payload.get("sources")
     if not isinstance(citations, list):
-        return False, False, None, None, "Response missing citations array"
+        return False, False, None, None, None, None, "Response missing citations array"
     if not isinstance(sources, list):
         return False, False, None, None, None, None, "Response missing sources array"
     if not answer:

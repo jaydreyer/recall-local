@@ -1,5 +1,25 @@
 # Recall.local Implementation Log
 
+## 2026-02-23 - Added formal Phase 3 guide + cleanup sweep fixes
+
+### Outcome
+
+- Added formal Phase 3 execution plan:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase3_Guide.md`
+  - includes `3A` UI/operator path, `3B` retrieval quality upgrades, and `3C` ops hardening/portfolio packaging with explicit completion gate.
+- Fixed eval contract bug in:
+  - `/Users/jaydreyer/projects/recall-local/scripts/eval/run_eval.py`
+  - `_evaluate_payload()` now returns the expected 7-field tuple in all branches.
+- Improved script portability by removing hard-coded default webhook host:
+  - `/Users/jaydreyer/projects/recall-local/scripts/eval/scheduled_eval.sh`
+  - `/Users/jaydreyer/projects/recall-local/scripts/rehearsal/run_phase2_demo_rehearsal.sh`
+  - defaults now derive from `N8N_HOST` (`http://localhost:5678` fallback) unless `RECALL_EVAL_WEBHOOK_URL` is explicitly set.
+  - replaced Bash-4-only `${VAR,,}` lowercasing with POSIX-compatible `tr` path for Mac Bash compatibility.
+- Updated related docs:
+  - `/Users/jaydreyer/projects/recall-local/docs/README.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Eval_Scheduling.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase2_Demo_Rehearsal_Runbook.md`
+
 ## 2026-02-23 - Added Phase 2 demo rehearsal runbook and helper script
 
 ### Outcome

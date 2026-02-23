@@ -3,7 +3,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
-WEBHOOK_URL="${RECALL_EVAL_WEBHOOK_URL:-http://100.116.103.78:5678/webhook/recall-query}"
+N8N_HOST="${N8N_HOST:-http://localhost:5678}"
+N8N_BASE_URL="${N8N_HOST%/}"
+WEBHOOK_URL="${RECALL_EVAL_WEBHOOK_URL:-$N8N_BASE_URL/webhook/recall-query}"
 ALERT_WEBHOOK_URL="${RECALL_ALERT_WEBHOOK_URL:-}"
 LOG_DIR="${RECALL_EVAL_LOG_DIR:-$ROOT_DIR/data/artifacts/evals/scheduled}"
 CORE_CASES_FILE="${RECALL_EVAL_CORE_CASES_FILE:-$ROOT_DIR/scripts/eval/eval_cases.json}"
@@ -11,6 +13,7 @@ JOB_SEARCH_CASES_FILE="${RECALL_EVAL_JOB_SEARCH_CASES_FILE:-$ROOT_DIR/scripts/ev
 LEARNING_CASES_FILE="${RECALL_EVAL_LEARNING_CASES_FILE:-$ROOT_DIR/scripts/eval/learning_eval_cases.json}"
 RETRY_ON_FAIL="${RECALL_EVAL_RETRY_ON_FAIL:-true}"
 RETRY_DELAY_SECONDS="${RECALL_EVAL_RETRY_DELAY_SECONDS:-5}"
+RETRY_ON_FAIL_NORMALIZED="$(printf '%s' "$RETRY_ON_FAIL" | tr '[:upper:]' '[:lower:]')"
 
 mkdir -p "$LOG_DIR"
 
@@ -36,7 +39,7 @@ run_suite() {
   local exit_code=$?
   set -e
 
-  if [[ "$exit_code" -ne 0 && "${RETRY_ON_FAIL,,}" == "true" ]]; then
+  if [[ "$exit_code" -ne 0 && "$RETRY_ON_FAIL_NORMALIZED" == "true" ]]; then
     sleep "$RETRY_DELAY_SECONDS"
     set +e
     "$PYTHON_BIN" "$ROOT_DIR/scripts/eval/run_eval.py" \

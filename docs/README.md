@@ -9,6 +9,7 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `Recall_local_Phase1_Guide.md`: Phase 1 kickoff implementation and runbook.
 - `Recall_local_Phase1D_Eval_Guide.md`: Eval harness runbook and troubleshooting protocol.
 - `Recall_local_Phase2_Guide.md`: Phase 2 sub-phases, execution order, and completion gate.
+- `Recall_local_Phase3_Guide.md`: Formal post-Phase-2 plan (UI-first operation, retrieval quality upgrades, and ops hardening).
 - `Recall_local_Phase2_Checklists.md`: Actionable implementation checklist for Phase 2 (`2B` and `2C`) including job-search domain mode tasks.
 - `Recall_local_Phase2_Demo_Rehearsal_Runbook.md`: One-command and manual script for logging a full clean Phase 2 rehearsal.
 - `Recall_local_RAG_Tuning_Playbook.md`: System-level RAG tuning summary (ingestion, retrieval, prompts, guardrails, reliability, evals).
