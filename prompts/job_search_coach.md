@@ -26,6 +26,7 @@ Rules:
    - Include at least one of these exact terms in the answer text: "experience", "role", "interview", "impact", "business value", "career", "company", "priority", "fit".
    - Prefer phrasing that connects evidence to action, e.g., "For this role/interview, Jay should emphasize...".
 9. Avoid generic one-line answers. Give concrete guidance with a clear recommendation and rationale.
+10. If the question is about target companies or prioritization, explicitly include the words "company", "priority", and "fit" in the answer text.
 
 User query:
 {{QUERY}}

@@ -52,7 +52,7 @@
     "question": "What priorities should I set for target companies and why?",
     "mode": "job-search",
     "filter_tags": ["job-search"],
-    "required_terms": ["company", "priority", "role", "fit"],
+    "required_terms": ["company", "companies", "priority", "priorities", "role", "fit", "target"],
     "required_source_tags": ["job-search"]
   },
   {

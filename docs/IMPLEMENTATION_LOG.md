@@ -1,5 +1,22 @@
 # Recall.local Implementation Log
 
+## 2026-02-24 - Job-search eval consistency fix: target-company priorities case stabilized
+
+### Outcome
+
+- Hardened `mode=job-search` prompt guidance for prioritization questions:
+  - `/Users/jaydreyer/projects/recall-local/prompts/job_search_coach.md`
+  - added explicit instruction to include `"company"`, `"priority"`, and `"fit"` when the question is about target companies/prioritization.
+- Expanded required grounding term variants for the flaky case:
+  - `/Users/jaydreyer/projects/recall-local/scripts/eval/job_search_eval_cases.json`
+  - target case now accepts: `company|companies|priority|priorities|role|fit|target`.
+- Synced changes to ai-lab and spot-checked remote content with `rg` before eval reruns.
+- ai-lab validation results:
+  - full job-search suite: `10/10` pass
+    - artifact: `/home/jaydreyer/recall-local/data/artifacts/evals/20260224T021744Z_654dd08c90f64217bc1da3a704a2fd6a.md`
+  - repeat answerable slice (`--max-cases 8`): `8/8` pass
+    - artifact: `/home/jaydreyer/recall-local/data/artifacts/evals/20260224T021822Z_67353df091554cfea94e4f42b1efc779.md`
+
 ## 2026-02-24 - Phase 3C ai-lab validation: sync, restart/recovery smoke, portfolio bundle evidence
 
 ### Outcome
