@@ -1,5 +1,27 @@
 # Recall.local Implementation Log
 
+## 2026-02-24 - Phase 3C kickoff: reliability wrappers + operations runbook
+
+### Outcome
+
+- Started Phase 3C implementation with operations hardening artifacts:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase3/run_service_preflight_now.sh`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase3/run_deterministic_restart_now.sh`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase3/run_backup_now.sh`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase3/run_restore_now.sh`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase3/backup_restore_state.py`
+- Added Phase 3C operations runbook:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase3C_Operations_Runbook.md`
+- Updated docs index:
+  - `/Users/jaydreyer/projects/recall-local/docs/README.md`
+
+### Validation
+
+- Script static checks passed locally:
+  - `bash -n` on all new shell wrappers
+  - `python3 -m py_compile scripts/phase3/backup_restore_state.py`
+  - `--help` execution checks for all new commands
+
 ## 2026-02-24 - Phase 3B ai-lab validation: baseline vs candidate experiment artifacts
 
 ### Outcome

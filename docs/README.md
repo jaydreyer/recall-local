@@ -12,6 +12,7 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `Recall_local_Phase3_Guide.md`: Formal post-Phase-2 plan (UI-first operation, retrieval quality upgrades, and ops hardening).
 - `Recall_local_Phase3A_Operator_Runbook.md`: Operator-first runbook for no-curl ingestion/query/eval paths and UI payload templates.
 - `Recall_local_Phase3B_Retrieval_Quality_Runbook.md`: Hybrid/reranker retrieval controls, eval scoring lane, and baseline/candidate experiment runbook.
+- `Recall_local_Phase3C_Operations_Runbook.md`: Deterministic restart, service preflight, and backup/restore runbook for ops hardening.
 - `Recall_local_Phase2_Checklists.md`: Actionable implementation checklist for Phase 2 (`2B` and `2C`) including job-search domain mode tasks.
 - `Recall_local_Phase2_Demo_Rehearsal_Runbook.md`: One-command and manual script for logging a full clean Phase 2 rehearsal.
 - `Recall_local_RAG_Tuning_Playbook.md`: System-level RAG tuning summary (ingestion, retrieval, prompts, guardrails, reliability, evals).
@@ -34,6 +35,11 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `../scripts/phase3/run_query_mode_now.sh`: Phase 3A one-command query-mode wrapper (`default`, `job-search`, `learning`).
 - `../scripts/phase3/run_all_evals_now.sh`: Phase 3A one-command wrapper for all eval suites.
 - `../scripts/phase3/run_retrieval_experiment_now.sh`: Phase 3B one-command baseline vs candidate retrieval experiment wrapper.
+- `../scripts/phase3/run_service_preflight_now.sh`: Phase 3C one-command preflight checks (connectivity, bridge, webhook dry-run).
+- `../scripts/phase3/run_deterministic_restart_now.sh`: Phase 3C deterministic service restart with health waits.
+- `../scripts/phase3/run_backup_now.sh`: Phase 3C backup wrapper for SQLite + Qdrant export.
+- `../scripts/phase3/run_restore_now.sh`: Phase 3C restore wrapper (latest or explicit backup folder).
+- `../scripts/phase3/backup_restore_state.py`: Shared Phase 3C backup/restore utility used by wrappers.
 - `../scripts/eval/run_phase3b_retrieval_experiment.sh`: Phase 3B retrieval experiment runner (`vector` baseline vs `hybrid+rereank` candidate).
 - `../scripts/eval/golden_sets/learning_golden_v1.json`: Versioned learning golden set with optional semantic-score references.
 - `../n8n/workflows/phase3a_bookmarklet_form_http.workflow.json`: Import-ready n8n bookmarklet-form workflow for bridge ingestion.
