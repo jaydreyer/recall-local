@@ -1,5 +1,36 @@
 # Recall.local Implementation Log
 
+## 2026-02-24 - Pre-Phase-5 closure check snapshot
+
+### What was executed
+
+- Local hygiene run with ai-lab remote inspection:
+  - `scripts/phase4/run_repo_hygiene_check.sh --ssh-key ~/.ssh/codex_ai_lab --no-fail`
+  - report:
+    - `/Users/jaydreyer/projects/recall-local/data/artifacts/phase4/hygiene/20260224T140000Z_repo_hygiene.json`
+- ai-lab quick soak sample (2 iterations each suite):
+  - `/home/jaydreyer/recall-local/scripts/phase4/run_eval_soak_now.sh --iterations 2 --suite both --delay-seconds 1 --no-fail-on-threshold`
+  - run dir:
+    - `/home/jaydreyer/recall-local/data/artifacts/evals/phase4_soak/20260224T140000Z`
+  - summary:
+    - `/home/jaydreyer/recall-local/data/artifacts/evals/phase4_soak/20260224T140000Z/soak_summary.json`
+    - `/home/jaydreyer/recall-local/data/artifacts/evals/phase4_soak/20260224T140000Z/soak_summary.md`
+
+### Results
+
+- Hygiene status: open finding remains (`remote_dirty_repo_files=7`).
+- Soak status: `fail`.
+  - threshold breaches:
+    - `core:avg_case_pass_rate_below_threshold:0.967<1.000`
+    - `core:avg_latency_above_threshold:38403.0>15000`
+    - `job-search:avg_latency_above_threshold:32729.5>15000`
+
+### Remaining pre-Phase-5 carryover items
+
+- Phase 4A reliability gate is still red (latency and one intermittent core unanswerable behavior).
+- Phase 4C hygiene and maintenance evidence is incomplete (runtime repo cleanliness still red; weekly/monthly evidence not yet complete).
+- Phase 3 ops drift monitoring remains operational work rather than a completed one-time milestone.
+
 ## 2026-02-24 - Phase 5 planning docs aligned to final architecture decisions
 
 ### Outcome
