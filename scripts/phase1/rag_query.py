@@ -134,6 +134,10 @@ def run_rag_query(
     max_retries: int | None = None,
     filter_tags: list[str] | None = None,
     mode: str | None = None,
+    retrieval_mode: str | None = None,
+    hybrid_alpha: float | None = None,
+    enable_reranker: bool | None = None,
+    reranker_weight: float | None = None,
     dry_run: bool = False,
 ) -> dict[str, Any]:
     settings = load_settings()
@@ -167,6 +171,10 @@ def run_rag_query(
             top_k=limit,
             min_score=threshold,
             filter_tags=normalized_filter_tags,
+            retrieval_mode=retrieval_mode,
+            hybrid_alpha=hybrid_alpha,
+            enable_reranker=enable_reranker,
+            reranker_weight=reranker_weight,
         )
         fallback_reason: str | None = None
         if not retrieved:
@@ -176,6 +184,10 @@ def run_rag_query(
                 top_k=limit,
                 min_score=-1.0,
                 filter_tags=normalized_filter_tags,
+                retrieval_mode=retrieval_mode,
+                hybrid_alpha=hybrid_alpha,
+                enable_reranker=enable_reranker,
+                reranker_weight=reranker_weight,
             )
             if not retrieved:
                 fallback_reason = "No retrieval results available for query."
@@ -238,6 +250,22 @@ def run_rag_query(
         response["audit"]["filter_tags"] = normalized_filter_tags
         response["audit"]["mode"] = active_mode
         response["audit"]["prompt_profile"] = _prompt_profile_name(active_mode)
+        response["audit"]["retrieval_mode"] = retrieval_mode or os.getenv("RECALL_RAG_RETRIEVAL_MODE", "vector")
+        response["audit"]["hybrid_alpha"] = (
+            float(hybrid_alpha)
+            if hybrid_alpha is not None
+            else _env_float("RECALL_RAG_HYBRID_ALPHA", 0.65)
+        )
+        response["audit"]["reranker_enabled"] = (
+            bool(enable_reranker)
+            if enable_reranker is not None
+            else _env_bool("RECALL_RAG_ENABLE_RERANK", False)
+        )
+        response["audit"]["reranker_weight"] = (
+            float(reranker_weight)
+            if reranker_weight is not None
+            else _env_float("RECALL_RAG_RERANK_WEIGHT", 0.35)
+        )
         response["audit"]["retrieved_count"] = len(retrieved)
         response["audit"]["dry_run"] = dry_run
         if fallback_reason is not None or bool(response["audit"].get("fallback_used")):
@@ -623,6 +651,23 @@ def _prompt_profile_name(mode: str) -> str:
     return "workflow_02_default"
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name, "").strip().lower()
+    if not raw:
+        return default
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
 def _truncate(text: str, max_chars: int) -> str:
     compact = " ".join(text.split())
     if len(compact) <= max_chars:
@@ -656,6 +701,28 @@ def parse_args() -> argparse.Namespace:
         default="default",
         help="Prompt mode: default|job-search|learning (aliases: rag, job_search, learn).",
     )
+    parser.add_argument(
+        "--retrieval-mode",
+        default=None,
+        help="Retrieval mode override: vector|hybrid.",
+    )
+    parser.add_argument(
+        "--hybrid-alpha",
+        type=float,
+        default=None,
+        help="Hybrid fusion weight for dense score [0..1].",
+    )
+    parser.add_argument(
+        "--enable-reranker",
+        action="store_true",
+        help="Enable heuristic reranker after retrieval.",
+    )
+    parser.add_argument(
+        "--reranker-weight",
+        type=float,
+        default=None,
+        help="Reranker lexical blend weight [0..1].",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Skip SQLite writes and artifact file creation.")
     return parser.parse_args()
 
@@ -678,6 +745,10 @@ def main() -> int:
             max_retries=args.max_retries,
             filter_tags=[part.strip() for part in args.filter_tags.split(",") if part.strip()],
             mode=args.mode,
+            retrieval_mode=args.retrieval_mode,
+            hybrid_alpha=args.hybrid_alpha,
+            enable_reranker=args.enable_reranker if args.enable_reranker else None,
+            reranker_weight=args.reranker_weight,
             dry_run=args.dry_run,
         )
     except Exception as exc:  # noqa: BLE001

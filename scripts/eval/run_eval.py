@@ -48,12 +48,18 @@ class EvalSettings:
 class EvalCase:
     question: str
     expected_doc_id: str | None
+    expected_answer: str | None
     max_latency_ms: int | None
     expect_unanswerable: bool
     mode: str | None
     filter_tags: list[str]
     required_terms: list[str]
     required_source_tags: list[str]
+    semantic_similarity_min: float | None
+    retrieval_mode: str | None
+    hybrid_alpha: float | None
+    enable_reranker: bool | None
+    reranker_weight: float | None
 
 
 @dataclass
@@ -67,6 +73,8 @@ class CaseResult:
     unanswerable_ok: bool | None
     required_terms_ok: bool | None
     source_tags_ok: bool | None
+    semantic_similarity: float | None
+    semantic_similarity_ok: bool | None
     latency_ms: int
     passed: bool
     notes: str
@@ -157,6 +165,45 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--top-k", type=int, default=5, help="Retrieval top-k sent to Workflow 02.")
     parser.add_argument("--min-score", type=float, default=0.15, help="Retrieval min score sent to Workflow 02.")
     parser.add_argument("--max-retries", type=int, default=1, help="Validation retries sent to Workflow 02.")
+    parser.add_argument(
+        "--retrieval-mode",
+        default=None,
+        help="Retrieval mode override for all cases: vector|hybrid.",
+    )
+    parser.add_argument(
+        "--hybrid-alpha",
+        type=float,
+        default=None,
+        help="Hybrid fusion weight override for all cases [0..1].",
+    )
+    parser.add_argument(
+        "--enable-reranker",
+        default=None,
+        choices=["true", "false"],
+        help="Enable or disable reranker globally (true|false).",
+    )
+    parser.add_argument(
+        "--reranker-weight",
+        type=float,
+        default=None,
+        help="Reranker lexical blend weight override [0..1].",
+    )
+    parser.add_argument(
+        "--semantic-score",
+        action="store_true",
+        help="Compute optional semantic similarity score for cases that include expected_answer.",
+    )
+    parser.add_argument(
+        "--semantic-min-score",
+        type=float,
+        default=None,
+        help="Semantic similarity threshold (default from env or 0.65).",
+    )
+    parser.add_argument(
+        "--enforce-semantic-score",
+        action="store_true",
+        help="Treat semantic score threshold failures as eval failures.",
+    )
     parser.add_argument("--max-cases", type=int, default=None, help="Only run first N cases.")
     parser.add_argument("--dry-run", action="store_true", help="Skip DB writes and artifact file write.")
     return parser.parse_args()
@@ -176,6 +223,8 @@ def load_cases(path: Path) -> list[EvalCase]:
             raise ValueError(f"Case at index {index} is missing question.")
         expected_doc_id_raw = item.get("expected_doc_id")
         expected_doc_id = str(expected_doc_id_raw).strip() if expected_doc_id_raw else None
+        expected_answer_raw = item.get("expected_answer")
+        expected_answer = str(expected_answer_raw).strip() if expected_answer_raw else None
         max_latency_raw = item.get("max_latency_ms")
         max_latency_ms = int(max_latency_raw) if max_latency_raw is not None else None
         expect_unanswerable = bool(item.get("expect_unanswerable", False))
@@ -184,16 +233,39 @@ def load_cases(path: Path) -> list[EvalCase]:
         filter_tags = _normalize_string_list(item.get("filter_tags"))
         required_terms = _normalize_string_list(item.get("required_terms"))
         required_source_tags = _normalize_string_list(item.get("required_source_tags"))
+        semantic_similarity_min_raw = item.get("semantic_similarity_min")
+        semantic_similarity_min = (
+            float(semantic_similarity_min_raw)
+            if semantic_similarity_min_raw is not None
+            else None
+        )
+        retrieval_mode_raw = item.get("retrieval_mode")
+        retrieval_mode = (
+            str(retrieval_mode_raw).strip()
+            if isinstance(retrieval_mode_raw, str) and retrieval_mode_raw.strip()
+            else None
+        )
+        hybrid_alpha_raw = item.get("hybrid_alpha")
+        hybrid_alpha = float(hybrid_alpha_raw) if hybrid_alpha_raw is not None else None
+        enable_reranker = _normalize_optional_bool(item.get("enable_reranker"))
+        reranker_weight_raw = item.get("reranker_weight")
+        reranker_weight = float(reranker_weight_raw) if reranker_weight_raw is not None else None
         cases.append(
             EvalCase(
                 question=question,
                 expected_doc_id=expected_doc_id,
+                expected_answer=expected_answer,
                 max_latency_ms=max_latency_ms,
                 expect_unanswerable=expect_unanswerable,
                 mode=mode,
                 filter_tags=filter_tags,
                 required_terms=required_terms,
                 required_source_tags=required_source_tags,
+                semantic_similarity_min=semantic_similarity_min,
+                retrieval_mode=retrieval_mode,
+                hybrid_alpha=hybrid_alpha,
+                enable_reranker=enable_reranker,
+                reranker_weight=reranker_weight,
             )
         )
     return cases
@@ -208,8 +280,20 @@ def run_case(
     min_score: float,
     max_retries: int,
     default_max_latency_ms: int,
+    retrieval_mode: str | None,
+    hybrid_alpha: float | None,
+    enable_reranker: bool | None,
+    reranker_weight: float | None,
+    semantic_score_enabled: bool,
+    semantic_min_score: float | None,
+    enforce_semantic_score: bool,
 ) -> CaseResult:
     eval_id = uuid.uuid4().hex
+
+    case_retrieval_mode = case.retrieval_mode or retrieval_mode
+    case_hybrid_alpha = case.hybrid_alpha if case.hybrid_alpha is not None else hybrid_alpha
+    case_enable_reranker = case.enable_reranker if case.enable_reranker is not None else enable_reranker
+    case_reranker_weight = case.reranker_weight if case.reranker_weight is not None else reranker_weight
 
     started = time.perf_counter()
     try:
@@ -222,6 +306,10 @@ def run_case(
             max_retries=max_retries,
             mode=case.mode,
             filter_tags=case.filter_tags,
+            retrieval_mode=case_retrieval_mode,
+            hybrid_alpha=case_hybrid_alpha,
+            enable_reranker=case_enable_reranker,
+            reranker_weight=case_reranker_weight,
         )
         latency_ms = int((time.perf_counter() - started) * 1000)
         (
@@ -231,12 +319,17 @@ def run_case(
             unanswerable_ok,
             required_terms_ok,
             source_tags_ok,
+            semantic_similarity,
+            semantic_similarity_ok,
             notes,
         ) = _evaluate_payload(
             case=case,
             payload=payload,
             latency_ms=latency_ms,
             default_max_latency_ms=default_max_latency_ms,
+            semantic_score_enabled=semantic_score_enabled,
+            semantic_min_score=semantic_min_score,
+            enforce_semantic_score=enforce_semantic_score,
         )
     except Exception as exc:  # noqa: BLE001
         latency_ms = int((time.perf_counter() - started) * 1000)
@@ -246,6 +339,8 @@ def run_case(
         unanswerable_ok = None
         required_terms_ok = None
         source_tags_ok = None
+        semantic_similarity = None
+        semantic_similarity_ok = None
         notes = f"Execution error: {exc}"
 
     return CaseResult(
@@ -258,6 +353,8 @@ def run_case(
         unanswerable_ok=unanswerable_ok,
         required_terms_ok=required_terms_ok,
         source_tags_ok=source_tags_ok,
+        semantic_similarity=semantic_similarity,
+        semantic_similarity_ok=semantic_similarity_ok,
         latency_ms=latency_ms,
         passed=passed,
         notes=notes,
@@ -274,6 +371,10 @@ def _execute_query(
     max_retries: int,
     mode: str | None,
     filter_tags: list[str],
+    retrieval_mode: str | None,
+    hybrid_alpha: float | None,
+    enable_reranker: bool | None,
+    reranker_weight: float | None,
 ) -> dict[str, Any]:
     if backend == "direct":
         from scripts.phase1.rag_query import run_rag_query  # noqa: PLC0415
@@ -285,6 +386,10 @@ def _execute_query(
             max_retries=max_retries,
             filter_tags=filter_tags,
             mode=mode,
+            retrieval_mode=retrieval_mode,
+            hybrid_alpha=hybrid_alpha,
+            enable_reranker=enable_reranker,
+            reranker_weight=reranker_weight,
             dry_run=True,
         )
 
@@ -298,6 +403,14 @@ def _execute_query(
         request_body["mode"] = mode
     if filter_tags:
         request_body["filter_tags"] = filter_tags
+    if retrieval_mode:
+        request_body["retrieval_mode"] = retrieval_mode
+    if hybrid_alpha is not None:
+        request_body["hybrid_alpha"] = hybrid_alpha
+    if enable_reranker is not None:
+        request_body["enable_reranker"] = enable_reranker
+    if reranker_weight is not None:
+        request_body["reranker_weight"] = reranker_weight
     response = httpx.post(webhook_url, json=request_body, timeout=90)
     response.raise_for_status()
 
@@ -317,17 +430,20 @@ def _evaluate_payload(
     payload: dict[str, Any],
     latency_ms: int,
     default_max_latency_ms: int,
-) -> tuple[bool, bool, str | None, bool | None, bool | None, bool | None, str]:
+    semantic_score_enabled: bool,
+    semantic_min_score: float | None,
+    enforce_semantic_score: bool,
+) -> tuple[bool, bool, str | None, bool | None, bool | None, bool | None, float | None, bool | None, str]:
     answer = str(payload.get("answer", "")).strip()
     confidence_level = str(payload.get("confidence_level", "")).strip().lower()
     citations = payload.get("citations")
     sources = payload.get("sources")
     if not isinstance(citations, list):
-        return False, False, None, None, None, None, "Response missing citations array"
+        return False, False, None, None, None, None, None, None, "Response missing citations array"
     if not isinstance(sources, list):
-        return False, False, None, None, None, None, "Response missing sources array"
+        return False, False, None, None, None, None, None, None, "Response missing sources array"
     if not answer:
-        return False, False, None, None, None, None, "Response missing answer text"
+        return False, False, None, None, None, None, None, None, "Response missing answer text"
 
     valid_pairs = {
         (str(source.get("doc_id", "")).strip(), str(source.get("chunk_id", "")).strip())
@@ -338,11 +454,11 @@ def _evaluate_payload(
     citation_pairs: list[tuple[str, str]] = []
     for citation in citations:
         if not isinstance(citation, dict):
-            return False, False, None, None, None, None, "Citation entry is not an object"
+            return False, False, None, None, None, None, None, None, "Citation entry is not an object"
         doc_id = str(citation.get("doc_id", "")).strip()
         chunk_id = str(citation.get("chunk_id", "")).strip()
         if not doc_id or not chunk_id:
-            return False, False, None, None, None, None, "Citation missing doc_id or chunk_id"
+            return False, False, None, None, None, None, None, None, "Citation missing doc_id or chunk_id"
         citation_pairs.append((doc_id, chunk_id))
 
     invalid_pairs = [pair for pair in citation_pairs if pair not in valid_pairs]
@@ -360,6 +476,8 @@ def _evaluate_payload(
     unanswerable_ok: bool | None = None
     required_terms_ok: bool | None = None
     source_tags_ok: bool | None = None
+    semantic_similarity: float | None = None
+    semantic_similarity_ok: bool | None = None
     if not citations and not case.expect_unanswerable:
         notes.append("Response returned zero citations")
     if not citation_valid:
@@ -389,6 +507,23 @@ def _evaluate_payload(
         if not source_tags_ok:
             notes.append(f"Sources did not satisfy required tags: {case.required_source_tags}")
 
+    if semantic_score_enabled and case.expected_answer:
+        threshold = (
+            case.semantic_similarity_min
+            if case.semantic_similarity_min is not None
+            else (semantic_min_score if semantic_min_score is not None else _env_semantic_min_score())
+        )
+        try:
+            semantic_similarity = _semantic_similarity(answer, case.expected_answer)
+            semantic_similarity_ok = semantic_similarity >= threshold
+            if not semantic_similarity_ok:
+                notes.append(
+                    f"Semantic similarity {semantic_similarity:.3f} below threshold {threshold:.3f}"
+                )
+        except Exception as exc:  # noqa: BLE001
+            semantic_similarity_ok = None
+            notes.append(f"Semantic score skipped due error: {exc}")
+
     if not latency_ok:
         notes.append(f"Latency {latency_ms}ms exceeded threshold {max_latency}ms")
 
@@ -400,6 +535,8 @@ def _evaluate_payload(
         passed = False
     if source_tags_ok is False:
         passed = False
+    if enforce_semantic_score and semantic_similarity_ok is False:
+        passed = False
     return (
         passed,
         citation_valid,
@@ -407,6 +544,8 @@ def _evaluate_payload(
         unanswerable_ok,
         required_terms_ok,
         source_tags_ok,
+        semantic_similarity,
+        semantic_similarity_ok,
         "; ".join(notes) if notes else "ok",
     )
 
@@ -436,6 +575,65 @@ def _sources_match_required_tags(*, sources: list[Any], required_tags: list[str]
         if not required.issubset(source_tags):
             return False
     return True
+
+
+def _semantic_similarity(answer: str, expected_answer: str) -> float:
+    from scripts import llm_client  # noqa: PLC0415
+
+    answer_embedding = llm_client.embed(
+        answer,
+        trace_metadata={
+            "workflow": "workflow_04_eval_gate",
+            "operation": "semantic_answer_embedding",
+        },
+    )
+    expected_embedding = llm_client.embed(
+        expected_answer,
+        trace_metadata={
+            "workflow": "workflow_04_eval_gate",
+            "operation": "semantic_expected_embedding",
+        },
+    )
+    return _cosine_similarity(answer_embedding, expected_embedding)
+
+
+def _cosine_similarity(left: list[float], right: list[float]) -> float:
+    if not left or not right or len(left) != len(right):
+        raise ValueError("Embedding vectors must be non-empty and equal length.")
+
+    dot = sum(l * r for l, r in zip(left, right))
+    left_norm = sum(l * l for l in left) ** 0.5
+    right_norm = sum(r * r for r in right) ** 0.5
+    if left_norm == 0.0 or right_norm == 0.0:
+        raise ValueError("Embedding vectors must have non-zero norm.")
+    return dot / (left_norm * right_norm)
+
+
+def _env_semantic_min_score() -> float:
+    raw = os.getenv("RECALL_EVAL_SEMANTIC_MIN_SCORE", "").strip()
+    if not raw:
+        return 0.65
+    try:
+        value = float(raw)
+    except ValueError:
+        return 0.65
+    return max(0.0, min(1.0, value))
+
+
+def _normalize_optional_bool(value: Any) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off", ""}:
+            return False
+    raise ValueError("Boolean-like field must be true/false.")
 
 
 def _normalize_string_list(value: Any) -> list[str]:
@@ -499,13 +697,13 @@ def write_markdown_artifact(*, artifact_path: Path, results: list[CaseResult], r
         f"- Unanswerable Cases: `{unanswerable_passed}/{unanswerable_total}`",
         f"- Generated: `{_now_iso()}`",
         "",
-        "| # | Type | Result | Latency (ms) | Citation Valid | Unanswerable OK | Terms OK | Source Tags OK | Expected Doc | Actual Doc | Question | Notes |",
-        "|---|---|---|---:|---|---|---|---|---|---|---|---|",
+        "| # | Type | Result | Latency (ms) | Citation Valid | Unanswerable OK | Terms OK | Source Tags OK | Semantic Score | Semantic OK | Expected Doc | Actual Doc | Question | Notes |",
+        "|---|---|---|---:|---|---|---|---|---:|---|---|---|---|---|",
     ]
 
     for index, row in enumerate(results, start=1):
         lines.append(
-            "| {index} | {case_type} | {result} | {latency} | {citation_valid} | {unanswerable_ok} | {required_terms_ok} | {source_tags_ok} | {expected} | {actual} | {question} | {notes} |".format(
+            "| {index} | {case_type} | {result} | {latency} | {citation_valid} | {unanswerable_ok} | {required_terms_ok} | {source_tags_ok} | {semantic_similarity} | {semantic_ok} | {expected} | {actual} | {question} | {notes} |".format(
                 index=index,
                 case_type="unanswerable" if row.expect_unanswerable else "answerable",
                 result="PASS" if row.passed else "FAIL",
@@ -525,6 +723,16 @@ def write_markdown_artifact(*, artifact_path: Path, results: list[CaseResult], r
                     "n/a"
                     if row.source_tags_ok is None
                     else ("yes" if row.source_tags_ok else "no")
+                ),
+                semantic_similarity=(
+                    "n/a"
+                    if row.semantic_similarity is None
+                    else f"{row.semantic_similarity:.3f}"
+                ),
+                semantic_ok=(
+                    "n/a"
+                    if row.semantic_similarity_ok is None
+                    else ("yes" if row.semantic_similarity_ok else "no")
                 ),
                 expected=(row.expected_doc_id or "-"),
                 actual=(row.actual_doc_id or "-"),
@@ -608,6 +816,12 @@ def main() -> int:
         print("No eval cases to run.", file=sys.stderr)
         return 2
 
+    try:
+        global_enable_reranker = _normalize_optional_bool(args.enable_reranker)
+    except ValueError as exc:
+        print(f"Invalid --enable-reranker value: {exc}", file=sys.stderr)
+        return 2
+
     run_id = uuid.uuid4().hex
     started = time.perf_counter()
     input_hash = hashlib.sha256(
@@ -619,6 +833,13 @@ def main() -> int:
                 "top_k": args.top_k,
                 "min_score": args.min_score,
                 "max_retries": args.max_retries,
+                "retrieval_mode": args.retrieval_mode,
+                "hybrid_alpha": args.hybrid_alpha,
+                "enable_reranker": args.enable_reranker,
+                "reranker_weight": args.reranker_weight,
+                "semantic_score": args.semantic_score,
+                "semantic_min_score": args.semantic_min_score,
+                "enforce_semantic_score": args.enforce_semantic_score,
                 "case_count": len(cases),
             },
             sort_keys=True,
@@ -642,6 +863,13 @@ def main() -> int:
                 min_score=args.min_score,
                 max_retries=args.max_retries,
                 default_max_latency_ms=settings.default_max_latency_ms,
+                retrieval_mode=args.retrieval_mode,
+                hybrid_alpha=args.hybrid_alpha,
+                enable_reranker=global_enable_reranker,
+                reranker_weight=args.reranker_weight,
+                semantic_score_enabled=args.semantic_score,
+                semantic_min_score=args.semantic_min_score,
+                enforce_semantic_score=args.enforce_semantic_score,
             )
             for case in cases
         ]
@@ -666,10 +894,20 @@ def main() -> int:
             "cases_file": str(cases_file),
             "backend": args.backend,
             "webhook_url": webhook_url if args.backend == "webhook" else None,
+            "retrieval_mode": args.retrieval_mode,
+            "hybrid_alpha": args.hybrid_alpha,
+            "enable_reranker": global_enable_reranker,
+            "reranker_weight": args.reranker_weight,
+            "semantic_score": args.semantic_score,
+            "semantic_min_score": args.semantic_min_score,
+            "enforce_semantic_score": args.enforce_semantic_score,
             "passed": pass_count,
             "total": total,
             "unanswerable_passed": sum(1 for row in results if row.expect_unanswerable and row.passed),
             "unanswerable_total": sum(1 for row in results if row.expect_unanswerable),
+            "semantic_scored_cases": sum(1 for row in results if row.semantic_similarity is not None),
+            "semantic_passed_cases": sum(1 for row in results if row.semantic_similarity_ok is True),
+            "semantic_failed_cases": sum(1 for row in results if row.semantic_similarity_ok is False),
             "latency_ms": latency_ms,
             "artifact_path": str(artifact_path.resolve()) if artifact_path else None,
             "results": [row.__dict__ for row in results],

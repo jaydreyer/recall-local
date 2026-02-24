@@ -118,12 +118,20 @@ class IngestBridgeHandler(BaseHTTPRequestHandler):
         max_retries = payload.get("max_retries")
         mode = payload.get("mode")
         filter_tags = payload.get("filter_tags")
+        retrieval_mode = payload.get("retrieval_mode")
+        hybrid_alpha = payload.get("hybrid_alpha")
+        enable_reranker = payload.get("enable_reranker")
+        reranker_weight = payload.get("reranker_weight")
         try:
             top_k_value = int(top_k) if top_k is not None else None
             min_score_value = float(min_score) if min_score is not None else None
             max_retries_value = int(max_retries) if max_retries is not None else None
             mode_value = str(mode) if mode is not None else None
             filter_tags_value = _normalize_tag_filter(filter_tags)
+            retrieval_mode_value = str(retrieval_mode) if retrieval_mode is not None else None
+            hybrid_alpha_value = float(hybrid_alpha) if hybrid_alpha is not None else None
+            reranker_weight_value = float(reranker_weight) if reranker_weight is not None else None
+            enable_reranker_value = _normalize_bool(enable_reranker) if enable_reranker is not None else None
         except (TypeError, ValueError) as exc:
             self._send_json(400, {"error": f"Invalid RAG options: {exc}"})
             return
@@ -136,6 +144,10 @@ class IngestBridgeHandler(BaseHTTPRequestHandler):
                 max_retries=max_retries_value,
                 filter_tags=filter_tags_value,
                 mode=mode_value,
+                retrieval_mode=retrieval_mode_value,
+                hybrid_alpha=hybrid_alpha_value,
+                enable_reranker=enable_reranker_value,
+                reranker_weight=reranker_weight_value,
                 dry_run=dry_run,
             )
         except Exception as exc:  # noqa: BLE001
@@ -234,6 +246,20 @@ def _normalize_tag_filter(value: Any) -> list[str]:
                 tags.append(tag)
         return tags
     raise ValueError("filter_tags must be an array or comma-separated string.")
+
+
+def _normalize_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off", ""}:
+            return False
+    raise ValueError("enable_reranker must be boolean-like.")
 
 
 def parse_args() -> argparse.Namespace:

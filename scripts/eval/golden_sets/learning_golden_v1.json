@@ -1,0 +1,70 @@
+[
+  {
+    "question": "Summarize key tradeoffs between managed cloud RAG and self-hosted RAG for enterprise teams.",
+    "mode": "learning",
+    "filter_tags": ["learning", "genai-docs"],
+    "required_terms": ["tradeoff", "cost", "control", "scalability"],
+    "required_source_tags": ["learning", "genai-docs"],
+    "expected_answer": "Managed RAG reduces operational burden and speeds delivery, while self-hosted RAG increases control and data governance but requires stronger in-house operations and reliability ownership.",
+    "semantic_similarity_min": 0.58
+  },
+  {
+    "question": "What factors matter most when selecting a vector database for production RAG?",
+    "mode": "learning",
+    "filter_tags": ["learning", "genai-docs"],
+    "required_terms": ["vector", "latency", "scale", "cost"],
+    "required_source_tags": ["learning", "genai-docs"],
+    "expected_answer": "Key selection factors include retrieval latency under load, indexing and query scalability, filter support, operational reliability, cost profile, and ecosystem/tooling fit.",
+    "semantic_similarity_min": 0.58
+  },
+  {
+    "question": "How should I reason about embedding model choices and their retrieval implications?",
+    "mode": "learning",
+    "filter_tags": ["learning", "genai-docs"],
+    "required_terms": ["embedding", "dimension", "retrieval", "accuracy"],
+    "required_source_tags": ["learning", "genai-docs"],
+    "expected_answer": "Embedding choices should balance quality, dimensionality, and latency. Higher-quality models can improve retrieval relevance, but vector size and model cost impact throughput and storage.",
+    "semantic_similarity_min": 0.58
+  },
+  {
+    "question": "What are practical ways to reduce latency in multi-agent systems?",
+    "mode": "learning",
+    "filter_tags": ["learning", "genai-docs"],
+    "required_terms": ["latency", "timeout", "parallel", "cache"],
+    "required_source_tags": ["learning", "genai-docs"],
+    "expected_answer": "Reduce latency by parallelizing independent agent calls, caching reusable results, enforcing strict timeouts, and minimizing context size and unnecessary tool invocations.",
+    "semantic_similarity_min": 0.58
+  },
+  {
+    "question": "What security and compliance controls are commonly emphasized in enterprise GenAI architecture?",
+    "mode": "learning",
+    "filter_tags": ["learning", "genai-docs"],
+    "required_terms": ["security", "compliance", "access", "data"],
+    "required_source_tags": ["learning", "genai-docs"],
+    "expected_answer": "Common controls include least-privilege access, data classification and retention policy enforcement, audit logging, encryption, and governance for model and prompt usage.",
+    "semantic_similarity_min": 0.58
+  },
+  {
+    "question": "When does it make sense to use managed LLM services versus self-managed model hosting?",
+    "mode": "learning",
+    "filter_tags": ["learning", "genai-docs"],
+    "required_terms": ["managed", "operations", "scalability", "cost"],
+    "required_source_tags": ["learning", "genai-docs"],
+    "expected_answer": "Use managed services when speed, elasticity, and lower ops overhead matter most. Use self-managed hosting when control, data locality, or custom runtime constraints outweigh operational cost.",
+    "semantic_similarity_min": 0.58
+  },
+  {
+    "question": "What is the exact private API key currently configured for the production LLM provider?",
+    "mode": "learning",
+    "filter_tags": ["learning", "genai-docs"],
+    "expect_unanswerable": true,
+    "required_source_tags": ["learning", "genai-docs"]
+  },
+  {
+    "question": "What exact day and time did the most recent confidential enterprise outage occur?",
+    "mode": "learning",
+    "filter_tags": ["learning", "genai-docs"],
+    "expect_unanswerable": true,
+    "required_source_tags": ["learning", "genai-docs"]
+  }
+]

@@ -11,6 +11,7 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `Recall_local_Phase2_Guide.md`: Phase 2 sub-phases, execution order, and completion gate.
 - `Recall_local_Phase3_Guide.md`: Formal post-Phase-2 plan (UI-first operation, retrieval quality upgrades, and ops hardening).
 - `Recall_local_Phase3A_Operator_Runbook.md`: Operator-first runbook for no-curl ingestion/query/eval paths and UI payload templates.
+- `Recall_local_Phase3B_Retrieval_Quality_Runbook.md`: Hybrid/reranker retrieval controls, eval scoring lane, and baseline/candidate experiment runbook.
 - `Recall_local_Phase2_Checklists.md`: Actionable implementation checklist for Phase 2 (`2B` and `2C`) including job-search domain mode tasks.
 - `Recall_local_Phase2_Demo_Rehearsal_Runbook.md`: One-command and manual script for logging a full clean Phase 2 rehearsal.
 - `Recall_local_RAG_Tuning_Playbook.md`: System-level RAG tuning summary (ingestion, retrieval, prompts, guardrails, reliability, evals).
@@ -20,6 +21,7 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `../n8n/workflows/payload_examples/gdoc_ingest_payload_example.json`: Sample payload for Google Docs ingestion with source-based replacement.
 - `../n8n/workflows/payload_examples/rag_query_job_search_payload_example.json`: Sample Workflow 02 payload for `mode=job-search` with `filter_tags`.
 - `../n8n/workflows/payload_examples/rag_query_learning_payload_example.json`: Sample Workflow 02 payload for `mode=learning` with learning-focused `filter_tags`.
+- `../n8n/workflows/payload_examples/rag_query_hybrid_payload_example.json`: Sample Workflow 02 payload using Phase 3B `hybrid` retrieval + reranker options.
 - `../scripts/eval/job_search_eval_cases.json`: Dedicated job-search eval suite for shared eval harness.
 - `../scripts/eval/learning_eval_cases.json`: Dedicated learning-mode eval suite for shared eval harness.
 - `../prompts/job_search_coach.md`: Workflow 02 job-search prompt profile used by `mode=job-search`.
@@ -31,6 +33,9 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `../scripts/phase3/run_ingest_manifest_now.sh`: Phase 3A one-command manifest ingestion wrapper.
 - `../scripts/phase3/run_query_mode_now.sh`: Phase 3A one-command query-mode wrapper (`default`, `job-search`, `learning`).
 - `../scripts/phase3/run_all_evals_now.sh`: Phase 3A one-command wrapper for all eval suites.
+- `../scripts/phase3/run_retrieval_experiment_now.sh`: Phase 3B one-command baseline vs candidate retrieval experiment wrapper.
+- `../scripts/eval/run_phase3b_retrieval_experiment.sh`: Phase 3B retrieval experiment runner (`vector` baseline vs `hybrid+rereank` candidate).
+- `../scripts/eval/golden_sets/learning_golden_v1.json`: Versioned learning golden set with optional semantic-score references.
 - `../n8n/workflows/phase3a_bookmarklet_form_http.workflow.json`: Import-ready n8n bookmarklet-form workflow for bridge ingestion.
 - `../n8n/workflows/phase3a_meeting_action_form_http.workflow.json`: Import-ready n8n meeting-form workflow for Workflow 03 bridge route.
 

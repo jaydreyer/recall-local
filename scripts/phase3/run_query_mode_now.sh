@@ -10,6 +10,10 @@ TOP_K="${RECALL_QUERY_TOP_K:-}"
 MIN_SCORE="${RECALL_QUERY_MIN_SCORE:-}"
 MAX_RETRIES="${RECALL_QUERY_MAX_RETRIES:-}"
 FILTER_TAGS="${RECALL_QUERY_FILTER_TAGS:-}"
+RETRIEVAL_MODE="${RECALL_QUERY_RETRIEVAL_MODE:-}"
+HYBRID_ALPHA="${RECALL_QUERY_HYBRID_ALPHA:-}"
+ENABLE_RERANKER="${RECALL_QUERY_ENABLE_RERANKER:-}"
+RERANKER_WEIGHT="${RECALL_QUERY_RERANKER_WEIGHT:-}"
 DRY_RUN="false"
 
 usage() {
@@ -24,6 +28,10 @@ Options:
   --min-score <float>                    Override min score
   --max-retries <int>                    Override retry count
   --filter-tags <csv>                    Override filter tags
+  --retrieval-mode <vector|hybrid>       Override retrieval mode
+  --hybrid-alpha <float>                 Override hybrid alpha [0..1]
+  --enable-reranker <true|false>         Enable/disable reranker
+  --reranker-weight <float>              Override reranker blend weight [0..1]
   --dry-run                              Skip artifact/SQLite writes
   --help                                 Show this help
 
@@ -99,6 +107,22 @@ while [[ $# -gt 0 ]]; do
       FILTER_TAGS="${2:-}"
       shift 2
       ;;
+    --retrieval-mode)
+      RETRIEVAL_MODE="${2:-}"
+      shift 2
+      ;;
+    --hybrid-alpha)
+      HYBRID_ALPHA="${2:-}"
+      shift 2
+      ;;
+    --enable-reranker)
+      ENABLE_RERANKER="${2:-}"
+      shift 2
+      ;;
+    --reranker-weight)
+      RERANKER_WEIGHT="${2:-}"
+      shift 2
+      ;;
     --dry-run)
       DRY_RUN="true"
       shift
@@ -153,9 +177,31 @@ fi
 if [[ -n "$FILTER_TAGS" ]]; then
   cmd+=(--filter-tags "$FILTER_TAGS")
 fi
+if [[ -n "$RETRIEVAL_MODE" ]]; then
+  cmd+=(--retrieval-mode "$RETRIEVAL_MODE")
+fi
+if [[ -n "$HYBRID_ALPHA" ]]; then
+  cmd+=(--hybrid-alpha "$HYBRID_ALPHA")
+fi
+if [[ -n "$ENABLE_RERANKER" ]]; then
+  case "$(printf '%s' "$ENABLE_RERANKER" | tr '[:upper:]' '[:lower:]')" in
+    true|1|yes|on)
+      cmd+=(--enable-reranker)
+      ;;
+    false|0|no|off)
+      ;;
+    *)
+      echo "Invalid --enable-reranker value: $ENABLE_RERANKER (expected true|false)" >&2
+      exit 2
+      ;;
+  esac
+fi
+if [[ -n "$RERANKER_WEIGHT" ]]; then
+  cmd+=(--reranker-weight "$RERANKER_WEIGHT")
+fi
 if [[ "$DRY_RUN" == "true" ]]; then
   cmd+=(--dry-run)
 fi
 
-echo "Running query mode=$MODE dry_run=$DRY_RUN"
+echo "Running query mode=$MODE dry_run=$DRY_RUN retrieval_mode=${RETRIEVAL_MODE:-env-default} reranker=${ENABLE_RERANKER:-env-default}"
 "${cmd[@]}"

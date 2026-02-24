@@ -1,5 +1,66 @@
 # Recall.local Implementation Log
 
+## 2026-02-24 - Phase 3B ai-lab validation: baseline vs candidate experiment artifacts
+
+### Outcome
+
+- Synced Phase 3B code/docs to ai-lab and spot-checked remote content with `rg` before runtime validation.
+- Ran retrieval-quality smoke check (dry-run, 2 cases) on ai-lab with:
+  - `retrieval_mode=hybrid`
+  - `hybrid_alpha=0.65`
+  - `enable_reranker=true`
+  - `reranker_weight=0.35`
+  - `semantic_score=true`
+  - result: `pass 2/2`
+- Executed full Phase 3B experiment runner on ai-lab (learning golden set):
+  - command path:
+    - `/home/jaydreyer/recall-local/scripts/phase3/run_retrieval_experiment_now.sh`
+  - comparison artifact:
+    - `/home/jaydreyer/recall-local/data/artifacts/evals/phase3b/20260224T015231Z_comparison.md`
+  - baseline summary:
+    - `/home/jaydreyer/recall-local/data/artifacts/evals/phase3b/20260224T015231Z_baseline_vector.json`
+  - candidate summary:
+    - `/home/jaydreyer/recall-local/data/artifacts/evals/phase3b/20260224T015231Z_candidate_hybrid.json`
+- Experiment results:
+  - baseline `8/8` pass, candidate `8/8` pass
+  - latency delta (candidate - baseline): `-196.8 ms`
+  - semantic avg delta (candidate - baseline): `-0.007`
+
+## 2026-02-24 - Phase 3B retrieval quality slice: hybrid lane + reranker + eval experiment track
+
+### Outcome
+
+- Added opt-in Workflow 02 retrieval controls:
+  - `retrieval_mode` (`vector|hybrid`)
+  - `hybrid_alpha`
+  - `enable_reranker`
+  - `reranker_weight`
+  - implementation:
+    - `/Users/jaydreyer/projects/recall-local/scripts/phase1/retrieval.py`
+    - `/Users/jaydreyer/projects/recall-local/scripts/phase1/rag_query.py`
+    - `/Users/jaydreyer/projects/recall-local/scripts/phase1/rag_from_payload.py`
+    - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py`
+- Added optional eval scoring lane for golden cases with expected answers:
+  - semantic similarity (embedding cosine) as secondary signal
+  - optional enforcement flag when strict gating is desired
+  - implementation:
+    - `/Users/jaydreyer/projects/recall-local/scripts/eval/run_eval.py`
+- Added Phase 3B baseline/candidate experiment runner:
+  - `/Users/jaydreyer/projects/recall-local/scripts/eval/run_phase3b_retrieval_experiment.sh`
+  - baseline: `vector`
+  - candidate: `hybrid + reranker`
+  - outputs comparison markdown under `/data/artifacts/evals/phase3b/`
+- Added operator wrapper for experiment execution:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase3/run_retrieval_experiment_now.sh`
+- Added versioned learning golden set starter:
+  - `/Users/jaydreyer/projects/recall-local/scripts/eval/golden_sets/learning_golden_v1.json`
+- Added retrieval payload example for n8n/Open WebUI tests:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/payload_examples/rag_query_hybrid_payload_example.json`
+- Added Phase 3B runbook:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase3B_Retrieval_Quality_Runbook.md`
+- Updated docs index:
+  - `/Users/jaydreyer/projects/recall-local/docs/README.md`
+
 ## 2026-02-24 - Phase 3A webhook path normalization fix (short paths restored)
 
 ### Outcome

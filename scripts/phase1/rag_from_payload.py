@@ -64,6 +64,10 @@ def main() -> int:
         max_retries = payload.get("max_retries")
         mode = payload.get("mode")
         filter_tags = _normalize_filter_tags(payload.get("filter_tags"))
+        retrieval_mode = payload.get("retrieval_mode")
+        hybrid_alpha = payload.get("hybrid_alpha")
+        enable_reranker = payload.get("enable_reranker")
+        reranker_weight = payload.get("reranker_weight")
 
         if top_k is not None:
             top_k = int(top_k)
@@ -71,6 +75,12 @@ def main() -> int:
             min_score = float(min_score)
         if max_retries is not None:
             max_retries = int(max_retries)
+        if hybrid_alpha is not None:
+            hybrid_alpha = float(hybrid_alpha)
+        if reranker_weight is not None:
+            reranker_weight = float(reranker_weight)
+        if enable_reranker is not None:
+            enable_reranker = _normalize_bool(enable_reranker)
 
         result = run_rag_query(
             query,
@@ -79,6 +89,10 @@ def main() -> int:
             max_retries=max_retries,
             filter_tags=filter_tags,
             mode=str(mode) if mode is not None else None,
+            retrieval_mode=str(retrieval_mode) if retrieval_mode is not None else None,
+            hybrid_alpha=hybrid_alpha,
+            enable_reranker=enable_reranker,
+            reranker_weight=reranker_weight,
             dry_run=args.dry_run,
         )
     except Exception as exc:  # noqa: BLE001
@@ -102,6 +116,20 @@ def _normalize_filter_tags(value: Any) -> list[str]:
                 tags.append(tag)
         return tags
     raise ValueError("Payload filter_tags must be an array or comma-separated string.")
+
+
+def _normalize_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off", ""}:
+            return False
+    raise ValueError("Payload enable_reranker must be boolean-like.")
 
 
 if __name__ == "__main__":
