@@ -1,5 +1,29 @@
 # Recall.local Implementation Log
 
+## 2026-02-24 - Phase 4A kickoff: soak runner + trend summarizer
+
+### Outcome
+
+- Added Phase 4A soak runner wrapper:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase4/run_eval_soak_now.sh`
+  - supports repeated core/job-search eval runs, per-run JSON/stderr/meta artifacts, and thresholded summary generation.
+- Added Phase 4A trend summarizer:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase4/summarize_eval_trend.py`
+  - aggregates run artifacts into trend JSON + Markdown with:
+    - per-run pass-rate + latency rows
+    - suite-level averages
+    - failure reason histogram
+    - threshold breach reporting (`min pass-rate`, `max avg latency`, error-run detection).
+- Updated docs index:
+  - `/Users/jaydreyer/projects/recall-local/docs/README.md`
+
+### Validation
+
+- `bash -n scripts/phase4/run_eval_soak_now.sh`
+- `python3 -m py_compile scripts/phase4/summarize_eval_trend.py`
+- `scripts/phase4/run_eval_soak_now.sh --help`
+- `python3 scripts/phase4/summarize_eval_trend.py --help`
+
 ## 2026-02-24 - Added Phase 3 completion summary and Phase 4 guide
 
 ### Outcome

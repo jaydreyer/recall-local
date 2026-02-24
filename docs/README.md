@@ -45,6 +45,8 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `../scripts/phase3/backup_restore_state.py`: Shared Phase 3C backup/restore utility used by wrappers.
 - `../scripts/phase3/build_portfolio_bundle_now.sh`: Phase 3C portfolio bundle wrapper that assembles evidence pack from artifacts.
 - `../scripts/phase3/build_portfolio_bundle.py`: Phase 3C portfolio bundle generator (trend snapshot + evidence copy + summary).
+- `../scripts/phase4/run_eval_soak_now.sh`: Phase 4A soak wrapper for repeated core/job-search eval runs plus thresholded trend summary output.
+- `../scripts/phase4/summarize_eval_trend.py`: Phase 4A trend aggregator that emits pass-rate/latency/failure-histogram JSON + Markdown artifacts.
 - `../scripts/eval/run_phase3b_retrieval_experiment.sh`: Phase 3B retrieval experiment runner (`vector` baseline vs `hybrid+rereank` candidate).
 - `../scripts/eval/golden_sets/learning_golden_v1.json`: Versioned learning golden set with optional semantic-score references.
 - `../n8n/workflows/phase3a_bookmarklet_form_http.workflow.json`: Import-ready n8n bookmarklet-form workflow for bridge ingestion.
