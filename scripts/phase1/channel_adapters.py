@@ -103,6 +103,9 @@ def _normalize_webhook(raw_payload: dict[str, Any]) -> dict[str, Any]:
         "source": str(raw_payload.get("source", "webhook")).strip() or "webhook",
         "metadata": metadata,
     }
+    group = metadata.get("group")
+    if isinstance(group, str) and group.strip():
+        payload["group"] = group.strip()
     if "replace_existing" in raw_payload:
         payload["replace_existing"] = raw_payload.get("replace_existing")
     source_key = _first_non_empty(
@@ -152,13 +155,20 @@ def _normalize_ios_share(raw_payload: dict[str, Any]) -> dict[str, Any]:
     tags = raw_payload.get("tags")
     if tags and "tags" not in metadata:
         metadata["tags"] = tags
+    group = _first_non_empty(raw_payload.get("group"))
+    if group and "group" not in metadata:
+        metadata["group"] = group
 
-    return {
+    payload = {
         "type": source_type,
         "content": content,
         "source": "ios-shortcut",
         "metadata": metadata,
     }
+    normalized_group = str(metadata.get("group", "")).strip()
+    if normalized_group:
+        payload["group"] = normalized_group
+    return payload
 
 
 def _normalize_gmail_forward(raw_payload: dict[str, Any]) -> dict[str, Any]:
@@ -193,6 +203,9 @@ def _normalize_gmail_forward(raw_payload: dict[str, Any]) -> dict[str, Any]:
         metadata["email_from"] = sender
     if message_id:
         metadata["email_message_id"] = message_id
+    group = _first_non_empty(raw_payload.get("group"))
+    if group and "group" not in metadata:
+        metadata["group"] = group
 
     content: dict[str, Any] = {
         "subject": subject or "",
@@ -200,12 +213,16 @@ def _normalize_gmail_forward(raw_payload: dict[str, Any]) -> dict[str, Any]:
         "attachment_paths": attachment_paths,
     }
 
-    return {
+    payload = {
         "type": "email",
         "content": content,
         "source": "gmail-forward",
         "metadata": metadata,
     }
+    group = str(metadata.get("group", "")).strip()
+    if group:
+        payload["group"] = group
+    return payload
 
 
 def _collect_attachment_paths(raw_payload: dict[str, Any]) -> list[str]:
@@ -261,6 +278,9 @@ def _merge_webhook_metadata(*, raw_payload: dict[str, Any], metadata: dict[str, 
     tags = raw_payload.get("tags")
     if tags is not None and "tags" not in metadata:
         metadata["tags"] = tags
+    group = _first_non_empty(raw_payload.get("group"))
+    if group and "group" not in metadata:
+        metadata["group"] = group
 
 
 def _looks_like_gdoc_payload(payload: dict[str, Any]) -> bool:

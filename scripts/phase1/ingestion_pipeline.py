@@ -30,6 +30,8 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from scripts.phase1.group_model import DEFAULT_GROUP, normalize_group
+
 HEADING_RE = re.compile(r"^(#{1,6}\s+.+|[A-Z][A-Z0-9 _:/-]{4,})$")
 TRACKING_QUERY_KEYS = {
     "fbclid",
@@ -72,6 +74,7 @@ class IngestRequest:
     content: Any
     source_channel: str = "manual"
     title: str | None = None
+    group: str = DEFAULT_GROUP
     tags: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
     replace_existing: bool = False
@@ -565,7 +568,20 @@ def _build_qdrant_points(
         chunk_id = f"{doc_id}:{index:04d}"
         embedding = llm_client.embed(chunk)
         metadata = dict(request.metadata)
+        group_candidate = request.group
+        metadata_group = metadata.get("group")
+        if (
+            isinstance(metadata_group, str)
+            and metadata_group.strip()
+            and (not group_candidate or normalize_group(group_candidate) == DEFAULT_GROUP)
+        ):
+            group_candidate = metadata_group
+        group = normalize_group(group_candidate)
+        tags = [str(tag).strip() for tag in request.tags if str(tag).strip()]
         metadata["source_identity"] = source_identity
+        metadata["group"] = group
+        metadata["tags"] = tags
+        metadata["ingestion_channel"] = request.source_channel
         metadata["replacement"] = {
             "requested": request.replace_existing,
             "deleted_points": replaced_points,
@@ -578,7 +594,8 @@ def _build_qdrant_points(
             "chunk_id": chunk_id,
             "title": title,
             "created_at": created_at,
-            "tags": request.tags,
+            "group": group,
+            "tags": tags,
             "ingestion_channel": request.source_channel,
             "text": chunk,
             "metadata": metadata,
@@ -884,6 +901,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--content", required=True, help="File path, URL, or raw text.")
     parser.add_argument("--source", default="manual", help="Ingestion channel label.")
     parser.add_argument("--title", default=None, help="Optional source title override.")
+    parser.add_argument(
+        "--group",
+        default=DEFAULT_GROUP,
+        help="Canonical group (`job-search|learning|project|reference|meeting`).",
+    )
     parser.add_argument("--tags", default="", help="Comma-separated tags.")
     parser.add_argument("--metadata-json", default="{}", help="JSON object for extra metadata.")
     parser.add_argument(
@@ -913,6 +935,7 @@ def main() -> int:
         content=args.content,
         source_channel=args.source,
         title=args.title,
+        group=normalize_group(args.group),
         tags=[part.strip() for part in args.tags.split(",") if part.strip()],
         metadata=metadata if isinstance(metadata, dict) else {},
         replace_existing=args.replace_existing,

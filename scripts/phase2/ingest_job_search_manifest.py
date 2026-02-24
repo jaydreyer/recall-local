@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from scripts.phase1.group_model import normalize_group  # noqa: E402
 from scripts.phase1.ingestion_pipeline import IngestRequest, ingest_request  # noqa: E402
 
 
@@ -73,6 +74,7 @@ def to_ingest_request(
 
     source_channel = str(item.get("source", defaults.get("source", "manual"))).strip() or "manual"
     title = _coalesce_text(item.get("title"), defaults.get("title"))
+    group = normalize_group(item.get("group", defaults.get("group")))
     tags = _normalize_tags(item.get("tags", defaults.get("tags")))
     enforced_tag = (ensure_tag or "").strip()
     if enforced_tag and enforced_tag not in tags:
@@ -88,6 +90,7 @@ def to_ingest_request(
         content=content,
         source_channel=source_channel,
         title=title,
+        group=group,
         tags=tags,
         metadata=metadata,
         replace_existing=replace_existing,

@@ -12,6 +12,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from scripts.phase1 import ingest_bridge_api
+from scripts.phase1.ingestion_pipeline import IngestResult
 
 
 @contextmanager
@@ -81,6 +82,66 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(alias.status_code, 200)
         self.assertIn("groups", canonical.json())
         self.assertEqual(canonical.json(), alias.json())
+
+    def test_ingestion_propagates_group_and_tags_with_reference_fallback(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        fake_result = IngestResult(
+            run_id="run-1",
+            ingest_id="ingest-1",
+            doc_id="doc-1",
+            source_type="text",
+            source_ref="inline:text",
+            title="Example",
+            source_identity="inline:text",
+            chunks_created=1,
+            moved_to=None,
+            replace_existing=False,
+            replaced_points=0,
+            replacement_status="skipped",
+            latency_ms=1,
+            status="dry_run",
+        )
+        with patch("scripts.phase1.ingest_bridge_api.ingest_request", return_value=fake_result) as mock_ingest:
+            with build_client(env) as client:
+                response = client.post(
+                    "/v1/ingestions?dry_run=true",
+                    json={
+                        "channel": "bookmarklet",
+                        "type": "text",
+                        "content": "hello world",
+                        "group": "not-a-group",
+                        "tags": ["alpha", "beta"],
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        request_obj = mock_ingest.call_args.args[0]
+        self.assertEqual(request_obj.group, "reference")
+        self.assertEqual(request_obj.tags, ["alpha", "beta"])
+
+    def test_rag_query_normalizes_filter_group(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        with patch("scripts.phase1.ingest_bridge_api.run_rag_query", return_value={"answer": "ok", "audit": {}}) as mock_rag:
+            with build_client(env) as client:
+                response = client.post(
+                    "/v1/rag-queries?dry_run=true",
+                    json={
+                        "query": "test query",
+                        "filter_group": "INVALID_GROUP",
+                        "filter_tags": ["job-search"],
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mock_rag.call_args.kwargs["filter_group"], "reference")
 
 
 if __name__ == "__main__":

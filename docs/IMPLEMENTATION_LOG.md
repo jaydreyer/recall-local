@@ -1,5 +1,67 @@
 # Recall.local Implementation Log
 
+## 2026-02-24 - Phase 5B ai-lab sync + runtime validation
+
+### What was executed
+
+- Attempted required full sync gate:
+  - `rsync -avz --delete -e "ssh -i ~/.ssh/codex_ai_lab" --exclude '.git/' /Users/jaydreyer/projects/recall-local/ jaydreyer@100.116.103.78:/home/jaydreyer/recall-local/`
+- Observed runtime-owned artifact permission failures under `data/artifacts/rag` and `__pycache__` on ai-lab (`rsync` exit `23`), then applied documented fallback:
+  - targeted sync via `--files-from` for changed Phase 5B files only.
+- Per sync gate rule, ran remote content spot-check:
+  - `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "cd /home/jaydreyer/recall-local && rg -n 'filter_group|group_model|normalize_group|CANONICAL_GROUPS' scripts/phase1 tests"`
+- Restarted bridge service to load synced code:
+  - `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "docker restart recall-ingest-bridge"`
+- Runtime contract smoke checks on ai-lab host:
+  - `POST /v1/ingestions?dry_run=true` with `group=project`
+  - `POST /v1/rag-queries?dry_run=true` with invalid `filter_group`
+  - OpenAPI probe confirmed `group` and `filter_group` in canonical schema.
+
+### Results
+
+- Remote spot-check: pass (new symbols present on ai-lab in expected files).
+- Bridge smoke status:
+  - `ingestions_status=200`
+  - `rag_queries_status=200`
+- Behavioral confirmation:
+  - ingestion accepts and echoes `group` in normalized payload.
+  - invalid `filter_group` normalizes to `reference` (`result.audit.filter_group=reference`).
+
+## 2026-02-24 - Phase 5B closure: canonical group model, metadata persistence, and query group filters
+
+### Outcome
+
+- Completed `5B` group/tag metadata model implementation end-to-end:
+  - added canonical group helper module with fallback behavior:
+    - `/Users/jaydreyer/projects/recall-local/scripts/phase1/group_model.py`
+    - enum: `job-search|learning|project|reference|meeting`
+    - invalid/missing group fallback: `reference`
+- Extended ingestion contract and normalization paths to carry group/tag metadata:
+  - bridge request schema supports `group` on `POST /v1/ingestions`
+  - channel adapters propagate `group` into normalized payload metadata
+  - payload parser maps `group` onto `IngestRequest`
+- Updated ingestion persistence so chunk payload metadata reliably stores:
+  - `group`
+  - `tags`
+  - `ingestion_channel`
+- Extended query contract and runtime with `filter_group` support:
+  - bridge request schema supports `filter_group` on `POST /v1/rag-queries`
+  - bridge parsing normalizes invalid `filter_group` values to `reference`
+  - retrieval layer now combines group and tag filters in Qdrant query filters
+  - RAG sources/audit payload now include group context
+- Added regression tests for metadata propagation and filtering:
+  - `/Users/jaydreyer/projects/recall-local/tests/test_phase5b_metadata_model.py`
+  - expanded `/Users/jaydreyer/projects/recall-local/tests/test_bridge_api_contract.py`
+- Updated supporting scripts for parity:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/rag_from_payload.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase2/ingest_job_search_manifest.py`
+
+### Validation
+
+- `python3 -m py_compile scripts/phase1/group_model.py scripts/phase1/ingest_bridge_api.py scripts/phase1/ingest_from_payload.py scripts/phase1/channel_adapters.py scripts/phase1/ingestion_pipeline.py scripts/phase1/retrieval.py scripts/phase1/rag_query.py scripts/phase1/rag_from_payload.py scripts/phase2/ingest_job_search_manifest.py`
+- `python3 -m unittest discover -s tests -p 'test_bridge_api_contract.py'`
+- `python3 -m unittest discover -s tests -p 'test_phase5b_metadata_model.py'`
+
 ## 2026-02-24 - Phase 5A closure: rate limits, auto-tag rules endpoint, and contract tests
 
 ### Outcome

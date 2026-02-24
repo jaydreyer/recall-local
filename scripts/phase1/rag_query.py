@@ -23,6 +23,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts import llm_client  # noqa: E402
+from scripts.phase1.group_model import normalize_group  # noqa: E402
 from scripts.phase1.retrieval import RetrievedChunk, retrieve_chunks  # noqa: E402
 from scripts.validate_output import ValidationResult, validate_rag_output  # noqa: E402
 
@@ -133,6 +134,7 @@ def run_rag_query(
     min_score: float | None = None,
     max_retries: int | None = None,
     filter_tags: list[str] | None = None,
+    filter_group: str | None = None,
     mode: str | None = None,
     retrieval_mode: str | None = None,
     hybrid_alpha: float | None = None,
@@ -145,7 +147,12 @@ def run_rag_query(
     threshold = settings.min_score if min_score is None else min_score
     retries = settings.max_retries if max_retries is None else max_retries
     normalized_filter_tags = _normalize_filter_tags(filter_tags)
-    active_mode = _resolve_mode(mode=mode, filter_tags=normalized_filter_tags)
+    normalized_filter_group = _normalize_filter_group(filter_group)
+    active_mode = _resolve_mode(
+        mode=mode,
+        filter_tags=normalized_filter_tags,
+        filter_group=normalized_filter_group,
+    )
     if limit <= 0:
         raise ValueError("top_k must be greater than 0")
     if retries < 0:
@@ -171,6 +178,7 @@ def run_rag_query(
             top_k=limit,
             min_score=threshold,
             filter_tags=normalized_filter_tags,
+            filter_group=normalized_filter_group,
             retrieval_mode=retrieval_mode,
             hybrid_alpha=hybrid_alpha,
             enable_reranker=enable_reranker,
@@ -184,6 +192,7 @@ def run_rag_query(
                 top_k=limit,
                 min_score=-1.0,
                 filter_tags=normalized_filter_tags,
+                filter_group=normalized_filter_group,
                 retrieval_mode=retrieval_mode,
                 hybrid_alpha=hybrid_alpha,
                 enable_reranker=enable_reranker,
@@ -248,6 +257,7 @@ def run_rag_query(
         response["audit"]["top_k"] = limit
         response["audit"]["min_score"] = threshold
         response["audit"]["filter_tags"] = normalized_filter_tags
+        response["audit"]["filter_group"] = normalized_filter_group
         response["audit"]["mode"] = active_mode
         response["audit"]["prompt_profile"] = _prompt_profile_name(active_mode)
         response["audit"]["retrieval_mode"] = retrieval_mode or os.getenv("RECALL_RAG_RETRIEVAL_MODE", "vector")
@@ -498,6 +508,7 @@ def _source_rows(retrieved: list[RetrievedChunk]) -> list[dict[str, Any]]:
             "source": item.source,
             "source_type": item.source_type,
             "ingestion_channel": item.ingestion_channel,
+            "group": item.group,
             "tags": item.tags,
             "score": round(item.score, 6),
             "excerpt": _truncate(item.text, 220),
@@ -514,6 +525,7 @@ def _build_context(chunks: list[RetrievedChunk]) -> str:
         lines.append(f"chunk_id: {chunk.chunk_id}")
         lines.append(f"title: {chunk.title}")
         lines.append(f"source: {chunk.source}")
+        lines.append(f"group: {chunk.group}")
         lines.append(f"tags: {', '.join(chunk.tags) if chunk.tags else '-'}")
         lines.append(f"score: {chunk.score:.6f}")
         lines.append("text:")
@@ -616,7 +628,7 @@ def _normalize_mode(mode: str | None) -> str:
     raise ValueError(f"Unsupported mode: {mode}")
 
 
-def _resolve_mode(*, mode: str | None, filter_tags: list[str]) -> str:
+def _resolve_mode(*, mode: str | None, filter_tags: list[str], filter_group: str | None) -> str:
     normalized_mode = _normalize_mode(mode)
     if normalized_mode != "default":
         return normalized_mode
@@ -626,6 +638,8 @@ def _resolve_mode(*, mode: str | None, filter_tags: list[str]) -> str:
         return "job-search"
     if {"learning", "genai-docs"}.issubset(normalized_tags):
         return "learning"
+    if filter_group in {"job-search", "learning"}:
+        return filter_group
     return "default"
 
 
@@ -641,6 +655,15 @@ def _normalize_filter_tags(filter_tags: list[str] | None) -> list[str]:
         seen.add(tag)
         deduped.append(tag)
     return deduped
+
+
+def _normalize_filter_group(filter_group: str | None) -> str | None:
+    if filter_group is None:
+        return None
+    raw = str(filter_group).strip()
+    if not raw:
+        return None
+    return normalize_group(raw)
 
 
 def _prompt_profile_name(mode: str) -> str:
@@ -697,6 +720,11 @@ def parse_args() -> argparse.Namespace:
         help="Comma-separated tags for retrieval filtering (optional).",
     )
     parser.add_argument(
+        "--filter-group",
+        default="",
+        help="Optional group filter (`job-search|learning|project|reference|meeting`).",
+    )
+    parser.add_argument(
         "--mode",
         default="default",
         help="Prompt mode: default|job-search|learning (aliases: rag, job_search, learn).",
@@ -744,6 +772,7 @@ def main() -> int:
             min_score=args.min_score,
             max_retries=args.max_retries,
             filter_tags=[part.strip() for part in args.filter_tags.split(",") if part.strip()],
+            filter_group=args.filter_group or None,
             mode=args.mode,
             retrieval_mode=args.retrieval_mode,
             hybrid_alpha=args.hybrid_alpha,

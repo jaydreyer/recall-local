@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from scripts.phase1.group_model import normalize_group
 from scripts.phase1.ingestion_pipeline import IngestRequest, ingest_request  # noqa: E402
 
 
@@ -55,8 +56,11 @@ def payload_to_requests(payload: dict[str, Any]) -> list[IngestRequest]:
     metadata = payload.get("metadata") or {}
     if not isinstance(metadata, dict):
         raise ValueError("Payload field 'metadata' must be a JSON object if present.")
+    metadata = dict(metadata)
 
     title = metadata.get("title") or payload.get("title")
+    group = _normalize_group(payload.get("group"), metadata.get("group"))
+    metadata["group"] = group
     tags = _normalize_tags(payload.get("tags"), metadata.get("tags"))
     replace_existing = _coerce_bool(
         payload.get("replace_existing", metadata.get("replace_existing", False))
@@ -79,6 +83,7 @@ def payload_to_requests(payload: dict[str, Any]) -> list[IngestRequest]:
                 content=content,
                 source_channel=source_channel,
                 title=title,
+                group=group,
                 tags=[str(tag) for tag in tags],
                 metadata=metadata,
                 replace_existing=replace_existing,
@@ -91,6 +96,7 @@ def payload_to_requests(payload: dict[str, Any]) -> list[IngestRequest]:
             content=content,
             source_channel=source_channel,
             title=title,
+            group=group,
             tags=[str(tag) for tag in tags],
             metadata=metadata,
             replace_existing=replace_existing,
@@ -105,6 +111,7 @@ def _email_payload_requests(
     content: Any,
     source_channel: str,
     title: str | None,
+    group: str,
     tags: list[str],
     metadata: dict[str, Any],
     replace_existing: bool,
@@ -134,6 +141,7 @@ def _email_payload_requests(
                     content=body,
                     source_channel=source_channel,
                     title=title or subject or "Email body",
+                    group=group,
                     tags=tags,
                     metadata=base_metadata,
                     replace_existing=replace_existing,
@@ -148,6 +156,7 @@ def _email_payload_requests(
                     content=str(attachment_path),
                     source_channel=source_channel,
                     title=None,
+                    group=group,
                     tags=tags,
                     metadata=base_metadata,
                     replace_existing=replace_existing,
@@ -163,6 +172,7 @@ def _email_payload_requests(
                     content=body,
                     source_channel=source_channel,
                     title=title or "Email body",
+                    group=group,
                     tags=tags,
                     metadata=metadata,
                     replace_existing=replace_existing,
@@ -206,6 +216,11 @@ def _coerce_bool(value: Any) -> bool:
         if normalized in {"0", "false", "no", "off", ""}:
             return False
     raise ValueError("replace_existing must be a boolean-like value.")
+
+
+def _normalize_group(primary: Any, fallback: Any) -> str:
+    value = primary if primary is not None else fallback
+    return normalize_group(value)
 
 
 def _first_non_empty(*values: Any) -> str | None:

@@ -14,11 +14,11 @@ Source plan: `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Gu
 
 ## 5B. Group/Tag Metadata Model
 
-- [ ] Define canonical group enum and default handling (`reference` fallback).
-- [ ] Extend ingest endpoint payloads to accept `group` + `tags`.
-- [ ] Ensure chunk metadata stores `group`, `tags`, and `ingestion_channel`.
-- [ ] Add query option `filter_group` and validate bridge payload parsing.
-- [ ] Add regression tests for metadata propagation and filtering.
+- [x] Define canonical group enum and default handling (`reference` fallback).
+- [x] Extend ingest endpoint payloads to accept `group` + `tags`.
+- [x] Ensure chunk metadata stores `group`, `tags`, and `ingestion_channel`.
+- [x] Add query option `filter_group` and validate bridge payload parsing.
+- [x] Add regression tests for metadata propagation and filtering.
 
 ## 5C. Obsidian Integration
 

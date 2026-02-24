@@ -26,6 +26,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.phase1.channel_adapters import normalize_payload  # noqa: E402
+from scripts.phase1.group_model import CANONICAL_GROUPS, normalize_group  # noqa: E402
 from scripts.phase1.ingest_from_payload import payload_to_requests  # noqa: E402
 from scripts.phase1.ingestion_pipeline import ingest_request  # noqa: E402
 from scripts.phase1.rag_query import run_rag_query  # noqa: E402
@@ -42,6 +43,7 @@ DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 60
 DEFAULT_RATE_LIMIT_MAX_REQUESTS = 120
 RATE_LIMIT_WINDOW_ENV = "RECALL_API_RATE_LIMIT_WINDOW_SECONDS"
 RATE_LIMIT_MAX_REQUESTS_ENV = "RECALL_API_RATE_LIMIT_MAX_REQUESTS"
+CANONICAL_GROUP_ENUM = list(CANONICAL_GROUPS)
 
 
 class InMemoryRateLimiter:
@@ -216,6 +218,7 @@ INGEST_SUCCESS_EXAMPLE = {
     "normalized_payload": {
         "type": "url",
         "content": "https://example.com/job-posting",
+        "group": "job-search",
         "source": "bookmarklet",
         "metadata": {"title": "Senior Solutions Engineer", "tags": ["job-search", "exampleco"]},
     },
@@ -243,6 +246,8 @@ RAG_SUCCESS_EXAMPLE = {
         "audit": {
             "workflow": "workflow_02_rag_query",
             "mode": "default",
+            "filter_group": "reference",
+            "filter_tags": [],
             "latency_ms": 1542,
             "run_id": "5dc39f6f34a4492a9815570bde204f3a",
         },
@@ -282,6 +287,12 @@ INGEST_REQUEST_BODY = {
                         "description": "Ingestion channel selector.",
                         "enum": list(ALLOWED_INGEST_CHANNELS),
                     },
+                    "group": {
+                        "type": "string",
+                        "description": "Optional canonical ingestion group. Invalid values fall back to `reference`.",
+                        "enum": CANONICAL_GROUP_ENUM,
+                        "default": "reference",
+                    },
                     "url": {"type": "string", "description": "Source URL for URL-based ingestion channels."},
                     "title": {"type": "string", "description": "Human-readable title."},
                     "text": {"type": "string", "description": "Optional body text to ingest directly."},
@@ -299,6 +310,7 @@ INGEST_REQUEST_BODY = {
                         "channel": "bookmarklet",
                         "url": "https://example.com/job-posting",
                         "title": "Senior Solutions Engineer",
+                        "group": "job-search",
                         "text": "Role responsibilities and qualifications...",
                         "tags": ["job-search", "exampleco"],
                         "source": "bookmarklet",
@@ -312,6 +324,7 @@ INGEST_REQUEST_BODY = {
                         "channel": "gmail-forward",
                         "subject": "Interview Follow-up",
                         "from": "recruiter@exampleco.com",
+                        "group": "job-search",
                         "body": "Thanks for your time...",
                         "tags": ["job-search", "recruiter"],
                         "source": "gmail-forward",
@@ -342,6 +355,11 @@ RAG_REQUEST_BODY = {
                         ],
                         "description": "Tag filter list or comma-separated string.",
                     },
+                    "filter_group": {
+                        "type": "string",
+                        "description": "Optional canonical group filter. Invalid values fall back to `reference`.",
+                        "enum": CANONICAL_GROUP_ENUM,
+                    },
                     "retrieval_mode": {"type": "string", "description": "Retrieval strategy (`vector` or `hybrid`)."},
                     "hybrid_alpha": {"type": "number", "minimum": 0, "maximum": 1},
                     "enable_reranker": {
@@ -366,6 +384,7 @@ RAG_REQUEST_BODY = {
                     "value": {
                         "query": "What should I emphasize for an Anthropic Solutions Engineer interview?",
                         "mode": "job-search",
+                        "filter_group": "job-search",
                         "filter_tags": ["job-search", "anthropic"],
                         "retrieval_mode": "hybrid",
                         "enable_reranker": True,
@@ -781,6 +800,7 @@ def _process_rag_query(*, payload: dict[str, Any], dry_run: bool, request_id: st
     max_retries = payload.get("max_retries")
     mode = payload.get("mode")
     filter_tags = payload.get("filter_tags")
+    filter_group = payload.get("filter_group")
     retrieval_mode = payload.get("retrieval_mode")
     hybrid_alpha = payload.get("hybrid_alpha")
     enable_reranker = payload.get("enable_reranker")
@@ -791,6 +811,7 @@ def _process_rag_query(*, payload: dict[str, Any], dry_run: bool, request_id: st
         max_retries_value = int(max_retries) if max_retries is not None else None
         mode_value = str(mode) if mode is not None else None
         filter_tags_value = _normalize_tag_filter(filter_tags)
+        filter_group_value = _normalize_group_filter(filter_group)
         retrieval_mode_value = str(retrieval_mode) if retrieval_mode is not None else None
         hybrid_alpha_value = float(hybrid_alpha) if hybrid_alpha is not None else None
         reranker_weight_value = float(reranker_weight) if reranker_weight is not None else None
@@ -810,6 +831,7 @@ def _process_rag_query(*, payload: dict[str, Any], dry_run: bool, request_id: st
             min_score=min_score_value,
             max_retries=max_retries_value,
             filter_tags=filter_tags_value,
+            filter_group=filter_group_value,
             mode=mode_value,
             retrieval_mode=retrieval_mode_value,
             hybrid_alpha=hybrid_alpha_value,
@@ -879,6 +901,15 @@ def _normalize_tag_filter(value: Any) -> list[str]:
                 tags.append(tag)
         return tags
     raise ValueError("filter_tags must be an array or comma-separated string.")
+
+
+def _normalize_group_filter(value: Any) -> str | None:
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    return normalize_group(raw)
 
 
 def _normalize_bool(value: Any) -> bool:

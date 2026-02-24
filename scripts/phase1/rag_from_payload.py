@@ -64,6 +64,7 @@ def main() -> int:
         max_retries = payload.get("max_retries")
         mode = payload.get("mode")
         filter_tags = _normalize_filter_tags(payload.get("filter_tags"))
+        filter_group = payload.get("filter_group")
         retrieval_mode = payload.get("retrieval_mode")
         hybrid_alpha = payload.get("hybrid_alpha")
         enable_reranker = payload.get("enable_reranker")
@@ -88,6 +89,7 @@ def main() -> int:
             min_score=min_score,
             max_retries=max_retries,
             filter_tags=filter_tags,
+            filter_group=str(filter_group) if filter_group is not None else None,
             mode=str(mode) if mode is not None else None,
             retrieval_mode=str(retrieval_mode) if retrieval_mode is not None else None,
             hybrid_alpha=hybrid_alpha,

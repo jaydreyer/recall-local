@@ -85,13 +85,22 @@ Last updated: 2026-02-24
   - n8n container does not include `python3`; `Execute Command`-based Workflow 02 fails with `/bin/sh: python3: not found`.
   - Use HTTP bridge workflow for Workflow 02 in this environment.
 
-## Bridge API Controls (Phase 5A)
+## Bridge API Controls (Phase 5A-5B)
 
 - API identity: `operations-v1`
 - Canonical base paths: `/v1/*`
 - Shared config endpoint:
   - canonical: `GET /v1/auto-tag-rules`
   - compatibility alias: `GET /config/auto-tags`
+- Canonical group model:
+  - enum: `job-search|learning|project|reference|meeting`
+  - fallback: invalid or missing group resolves to `reference`.
+- Ingestion payload support:
+  - `POST /v1/ingestions` accepts optional `group` and `tags`.
+  - ingested chunk payloads persist `group`, `tags`, and `ingestion_channel` in Qdrant metadata.
+- Query payload support:
+  - `POST /v1/rag-queries` accepts optional `filter_group` and `filter_tags`.
+  - invalid `filter_group` values normalize to `reference`.
 - Optional auth:
   - `RECALL_API_KEY` enforces `X-API-Key` header when set.
 - Rate limiting env vars:
