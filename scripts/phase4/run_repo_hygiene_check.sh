@@ -6,6 +6,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 REMOTE_HOST="${AI_LAB_HOST:-100.116.103.78}"
 REMOTE_USER="${AI_LAB_USER:-jaydreyer}"
 REMOTE_REPO_PATH="${AI_LAB_REPO_PATH:-/home/jaydreyer/recall-local}"
+REMOTE_SSH_KEY="${AI_LAB_SSH_KEY:-}"
 SKIP_REMOTE="false"
 FAIL_ON_FINDINGS="true"
 OUTPUT_JSON=""
@@ -19,6 +20,7 @@ Options:
   --remote-host <host>       ai-lab host/address (default: 100.116.103.78)
   --remote-user <user>       ai-lab SSH user (default: jaydreyer)
   --remote-repo-path <path>  ai-lab runtime repo path (default: /home/jaydreyer/recall-local)
+  --ssh-key <path>           Optional SSH private key path for ai-lab checks
   --skip-remote              Skip ai-lab checks and run local metadata checks only
   --no-fail                  Always exit 0 (report findings without failing)
   --output-json <path>       Write machine-readable report JSON
@@ -27,6 +29,7 @@ Options:
 Examples:
   run_repo_hygiene_check.sh
   run_repo_hygiene_check.sh --skip-remote
+  run_repo_hygiene_check.sh --ssh-key ~/.ssh/codex_ai_lab
   run_repo_hygiene_check.sh --remote-host 100.116.103.78 --remote-user jaydreyer
 EOF
 }
@@ -43,6 +46,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --remote-repo-path)
       REMOTE_REPO_PATH="${2:-}"
+      shift 2
+      ;;
+    --ssh-key)
+      REMOTE_SSH_KEY="${2:-}"
       shift 2
       ;;
     --skip-remote)
@@ -86,8 +93,12 @@ remote_dot_count="0"
 
 if [[ "$SKIP_REMOTE" != "true" ]]; then
   remote_checked="true"
+  SSH_CMD=(ssh -o BatchMode=yes -o ConnectTimeout=10)
+  if [[ -n "$REMOTE_SSH_KEY" ]]; then
+    SSH_CMD+=(-i "$REMOTE_SSH_KEY")
+  fi
   remote_result="$(
-    ssh -o BatchMode=yes -o ConnectTimeout=10 "$REMOTE_USER@$REMOTE_HOST" "bash -s -- '$REMOTE_REPO_PATH'" <<'EOF'
+    "${SSH_CMD[@]}" "$REMOTE_USER@$REMOTE_HOST" "bash -s -- '$REMOTE_REPO_PATH'" <<'EOF'
 set -euo pipefail
 repo_path="$1"
 if [[ ! -d "$repo_path/.git" ]]; then

@@ -1,5 +1,44 @@
 # Recall.local Implementation Log
 
+## 2026-02-24 - Phase 4A ai-lab soak evidence + hygiene remote check
+
+### Outcome
+
+- Synced Phase 4 files from Mac to ai-lab with SSH key auth and performed required remote spot-check:
+  - sync key: `~/.ssh/codex_ai_lab`
+  - remote check confirmed new Phase 4 scripts/workflow docs are present on `/home/jaydreyer/recall-local`.
+- Ran first live Phase 4A soak on ai-lab:
+  - command:
+    - `/home/jaydreyer/recall-local/scripts/phase4/run_eval_soak_now.sh --iterations 5 --suite both --delay-seconds 2`
+  - artifact dir:
+    - `/home/jaydreyer/recall-local/data/artifacts/evals/phase4_soak/20260224T024404Z`
+  - summary artifacts:
+    - `/home/jaydreyer/recall-local/data/artifacts/evals/phase4_soak/20260224T024404Z/soak_summary.json`
+    - `/home/jaydreyer/recall-local/data/artifacts/evals/phase4_soak/20260224T024404Z/soak_summary.md`
+  - threshold status: `fail`
+  - breach details:
+    - `core:avg_case_pass_rate_below_threshold:0.973<1.000`
+    - `core:avg_latency_above_threshold:36754.2>15000`
+    - `job-search:avg_latency_above_threshold:34949.2>15000`
+  - notable core failure reason:
+    - unanswerable case "What is the planned Phase 2 launch date in March 2026?" intermittently returned high-confidence answer style in 2/5 runs (`14/15` pass in runs 3 and 4).
+- Enhanced hygiene checker for key-based SSH environments:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase4/run_repo_hygiene_check.sh`
+  - added `--ssh-key` / `AI_LAB_SSH_KEY`.
+- Ran hygiene checker with remote inspection:
+  - command:
+    - `scripts/phase4/run_repo_hygiene_check.sh --ssh-key ~/.ssh/codex_ai_lab --no-fail`
+  - report:
+    - `/Users/jaydreyer/projects/recall-local/data/artifacts/phase4/hygiene/20260224T025138Z_repo_hygiene.json`
+  - finding:
+    - `remote_dirty_repo_files=7` (runtime repo not clean after file-sync style updates).
+
+### Validation
+
+- `bash -n scripts/phase4/run_repo_hygiene_check.sh`
+- `scripts/phase4/run_repo_hygiene_check.sh --help`
+- `scripts/phase4/run_repo_hygiene_check.sh --ssh-key ~/.ssh/codex_ai_lab --no-fail`
+
 ## 2026-02-24 - Phase 4 milestone-1 continuation: CI guardrails, release checklist, hygiene script
 
 ### Outcome

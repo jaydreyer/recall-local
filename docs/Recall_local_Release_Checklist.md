@@ -59,6 +59,7 @@ Always sync local updates before any ai-lab restart/curl/n8n validation:
 
 ```bash
 rsync -avz --delete \
+  -e "ssh -i ~/.ssh/codex_ai_lab" \
   --exclude '.git/' \
   /Users/jaydreyer/projects/recall-local/ \
   jaydreyer@100.116.103.78:/home/jaydreyer/recall-local/
@@ -67,9 +68,11 @@ rsync -avz --delete \
 Then spot-check remote content before runtime troubleshooting:
 
 ```bash
-ssh jaydreyer@100.116.103.78 \
+ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 \
   "cd /home/jaydreyer/recall-local && rg -n 'run_eval_soak_now|run_repo_hygiene_check|quality-checks' scripts .github/workflows"
 ```
+
+If full `--delete` sync encounters permission errors under runtime-owned artifact folders, run targeted sync for changed code/docs paths and re-run the same `rg` spot-check.
 
 ## Release Tag + Push Sequence
 
