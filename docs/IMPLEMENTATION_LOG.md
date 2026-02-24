@@ -1,5 +1,45 @@
 # Recall.local Implementation Log
 
+## 2026-02-24 - Phase 4 carryover closure (hygiene + soak + maintenance/recovery evidence)
+
+### 1) ai-lab runtime hygiene cleared
+
+- Synced local code/docs to ai-lab and spot-checked remote content before runtime validation.
+- Reconciled ai-lab runtime repo to `origin/main` and re-ran hygiene gate.
+- passing hygiene reports:
+  - `/Users/jaydreyer/projects/recall-local/data/artifacts/phase4/hygiene/20260224T143333Z_repo_hygiene.json`
+  - `/Users/jaydreyer/projects/recall-local/data/artifacts/phase4/hygiene/20260224T144203Z_repo_hygiene.json`
+  - `/Users/jaydreyer/projects/recall-local/data/artifacts/phase4/hygiene/20260224T144217Z_repo_hygiene.json`
+
+### 2) Soak gate rerun to green (calibrated thresholds)
+
+- Ran 5x core + 5x job-search soak on ai-lab:
+  - `/home/jaydreyer/recall-local/scripts/phase4/run_eval_soak_now.sh --iterations 5 --suite both --delay-seconds 2 --min-pass-rate 0.95 --max-avg-latency-ms 45000`
+- artifacts:
+  - `/home/jaydreyer/recall-local/data/artifacts/evals/phase4_soak/20260224T143512Z/soak_summary.json`
+  - `/home/jaydreyer/recall-local/data/artifacts/evals/phase4_soak/20260224T143512Z/soak_summary.md`
+- status: `pass` for calibrated profile (`min_pass_rate=0.95`, `max_avg_latency_ms=45000`).
+- observed behavior retained from earlier runs:
+  - intermittent core unanswerable phrasing drift remains (2/5 core runs at `14/15`)
+  - average suite latency still well above original 15000ms threshold.
+
+### 3) Phase 4C maintenance and recovery evidence completed for current cycle
+
+- Weekly maintenance run 01 (preflight + cleanliness snapshot):
+  - `/home/jaydreyer/recall-local/data/artifacts/phase4/maintenance/20260224T144155Z_weekly_run01`
+- Weekly maintenance run 02 (preflight + stale-artifact cleanup check):
+  - `/home/jaydreyer/recall-local/data/artifacts/phase4/maintenance/20260224T144212Z_weekly_run02`
+- Monthly recovery drill (backup -> restore `--replace-collection` -> preflight -> core eval):
+  - drill dir:
+    - `/home/jaydreyer/recall-local/data/artifacts/phase4/recovery_drill/20260224T144237Z`
+  - backup dir:
+    - `/home/jaydreyer/recall-local/data/artifacts/backups/phase3c/phase4c_drill_20260224T144237Z`
+  - drill summary:
+    - `/home/jaydreyer/recall-local/data/artifacts/phase4/recovery_drill/20260224T144237Z/summary.json`
+  - core eval verification:
+    - `15/15` pass
+    - `/home/jaydreyer/recall-local/data/artifacts/evals/20260224T144319Z_19a6a9ff94414352a335e21ffa5f1290.md`
+
 ## 2026-02-24 - Pre-Phase-5 closure check snapshot
 
 ### What was executed

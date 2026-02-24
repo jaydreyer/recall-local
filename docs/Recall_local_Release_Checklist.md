@@ -39,10 +39,18 @@ python3 -m py_compile scripts/phase4/summarize_eval_trend.py
 python3 -m py_compile scripts/eval/run_eval.py
 ```
 
-3. Run soak trend gate (`4A`) and verify summary status:
+3. Run soak trend gate (`4A`) and verify summary status.
+   Current ai-lab calibrated profile:
+   - `min_pass_rate=0.95`
+   - `max_avg_latency_ms=45000`
 
 ```bash
-scripts/phase4/run_eval_soak_now.sh --iterations 5 --suite both --delay-seconds 5
+scripts/phase4/run_eval_soak_now.sh \
+  --iterations 5 \
+  --suite both \
+  --delay-seconds 5 \
+  --min-pass-rate 0.95 \
+  --max-avg-latency-ms 45000
 ```
 
 4. Run hygiene gate (`4C`) and resolve any findings:
