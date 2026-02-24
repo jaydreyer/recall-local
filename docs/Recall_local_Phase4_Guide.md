@@ -83,19 +83,14 @@ Create a low-risk operating loop where changes can be validated, shipped, and ve
 4. Add first CI workflow under `.github/workflows/` for syntax/smoke checks.
 5. Add `scripts/phase4/run_repo_hygiene_check.sh` to flag `._*`, stale stashes, and dirty ai-lab repo.
 
-## Milestone 2 backlog (operator UX + Obsidian integration)
+## Milestone 2 handoff note
 
-1. Add `scripts/obsidian/ingest_note_now.sh` to ingest a selected Obsidian note path with minimal flags.
-2. Add `scripts/obsidian/query_recall_now.sh` to run a one-command query against Workflow 02 with optional `filter_tags=obsidian`.
-3. Add `docs/Recall_local_Obsidian_Integration.md` with:
-   - vault setup pattern
-   - quick action/hotkey wiring
-   - examples for note, web clip, and email-summary ingestion.
-4. Add optional n8n webhook profile for Obsidian QuickAdd/Templater HTTP actions (no manual JSON editing).
-5. Add acceptance checks:
-   - one note ingested from Obsidian in under 10 seconds
-   - one query from Obsidian returns cited answer with source path
-   - one web clip workflow from Obsidian is reproducible via docs only.
+Operator UX expansion (dashboard, extension, and Obsidian integration) is now tracked in Phase 5 planning docs:
+
+1. `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Guide.md`
+2. `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Checklists.md`
+
+Phase 4 remains focused on reliability telemetry, CI/release guardrails, and maintenance hygiene.
 
 ## Constraints and non-goals
 

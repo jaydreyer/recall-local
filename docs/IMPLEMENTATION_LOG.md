@@ -1,5 +1,43 @@
 # Recall.local Implementation Log
 
+## 2026-02-24 - Phase 5 planning docs aligned to final architecture decisions
+
+### Outcome
+
+- Updated all Phase 5 planning docs to match confirmed decisions:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Guide.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Checklists.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/phase5-implementation-brief.md`
+- Updated Phase 4 guide to avoid planning overlap:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase4_Guide.md`
+  - replaced prior Milestone 2 UX backlog with explicit handoff to Phase 5 docs.
+- Incorporated decision changes:
+  - FastAPI migration as task 1
+  - separate `recall-ui` container
+  - `RECALL_VAULT_WRITE_BACK=false` default
+  - Gmail extension deferred to `5E.1`
+  - optional local auth mode with startup warning when API key is unset
+  - Syncthing-based Obsidian mirror handling (`on_moved`, temp file excludes, `RECALL_VAULT_IS_SYNCED=true`).
+- Updated docs index with tracked Phase 5 planning assets:
+  - `/Users/jaydreyer/projects/recall-local/docs/README.md`
+  - includes the implementation brief and both scaffold files as in-repo references.
+
+## 2026-02-24 - Phase 5 planning baseline from implementation brief + UI scaffolds
+
+### Outcome
+
+- Reviewed Phase 5 implementation brief and scaffold references:
+  - `/Users/jaydreyer/projects/recall-local/docs/phase5-implementation-brief.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/scaffolds/recall-dashboard.jsx`
+  - `/Users/jaydreyer/projects/recall-local/docs/scaffolds/recall-chrome-popup.jsx`
+- Added formal Phase 5 execution plan:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Guide.md`
+  - defines sub-phases `5A`-`5F`, endpoint plan, data contract updates, and acceptance gate.
+- Added actionable Phase 5 checklists:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Checklists.md`
+- Updated docs index:
+  - `/Users/jaydreyer/projects/recall-local/docs/README.md`
+
 ## 2026-02-24 - Added Obsidian integration to Phase 4 backlog
 
 ### Outcome
@@ -11,6 +49,12 @@
   - Obsidian integration runbook
   - optional Obsidian HTTP action profile
   - concrete acceptance checks for frictionless ingestion/query flow.
+
+### Superseded note
+
+- This temporary Phase 4 backlog placement was superseded the same day by Phase 5 planning docs:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Guide.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Checklists.md`
 
 ## 2026-02-24 - Phase 4A ai-lab soak evidence + hygiene remote check
 
