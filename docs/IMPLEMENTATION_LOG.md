@@ -1,5 +1,37 @@
 # Recall.local Implementation Log
 
+## 2026-02-24 - Phase 5E browser smoke (popup + context-menu/shortcut wiring) via Playwright
+
+### What was executed
+
+- Ran a real Chromium extension smoke using Playwright with the unpacked extension:
+  - script: `/Users/jaydreyer/projects/recall-local/output/playwright/phase5e_extension_smoke.cjs`
+  - command:
+    - `NODE_PATH=<tmp-playwright-node_modules> node output/playwright/phase5e_extension_smoke.cjs`
+- Smoke harness behavior:
+  - starts an auth-enabled local bridge process (`RECALL_API_KEY=phase5e-test-key`) on `127.0.0.1:18090`
+  - loads `chrome-extension/` via Chromium persistent context (`--disable-extensions-except` + `--load-extension`)
+  - validates extension runtime wiring:
+    - `chrome.commands.getAll()` contains `open-recall-popup`
+    - context menu listener active (`chrome.contextMenus.onClicked.hasListeners()`)
+    - context menu IDs update successfully (`recall_capture_page`, `recall_capture_link`, `recall_capture_selection`)
+  - runs popup capture flow and records status.
+- Artifacts written:
+  - `/Users/jaydreyer/projects/recall-local/output/playwright/phase5e_extension_smoke_result.json`
+  - `/Users/jaydreyer/projects/recall-local/output/playwright/phase5e_popup_after_capture.png`
+  - `/Users/jaydreyer/projects/recall-local/output/playwright/phase5e_bridge_smoke_runtime.log`
+
+### Results
+
+- Smoke result: `success=true`
+- Popup path:
+  - status before capture: `Connected to http://127.0.0.1:18090`
+  - status after capture: `Capture sent successfully (0 items).`
+- Shortcut/context-menu verification status:
+  - command registration: pass (`open-recall-popup` present)
+  - context-menu wiring: pass (listener + ID updates pass)
+  - keypress-triggered popup open: not observed in this automation context because Chromium reported no bound shortcut string for `open-recall-popup` (`shortcut=""`) in `chrome.commands.getAll()`.
+
 ## 2026-02-24 - Phase 5E ai-lab sync + auth-enabled extension-flow validation
 
 ### What was executed
