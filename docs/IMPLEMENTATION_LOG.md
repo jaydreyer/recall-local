@@ -1,5 +1,39 @@
 # Recall.local Implementation Log
 
+## 2026-02-24 - Phase 3C ai-lab validation: sync, restart/recovery smoke, portfolio bundle evidence
+
+### Outcome
+
+- Synced latest Phase 3C docs/scripts from Mac to ai-lab (`/home/jaydreyer/recall-local`) using `rsync` over SSH key auth and verified remote content with `rg` before runtime checks.
+- Executed new preflight and deterministic restart wrappers on ai-lab:
+  - `/home/jaydreyer/recall-local/scripts/phase3/run_service_preflight_now.sh`
+  - `/home/jaydreyer/recall-local/scripts/phase3/run_deterministic_restart_now.sh --wait-timeout-seconds 180`
+  - result: all service health checks passed (`Ollama`, `Qdrant`, `n8n`, bridge, SQLite paths).
+- Executed backup/restore smoke test:
+  - backup:
+    - `/home/jaydreyer/recall-local/scripts/phase3/run_backup_now.sh --backup-name phase3c_recovery_smoke_20260224`
+  - restore:
+    - `/home/jaydreyer/recall-local/scripts/phase3/run_restore_now.sh --backup-dir /home/jaydreyer/recall-local/data/artifacts/backups/phase3c/phase3c_recovery_smoke_20260224 --replace-collection`
+  - restore report:
+    - `/home/jaydreyer/recall-local/data/artifacts/backups/phase3c/phase3c_recovery_smoke_20260224/restore_report_20260224T021026Z.json`
+- Verified post-restore core eval gate:
+  - command:
+    - `python3 scripts/eval/run_eval.py --cases-file scripts/eval/eval_cases.json --backend webhook --webhook-url http://localhost:5678/webhook/recall-query`
+  - result: `15/15` pass
+  - artifact:
+    - `/home/jaydreyer/recall-local/data/artifacts/evals/20260224T021109Z_eac89989ae1446b5b80fd669699dc157.md`
+- Ran rehearsal script to produce fresh rehearsal log evidence:
+  - `/home/jaydreyer/recall-local/scripts/rehearsal/run_phase2_demo_rehearsal.sh`
+  - log:
+    - `/home/jaydreyer/recall-local/data/artifacts/rehearsals/20260224T021123Z_phase2_demo_rehearsal.log`
+  - note: job-search suite in that run reported `9/10` due one required-terms miss; not used as the recovery acceptance gate.
+- Generated refreshed portfolio bundle with all required evidence present:
+  - `/home/jaydreyer/recall-local/scripts/phase3/build_portfolio_bundle_now.sh`
+  - bundle:
+    - `/home/jaydreyer/recall-local/data/artifacts/portfolio/phase3c/20260224T021251Z/portfolio_bundle.md`
+  - summary:
+    - `/home/jaydreyer/recall-local/data/artifacts/portfolio/phase3c/20260224T021251Z/bundle_summary.json` (`missing_items: []`)
+
 ## 2026-02-24 - Phase 3C portfolio packaging slice: architecture diagram + bundle generator
 
 ### Outcome

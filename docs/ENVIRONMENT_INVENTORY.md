@@ -99,6 +99,8 @@ Last updated: 2026-02-22
 
 - Phase 0: complete (all baseline checks and ingestion webhook validation done)
 - Phase 1: complete (`1A`-`1D` done; Workflow 02 webhook live and eval suite passing)
+- Phase 2: complete (`2A`-`2C` done; meeting pipeline + domain retrieval/evals operational)
+- Phase 3: complete (`3A` operator wrappers/forms, `3B` retrieval-quality track, `3C` ops hardening + portfolio bundle validated on ai-lab on 2026-02-24)
 
 ## Skills Baseline (local Codex)
 
