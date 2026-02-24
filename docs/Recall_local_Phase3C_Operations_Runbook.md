@@ -14,6 +14,9 @@ Purpose: provide deterministic restart, preflight, and backup/restore procedures
    - `/Users/jaydreyer/projects/recall-local/scripts/phase3/run_restore_now.sh`
 5. Shared backup/restore utility:
    - `/Users/jaydreyer/projects/recall-local/scripts/phase3/backup_restore_state.py`
+6. Portfolio bundle builder:
+   - `/Users/jaydreyer/projects/recall-local/scripts/phase3/build_portfolio_bundle_now.sh`
+   - `/Users/jaydreyer/projects/recall-local/scripts/phase3/build_portfolio_bundle.py`
 
 ## Important sync rule (Mac -> ai-lab)
 
@@ -118,3 +121,15 @@ python3 /home/jaydreyer/recall-local/scripts/eval/run_eval.py \
   --backend webhook \
   --webhook-url http://localhost:5678/webhook/recall-query
 ```
+
+## Portfolio bundle build
+
+Generate an interview-ready evidence bundle from current artifacts:
+
+```bash
+/home/jaydreyer/recall-local/scripts/phase3/build_portfolio_bundle_now.sh
+```
+
+Output root:
+
+- `/home/jaydreyer/recall-local/data/artifacts/portfolio/phase3c/`

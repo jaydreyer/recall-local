@@ -1,5 +1,28 @@
 # Recall.local Implementation Log
 
+## 2026-02-24 - Phase 3C portfolio packaging slice: architecture diagram + bundle generator
+
+### Outcome
+
+- Added architecture diagram source for portfolio walkthrough:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Architecture_Diagram.md`
+- Added Phase 3C portfolio bundle generator and wrapper:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase3/build_portfolio_bundle.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase3/build_portfolio_bundle_now.sh`
+- Extended Phase 3C operations runbook with portfolio bundle build step:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase3C_Operations_Runbook.md`
+- Generated local bundle artifact:
+  - `/Users/jaydreyer/projects/recall-local/data/artifacts/portfolio/phase3c/20260224T020734Z/portfolio_bundle.md`
+  - `/Users/jaydreyer/projects/recall-local/data/artifacts/portfolio/phase3c/20260224T020734Z/bundle_summary.json`
+- Updated docs index:
+  - `/Users/jaydreyer/projects/recall-local/docs/README.md`
+
+### Validation
+
+- `python3 -m py_compile scripts/phase3/build_portfolio_bundle.py`
+- `bash -n scripts/phase3/build_portfolio_bundle_now.sh`
+- `scripts/phase3/build_portfolio_bundle_now.sh` produced bundle directory under `data/artifacts/portfolio/phase3c/`
+
 ## 2026-02-24 - Phase 3C kickoff: reliability wrappers + operations runbook
 
 ### Outcome
