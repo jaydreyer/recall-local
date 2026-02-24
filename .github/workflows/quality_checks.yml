@@ -1,0 +1,73 @@
+name: quality-checks
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  syntax-and-smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Python syntax checks
+        run: |
+          python - <<'PY'
+          import pathlib
+          import py_compile
+          import sys
+
+          files = sorted(pathlib.Path("scripts").rglob("*.py"))
+          if not files:
+            print("No Python files under scripts/.")
+            sys.exit(0)
+
+          errors = []
+          for path in files:
+            try:
+              py_compile.compile(str(path), doraise=True)
+            except py_compile.PyCompileError as exc:
+              errors.append((path, exc.msg))
+
+          if errors:
+            print("Python syntax check failed:")
+            for path, msg in errors:
+              print(f"- {path}: {msg}")
+            sys.exit(1)
+
+          print(f"Python syntax check passed for {len(files)} files.")
+          PY
+
+      - name: Shell syntax checks
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' file; do
+            bash -n "$file"
+          done < <(find scripts -type f -name "*.sh" -print0)
+          echo "Shell syntax check passed."
+
+      - name: Wrapper smoke checks
+        run: |
+          set -euo pipefail
+          scripts/phase3/run_all_evals_now.sh --help >/dev/null
+          scripts/phase3/run_retrieval_experiment_now.sh --help >/dev/null
+          scripts/phase3/run_service_preflight_now.sh --help >/dev/null
+          scripts/phase3/run_deterministic_restart_now.sh --help >/dev/null
+          scripts/phase3/run_backup_now.sh --help >/dev/null
+          scripts/phase3/run_restore_now.sh --help >/dev/null
+          scripts/phase4/run_eval_soak_now.sh --help >/dev/null
+          scripts/phase4/run_repo_hygiene_check.sh --help >/dev/null
+          python scripts/phase4/summarize_eval_trend.py --help >/dev/null
+          python scripts/eval/run_eval.py --help >/dev/null
+          echo "Wrapper smoke checks passed."

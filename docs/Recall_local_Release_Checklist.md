@@ -1,0 +1,122 @@
+# Recall.local Release Checklist
+
+Purpose: provide a reproducible pre-release, tag, and rollback flow for Phase 4 operations.
+
+## Tag Convention (`v0.x-*`)
+
+Use monotonic `v0` tags with explicit release intent:
+
+- Release candidate: `v0.<minor>.<patch>-rc.<n>`
+- Stable release: `v0.<minor>.<patch>-r<YYYYMMDD>`
+
+Examples:
+
+- `v0.4.0-rc.1`
+- `v0.4.0-r20260224`
+
+Before creating a tag, verify current progression:
+
+```bash
+git fetch --tags
+git tag --list 'v0.*' --sort=-version:refname | head -n 10
+```
+
+## Pre-Release Gate (required)
+
+1. Confirm local repo is clean and on expected base:
+
+```bash
+git status --short --branch
+git pull --ff-only origin main
+```
+
+2. Run local quality checks (same class as CI gate):
+
+```bash
+bash -n scripts/phase4/run_eval_soak_now.sh
+bash -n scripts/phase4/run_repo_hygiene_check.sh
+python3 -m py_compile scripts/phase4/summarize_eval_trend.py
+python3 -m py_compile scripts/eval/run_eval.py
+```
+
+3. Run soak trend gate (`4A`) and verify summary status:
+
+```bash
+scripts/phase4/run_eval_soak_now.sh --iterations 5 --suite both --delay-seconds 5
+```
+
+4. Run hygiene gate (`4C`) and resolve any findings:
+
+```bash
+scripts/phase4/run_repo_hygiene_check.sh
+```
+
+5. Ensure PR checks are green (GitHub Actions `quality-checks` workflow).
+
+## ai-lab Sync Gate (required before runtime validation)
+
+Always sync local updates before any ai-lab restart/curl/n8n validation:
+
+```bash
+rsync -avz --delete \
+  --exclude '.git/' \
+  /Users/jaydreyer/projects/recall-local/ \
+  jaydreyer@100.116.103.78:/home/jaydreyer/recall-local/
+```
+
+Then spot-check remote content before runtime troubleshooting:
+
+```bash
+ssh jaydreyer@100.116.103.78 \
+  "cd /home/jaydreyer/recall-local && rg -n 'run_eval_soak_now|run_repo_hygiene_check|quality-checks' scripts .github/workflows"
+```
+
+## Release Tag + Push Sequence
+
+1. Prepare changelog note text (summary + evidence artifact paths).
+2. Create an annotated tag on the release commit:
+
+```bash
+git tag -a v0.4.0-r20260224 -m "Recall.local v0.4.0 release: Phase 4 milestone update"
+```
+
+3. Push branch and tag:
+
+```bash
+git push origin main
+git push origin v0.4.0-r20260224
+```
+
+4. Verify on GitHub that tag points to intended commit and CI status is green.
+
+## Rollback Steps
+
+If release validation fails after deployment:
+
+1. Identify previous stable tag:
+
+```bash
+git tag --list 'v0.*-r*' --sort=-version:refname | head -n 2
+```
+
+2. Check out previous stable tag in local repo:
+
+```bash
+git checkout <previous_stable_tag>
+```
+
+3. Sync rollback code state to ai-lab and spot-check files.
+4. Perform deterministic restart and service preflight on ai-lab:
+
+```bash
+scripts/phase3/run_deterministic_restart_now.sh --wait-timeout-seconds 180
+scripts/phase3/run_service_preflight_now.sh
+```
+
+5. If data integrity is impacted, run restore workflow with latest known-good backup:
+
+```bash
+scripts/phase3/run_restore_now.sh --backup-dir /home/jaydreyer/recall-local/data/artifacts/backups/phase3c/<backup_name> --replace-collection
+```
+
+6. Re-run core eval gate and archive evidence artifact path in release notes.

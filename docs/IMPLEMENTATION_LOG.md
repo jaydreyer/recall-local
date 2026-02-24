@@ -1,5 +1,42 @@
 # Recall.local Implementation Log
 
+## 2026-02-24 - Phase 4 milestone-1 continuation: CI guardrails, release checklist, hygiene script
+
+### Outcome
+
+- Added first GitHub Actions quality gate:
+  - `/Users/jaydreyer/projects/recall-local/.github/workflows/quality_checks.yml`
+  - includes:
+    - Python syntax checks across `scripts/**/*.py`
+    - shell syntax checks across `scripts/**/*.sh`
+    - smoke help checks for key phase3/phase4 wrappers.
+- Added release checklist runbook:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Release_Checklist.md`
+  - documents:
+    - `v0.x-*` tag convention
+    - required pre-release gates
+    - ai-lab sync + spot-check requirement
+    - rollback flow.
+- Added Phase 4 hygiene checker:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase4/run_repo_hygiene_check.sh`
+  - flags:
+    - `._*` metadata files
+    - ai-lab dirty runtime repo state
+    - ai-lab stash presence
+  - writes machine-readable JSON report under `data/artifacts/phase4/hygiene/`.
+- Updated docs index:
+  - `/Users/jaydreyer/projects/recall-local/docs/README.md`
+
+### Validation
+
+- `bash -n scripts/phase4/run_repo_hygiene_check.sh`
+- `scripts/phase4/run_repo_hygiene_check.sh --help`
+- `python3 -m py_compile scripts/phase4/summarize_eval_trend.py`
+- `python3 scripts/phase4/summarize_eval_trend.py --help`
+- `python3 -m py_compile scripts/eval/run_eval.py`
+- `python3 scripts/eval/run_eval.py --help`
+- `python3 -m py_compile scripts/phase3/backup_restore_state.py`
+
 ## 2026-02-24 - Phase 4A kickoff: soak runner + trend summarizer
 
 ### Outcome

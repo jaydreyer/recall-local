@@ -12,6 +12,7 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `Recall_local_Phase3_Guide.md`: Formal post-Phase-2 plan (UI-first operation, retrieval quality upgrades, and ops hardening).
 - `Recall_local_Phase3_Completion_Summary.md`: Phase 3 completion outcomes, evidence pointers, and residual follow-up.
 - `Recall_local_Phase4_Guide.md`: Phase 4 execution plan for reliability telemetry, CI/release guardrails, and maintenance hygiene.
+- `Recall_local_Release_Checklist.md`: Release preflight, tag convention, push sequence, and rollback flow for Phase 4 cadence.
 - `Recall_local_Phase3A_Operator_Runbook.md`: Operator-first runbook for no-curl ingestion/query/eval paths and UI payload templates.
 - `Recall_local_Phase3B_Retrieval_Quality_Runbook.md`: Hybrid/reranker retrieval controls, eval scoring lane, and baseline/candidate experiment runbook.
 - `Recall_local_Phase3C_Operations_Runbook.md`: Deterministic restart, service preflight, and backup/restore runbook for ops hardening.
@@ -47,6 +48,7 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `../scripts/phase3/build_portfolio_bundle.py`: Phase 3C portfolio bundle generator (trend snapshot + evidence copy + summary).
 - `../scripts/phase4/run_eval_soak_now.sh`: Phase 4A soak wrapper for repeated core/job-search eval runs plus thresholded trend summary output.
 - `../scripts/phase4/summarize_eval_trend.py`: Phase 4A trend aggregator that emits pass-rate/latency/failure-histogram JSON + Markdown artifacts.
+- `../scripts/phase4/run_repo_hygiene_check.sh`: Phase 4C hygiene checker for `._*` metadata files, ai-lab dirty repo state, and stale stashes.
 - `../scripts/eval/run_phase3b_retrieval_experiment.sh`: Phase 3B retrieval experiment runner (`vector` baseline vs `hybrid+rereank` candidate).
 - `../scripts/eval/golden_sets/learning_golden_v1.json`: Versioned learning golden set with optional semantic-score references.
 - `../n8n/workflows/phase3a_bookmarklet_form_http.workflow.json`: Import-ready n8n bookmarklet-form workflow for bridge ingestion.
@@ -61,6 +63,7 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `../n8n/workflows/PHASE2A_WORKFLOW03_WIRING.md`: Workflow 03 deployment and troubleshooting runbook.
 - `../n8n/workflows/PHASE3A_OPERATOR_FORMS_WIRING.md`: Phase 3A operator webhook/form import and smoke-test runbook.
 - `../scripts/phase2/verify_workflow03_bridge.py`: Workflow 03 bridge verification helper (contract + persisted evidence checks).
+- `../.github/workflows/quality_checks.yml`: Phase 4B CI gate for syntax checks and wrapper smoke help checks.
 
 ## Shareable Kit
 
