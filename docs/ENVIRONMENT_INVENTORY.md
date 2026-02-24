@@ -1,6 +1,6 @@
 # Recall.local Environment Inventory
 
-Last updated: 2026-02-22
+Last updated: 2026-02-24
 
 ## Decision Snapshot
 
@@ -77,7 +77,7 @@ Last updated: 2026-02-22
 ## n8n Query Webhook (Workflow 02)
 
 - Query webhook endpoint (local on server): `http://localhost:5678/webhook/recall-query`
-- Backing bridge endpoint (server): `http://localhost:8090/query/rag`
+- Backing bridge endpoint (server): `http://localhost:8090/v1/rag-queries` (legacy alias `POST /query/rag` is still supported)
 - Validation status:
   - Bridge route: `HTTP 200` for dry-run query payload (verified 2026-02-22)
   - n8n production webhook: `HTTP 200` with cited RAG JSON payload (verified 2026-02-22)

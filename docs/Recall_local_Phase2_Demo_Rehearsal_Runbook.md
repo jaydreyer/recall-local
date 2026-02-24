@@ -46,28 +46,34 @@ curl -sS http://localhost:8090/healthz
 curl -sS http://localhost:5678/healthz || true
 
 # 2) Ingestion channels (same rehearsal)
-curl -sS -X POST "http://localhost:8090/ingest/bookmarklet?dry_run=true" \
-  -H "content-type: application/json" \
-  -d @/home/jaydreyer/recall-local/n8n/workflows/payload_examples/bookmarklet_ingest_payload_example.json
+python3 - <<'PY' | curl -sS -X POST "http://localhost:8090/v1/ingestions?dry_run=true" -H "content-type: application/json" -d @-
+import json
+payload = json.load(open("/home/jaydreyer/recall-local/n8n/workflows/payload_examples/bookmarklet_ingest_payload_example.json", "r", encoding="utf-8"))
+payload["channel"] = "bookmarklet"
+print(json.dumps(payload))
+PY
 
-curl -sS -X POST "http://localhost:8090/ingest/webhook?dry_run=true" \
-  -H "content-type: application/json" \
-  -d @/home/jaydreyer/recall-local/n8n/workflows/payload_examples/gdoc_ingest_payload_example.json
+python3 - <<'PY' | curl -sS -X POST "http://localhost:8090/v1/ingestions?dry_run=true" -H "content-type: application/json" -d @-
+import json
+payload = json.load(open("/home/jaydreyer/recall-local/n8n/workflows/payload_examples/gdoc_ingest_payload_example.json", "r", encoding="utf-8"))
+payload["channel"] = "webhook"
+print(json.dumps(payload))
+PY
 
-curl -sS -X POST "http://localhost:8090/meeting/action-items?dry_run=true" \
+curl -sS -X POST "http://localhost:8090/v1/meeting-action-items?dry_run=true" \
   -H "content-type: application/json" \
   -d @/home/jaydreyer/recall-local/n8n/workflows/payload_examples/meeting_action_items_payload_example.json
 
 # 3) RAG checks (default + job-search + learning)
-curl -sS -X POST "http://localhost:8090/query/rag?dry_run=true" \
+curl -sS -X POST "http://localhost:8090/v1/rag-queries?dry_run=true" \
   -H "content-type: application/json" \
   -d '{"query":"Summarize indexed content with citations.","mode":"default","top_k":5,"min_score":0.15}'
 
-curl -sS -X POST "http://localhost:8090/query/rag?dry_run=true" \
+curl -sS -X POST "http://localhost:8090/v1/rag-queries?dry_run=true" \
   -H "content-type: application/json" \
   -d '{"query":"What should I emphasize for an Anthropic SE interview?","mode":"job-search","filter_tags":["job-search"],"top_k":5,"min_score":0.15}'
 
-curl -sS -X POST "http://localhost:8090/query/rag?dry_run=true" \
+curl -sS -X POST "http://localhost:8090/v1/rag-queries?dry_run=true" \
   -H "content-type: application/json" \
   -d '{"query":"Summarize RAG architecture tradeoffs for enterprise use.","mode":"learning","filter_tags":["learning","genai-docs"],"top_k":5,"min_score":0.2,"max_retries":0}'
 

@@ -4,9 +4,9 @@ Source plan: `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Gu
 
 ## 5A. Bridge Platform Layer
 
-- [ ] Migrate bridge from `http.server` to FastAPI before adding new Phase 5 endpoints.
-- [ ] Add API key validation helper in bridge (`X-API-Key` when configured).
-- [ ] Add startup warning when `RECALL_API_KEY` is unset (local unauthenticated mode).
+- [x] Migrate bridge from `http.server` to FastAPI before adding new Phase 5 endpoints.
+- [x] Add API key validation helper in bridge (`X-API-Key` when configured).
+- [x] Add startup warning when `RECALL_API_KEY` is unset (local unauthenticated mode).
 - [ ] Add rate limiter with configurable window/limit env vars.
 - [ ] Add `GET /config/auto-tags` endpoint serving `config/auto_tag_rules.json`.
 - [ ] Add endpoint contract tests for auth success/failure and rate-limit behavior.
@@ -49,7 +49,7 @@ Source plan: `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Gu
   - [ ] Eval
   - [ ] Vault
 - [ ] Wire ingestion actions to new bridge endpoints.
-- [ ] Wire query panel to `POST /query/rag` with mode/group/tag controls.
+- [ ] Wire query panel to `POST /v1/rag-queries` with mode/group/tag controls.
 - [ ] Wire Activity tab to `GET /activity`.
 - [ ] Wire Eval tab to `GET /eval/latest` + `POST /eval/run`.
 - [ ] Wire Vault tab to `GET /vault/tree` + `POST /vault/sync`.

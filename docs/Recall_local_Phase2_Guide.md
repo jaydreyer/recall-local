@@ -64,7 +64,8 @@ Execution checklist: `/Users/jaydreyer/projects/recall-local/docs/Recall_local_P
 - Payload runner:
   - `/Users/jaydreyer/projects/recall-local/scripts/phase2/meeting_from_payload.py`
 - HTTP bridge endpoints:
-  - `/meeting/action-items` (primary)
+  - `/v1/meeting-action-items` (canonical)
+  - `/meeting/action-items` (alias)
   - `/meeting/actions` (alias)
   - `/query/meeting` (alias)
 - Prompt templates:
@@ -94,7 +95,8 @@ Initial contract behavior:
   - replacement activity exposed in ingestion result fields (`replace_existing`, `replaced_points`, `replacement_status`)
   - implementation: `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingestion_pipeline.py`
 - Bridge route supports bookmarklet path directly:
-  - `/ingest/bookmarklet`
+  - `/v1/ingestions` (canonical, with `channel=bookmarklet`)
+  - `/ingest/bookmarklet` (alias)
   - implementation: `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py`
 - Phase 2B payload/runbook assets:
   - `/Users/jaydreyer/projects/recall-local/n8n/workflows/payload_examples/bookmarklet_ingest_payload_example.json`

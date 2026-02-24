@@ -64,12 +64,23 @@ Ship a demo-ready and daily-usable Recall.local where ingestion is low-friction 
 
 ## Endpoint plan (bridge)
 
-### Existing endpoints (retain behavior, migrate implementation to FastAPI)
+API identity: `operations-v1` (major-versioned API surface; canonical endpoints are under `/v1`).
 
+### Existing endpoints (canonical + compatibility aliases)
+
+Canonical REST endpoints:
+1. `POST /v1/ingestions`
+2. `POST /v1/rag-queries`
+3. `POST /v1/meeting-action-items`
+4. `GET /v1/healthz`
+
+Compatibility aliases (kept for backward compatibility, hidden from OpenAPI docs):
 1. `POST /ingest/{webhook|bookmarklet|ios-share|gmail-forward}`
 2. `POST /query/rag`
-3. `POST /meeting/action-items`
-4. `GET /healthz`
+3. `POST /rag/query`
+4. `POST /meeting/action-items`
+5. `POST /meeting/actions`
+6. `POST /query/meeting`
 
 ### New endpoints (Phase 5)
 

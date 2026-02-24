@@ -7,6 +7,7 @@ QDRANT_HOST="${QDRANT_HOST:-http://localhost:6333}"
 OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
 N8N_HOST="${N8N_HOST:-http://localhost:5678}"
 BRIDGE_URL="${RECALL_BRIDGE_URL:-http://localhost:8090}"
+BRIDGE_API_BASE="${BRIDGE_URL%/}/v1"
 
 WAIT_TIMEOUT_SECONDS="${RECALL_RESTART_WAIT_TIMEOUT_SECONDS:-120}"
 RUN_POST_PREFLIGHT="true"
@@ -104,7 +105,7 @@ echo
 echo "Waiting for core service health"
 wait_for_http "Qdrant" "$QDRANT_HOST/healthz" "$WAIT_TIMEOUT_SECONDS"
 wait_for_http "Ollama" "$OLLAMA_HOST/api/tags" "$WAIT_TIMEOUT_SECONDS"
-wait_for_http "Ingest bridge" "$BRIDGE_URL/healthz" "$WAIT_TIMEOUT_SECONDS"
+wait_for_http "Ingest bridge" "$BRIDGE_API_BASE/healthz" "$WAIT_TIMEOUT_SECONDS"
 wait_for_http "n8n" "${N8N_HOST%/}/healthz" "$WAIT_TIMEOUT_SECONDS"
 
 if [[ "$RUN_POST_PREFLIGHT" == "true" ]]; then

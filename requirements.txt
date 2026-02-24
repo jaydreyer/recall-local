@@ -1,6 +1,8 @@
 trafilatura
 qdrant-client
 httpx
+fastapi
+uvicorn
 python-dotenv
 pdfplumber
 python-docx

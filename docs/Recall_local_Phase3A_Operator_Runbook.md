@@ -122,8 +122,8 @@ Use existing payload examples as canonical templates:
 
 Recommended form mappings:
 
-1. Bookmarklet form -> HTTP POST `http://localhost:8090/ingest/bookmarklet` with fields `url`, `title`, `text`, `tags`, `replace_existing`, `source_key`, `source`.
-2. Meeting form -> HTTP POST `http://localhost:8090/meeting/action-items` with fields `meeting_title`, `transcript`, `source`, `source_ref`, `tags`.
+1. Bookmarklet form -> HTTP POST `http://localhost:8090/v1/ingestions` with fields `channel=bookmarklet`, `url`, `title`, `text`, `tags`, `replace_existing`, `source_key`, `source`.
+2. Meeting form -> HTTP POST `http://localhost:8090/v1/meeting-action-items` with fields `meeting_title`, `transcript`, `source`, `source_ref`, `tags`.
 
 ## Validation checklist for this slice
 

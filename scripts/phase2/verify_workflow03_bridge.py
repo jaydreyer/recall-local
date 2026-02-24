@@ -22,7 +22,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Verify Workflow 03 meeting bridge contract.")
     parser.add_argument(
         "--bridge-url",
-        default="http://localhost:8090/meeting/action-items",
+        default="http://localhost:8090/v1/meeting-action-items",
         help="Workflow 03 bridge endpoint URL.",
     )
     parser.add_argument(

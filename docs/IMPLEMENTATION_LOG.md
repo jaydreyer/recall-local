@@ -1,5 +1,166 @@
 # Recall.local Implementation Log
 
+## 2026-02-24 - REST API design update: versioned API identity + OpenAPI servers
+
+### Outcome
+
+- Re-reviewed bridge API against updated `rest-api-design` skill rules and applied versioned API conventions:
+  - API identity in OpenAPI set to plural + major version: `operations-v1`
+  - canonical endpoints moved to versioned path space:
+    - `GET /v1/healthz`
+    - `POST /v1/ingestions`
+    - `POST /v1/rag-queries`
+    - `POST /v1/meeting-action-items`
+- Added explicit OpenAPI `servers` so Swagger `Try it out` resolves full callable URLs:
+  - local default: `http://localhost:8090`
+  - ai-lab default: `http://100.116.103.78:8090`
+  - override env vars supported:
+    - `RECALL_API_SERVER_LOCAL`
+    - `RECALL_API_SERVER_AI_LAB`
+- Kept compatibility aliases active and hidden from schema to avoid breaking existing callers:
+  - unversioned canonical aliases (`/ingestions`, `/rag-queries`, `/meeting-action-items`)
+  - legacy workflow aliases (`/ingest/{channel}`, `/query/rag`, `/rag/query`, `/meeting/action-items`, `/meeting/actions`, `/query/meeting`)
+- Updated scripts and runbooks to prefer versioned canonical endpoints:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase3/run_service_preflight_now.sh`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase3/run_deterministic_restart_now.sh`
+  - `/Users/jaydreyer/projects/recall-local/scripts/rehearsal/run_phase2_demo_rehearsal.sh`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase2/verify_workflow03_bridge.py`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase2_Demo_Rehearsal_Runbook.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase2_Guide.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase3A_Operator_Runbook.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Guide.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Checklists.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/ENVIRONMENT_INVENTORY.md`
+
+### Validation
+
+- `python3 -m py_compile scripts/phase1/ingest_bridge_api.py scripts/phase2/verify_workflow03_bridge.py`
+- `bash -n scripts/phase3/run_service_preflight_now.sh`
+- `bash -n scripts/phase3/run_deterministic_restart_now.sh`
+- `bash -n scripts/rehearsal/run_phase2_demo_rehearsal.sh`
+- OpenAPI path verification:
+  - `/v1/healthz`
+  - `/v1/ingestions`
+  - `/v1/rag-queries`
+  - `/v1/meeting-action-items`
+
+## 2026-02-24 - REST API design review + canonical collection-first endpoints
+
+### Outcome
+
+- Completed a Review+Design pass using the `rest-api-design` skill and implemented collection-first canonical endpoints in the bridge:
+  - `POST /ingestions`
+  - `POST /rag-queries`
+  - `POST /meeting-action-items`
+  - `GET /healthz`
+- Preserved backward compatibility while cleaning docs surface:
+  - kept legacy aliases operational (`/ingest/{channel}`, `/query/rag`, `/rag/query`, `/meeting/action-items`, `/meeting/actions`, `/query/meeting`)
+  - hid legacy aliases from OpenAPI schema (`include_in_schema=False`) so docs show only canonical paths.
+- Upgraded API documentation quality in OpenAPI:
+  - endpoint tags + summaries + detailed descriptions
+  - documented query params (`dry_run`)
+  - request schemas with examples for canonical endpoints
+  - success + error response examples.
+- Standardized bridge error model for documented endpoints:
+  - response shape now uses structured envelope:
+    - `error.code`
+    - `error.message`
+    - `error.details[]`
+    - `error.requestId`
+- Updated active project scripts and runbooks to consume canonical routes:
+  - `/Users/jaydreyer/projects/recall-local/scripts/rehearsal/run_phase2_demo_rehearsal.sh`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase2/verify_workflow03_bridge.py`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase2_Demo_Rehearsal_Runbook.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase3A_Operator_Runbook.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase2_Guide.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Guide.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Checklists.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/ENVIRONMENT_INVENTORY.md`
+
+### Validation
+
+- `python3 -m py_compile scripts/phase1/ingest_bridge_api.py`
+- `python3 -m py_compile scripts/phase2/verify_workflow03_bridge.py`
+- `bash -n scripts/rehearsal/run_phase2_demo_rehearsal.sh`
+- OpenAPI smoke check confirms canonical schema paths only:
+  - `/healthz`
+  - `/ingestions`
+  - `/rag-queries`
+  - `/meeting-action-items`
+
+## 2026-02-24 - Phase 5A API docs cleanup for demo quality
+
+### Outcome
+
+- Cleaned OpenAPI surface so docs show canonical routes only while preserving backward-compatible aliases:
+  - aliases hidden from schema: `/health`, `/rag/query`, `/meeting/actions`, `/query/meeting`
+  - catch-all not-found routes hidden from schema.
+- Added endpoint-level docs quality improvements in bridge app:
+  - tags, summaries, descriptions for health + workflow endpoints
+  - documented query parameter `dry_run` on ingest/query/meeting endpoints
+  - request body schemas with examples for:
+    - `POST /ingest/{channel}`
+    - `POST /query/rag`
+    - `POST /meeting/action-items`
+  - response models + error response models for common status codes.
+- Result: Swagger/ReDoc now show a concise demo-ready API surface with actionable sample payloads.
+
+### Validation
+
+- `python3 -m py_compile scripts/phase1/ingest_bridge_api.py`
+- `curl http://localhost:8090/openapi.json` (after bridge restart) confirms canonical paths and example-rich request bodies.
+
+## 2026-02-24 - Phase 5A demo hardening: always-on API docs checks
+
+### Outcome
+
+- Kept FastAPI docs surfaces explicitly enabled in bridge app config:
+  - `GET /docs`
+  - `GET /redoc`
+  - `GET /openapi.json`
+- Added startup log lines that print docs and OpenAPI URLs for operator/demo visibility:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py`
+- Updated preflight script so docs availability is verified by default:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase3/run_service_preflight_now.sh`
+  - new default checks: `curl $BRIDGE_URL/docs` and `curl $BRIDGE_URL/openapi.json`
+  - added optional bypass flag: `--skip-docs-check`
+- Updated Phase 2 demo rehearsal script so docs/OpenAPI checks are part of the first health gate:
+  - `/Users/jaydreyer/projects/recall-local/scripts/rehearsal/run_phase2_demo_rehearsal.sh`
+
+### Validation
+
+- `python3 -m py_compile scripts/phase1/ingest_bridge_api.py`
+- `bash -n scripts/phase3/run_service_preflight_now.sh`
+- `bash -n scripts/rehearsal/run_phase2_demo_rehearsal.sh`
+
+## 2026-02-24 - Phase 5A kickoff slice: FastAPI bridge migration + optional API-key gate
+
+### Outcome
+
+- Migrated bridge runtime from `http.server` to FastAPI/uvicorn while preserving existing production paths and aliases:
+  - `GET /healthz` and `GET /health`
+  - `POST /ingest/{webhook|bookmarklet|ios-share|gmail-forward}`
+  - `POST /query/rag` and alias `POST /rag/query`
+  - `POST /meeting/action-items` and aliases `POST /meeting/actions`, `POST /query/meeting`
+- Preserved response contract patterns used by existing wrappers/runbooks:
+  - JSON body validation with `400` on malformed/non-object payloads
+  - `workflow_01_ingestion` responses include `ingested`, `errors`, and `dry_run`, with `207` on partial failures
+  - RAG and meeting workflows keep same workflow identifiers in response payloads.
+- Added optional API key enforcement in bridge:
+  - if `RECALL_API_KEY` unset: no auth enforcement (local mode)
+  - if `RECALL_API_KEY` set: require `X-API-Key` header for non-health endpoints (`401` on mismatch).
+- Added startup mode logging for auth posture (explicit warning when unauthenticated mode is active).
+- Updated dependency and env baseline for this slice:
+  - `/Users/jaydreyer/projects/recall-local/requirements.txt` now includes `fastapi` and `uvicorn`
+  - `/Users/jaydreyer/projects/recall-local/docker/.env.example` now includes `RECALL_API_KEY=`.
+- Updated Phase 5 checklist state for completed `5A` kickoff items:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Checklists.md`
+
+### Validation
+
+- `python3 -m py_compile scripts/phase1/ingest_bridge_api.py`
+- `python3 scripts/phase1/ingest_bridge_api.py --help`
+
 ## 2026-02-24 - Phase 4 carryover closure (hygiene + soak + maintenance/recovery evidence)
 
 ### 1) ai-lab runtime hygiene cleared
