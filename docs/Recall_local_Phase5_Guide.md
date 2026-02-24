@@ -51,7 +51,7 @@ Ship a demo-ready and daily-usable Recall.local where ingestion is low-friction 
 2. Use a separate React/Vite frontend for dashboard in its own container.
 3. Shared auto-tag config remains single-source JSON:
    - `config/auto_tag_rules.json`
-   - served by bridge `GET /config/auto-tags`
+   - served by bridge `GET /v1/auto-tag-rules` (compatibility alias: `GET /config/auto-tags`)
 4. Obsidian sync excludes:
    - `.obsidian`
    - `.trash`
@@ -84,7 +84,7 @@ Compatibility aliases (kept for backward compatibility, hidden from OpenAPI docs
 
 ### New endpoints (Phase 5)
 
-1. `GET /config/auto-tags`
+1. `GET /v1/auto-tag-rules` (compatibility alias: `GET /config/auto-tags`)
 2. `POST /ingest/url`
 3. `POST /ingest/text`
 4. `POST /ingest/gdoc`
@@ -184,19 +184,21 @@ Retrieval/query behavior:
 ## Environment additions (Phase 5)
 
 1. `RECALL_API_KEY=`
-2. `RECALL_VAULT_PATH=~/obsidian-vault`
-3. `RECALL_VAULT_SYNC_MODE=watch`
-4. `RECALL_VAULT_DEBOUNCE_SEC=5`
-5. `RECALL_VAULT_EXCLUDE_DIRS=_attachments,.obsidian,.trash,recall-artifacts`
-6. `RECALL_VAULT_WRITE_BACK=false`
-7. `RECALL_VAULT_IS_SYNCED=true`
+2. `RECALL_API_RATE_LIMIT_WINDOW_SECONDS=60`
+3. `RECALL_API_RATE_LIMIT_MAX_REQUESTS=120`
+4. `RECALL_VAULT_PATH=~/obsidian-vault`
+5. `RECALL_VAULT_SYNC_MODE=watch`
+6. `RECALL_VAULT_DEBOUNCE_SEC=5`
+7. `RECALL_VAULT_EXCLUDE_DIRS=_attachments,.obsidian,.trash,recall-artifacts`
+8. `RECALL_VAULT_WRITE_BACK=false`
+9. `RECALL_VAULT_IS_SYNCED=true`
 
 ## Recommended implementation order
 
 1. FastAPI migration (replace `http.server` bridge implementation).
 2. API key auth + startup warning behavior.
 3. Rate limiting middleware.
-4. Auto-tag rules config (`config/auto_tag_rules.json`) + `GET /config/auto-tags`.
+4. Auto-tag rules config (`config/auto_tag_rules.json`) + `GET /v1/auto-tag-rules` (keep `GET /config/auto-tags` alias).
 5. Pytest scaffolding + target test coverage.
 6. Docker compose consolidation (including separate `recall-ui` container).
 7. New bridge endpoints (`ingest/file`, `activity`, `eval`, `vault`, `config`).

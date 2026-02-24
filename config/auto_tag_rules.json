@@ -1,0 +1,165 @@
+{
+  "groups": [
+    {
+      "id": "job-search",
+      "label": "Job Search",
+      "icon": "target",
+      "color": "#f59e0b"
+    },
+    {
+      "id": "learning",
+      "label": "Learning",
+      "icon": "book",
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "project",
+      "label": "Project",
+      "icon": "wrench",
+      "color": "#22c55e"
+    },
+    {
+      "id": "reference",
+      "label": "Reference",
+      "icon": "pin",
+      "color": "#6366f1"
+    },
+    {
+      "id": "meeting",
+      "label": "Meeting",
+      "icon": "clipboard",
+      "color": "#ec4899"
+    }
+  ],
+  "url_patterns": {
+    "job-search": [
+      "linkedin.com/jobs",
+      "lever.co",
+      "greenhouse.io",
+      "anthropic.com/careers",
+      "openai.com/careers",
+      "boards.greenhouse.io"
+    ],
+    "learning": [
+      "arxiv.org",
+      "huggingface.co",
+      "docs.qdrant.tech",
+      "python.langchain.com",
+      "docs.anthropic.com",
+      "paperswithcode.com",
+      "readthedocs.io"
+    ],
+    "project": [
+      "github.com"
+    ]
+  },
+  "url_tag_patterns": {
+    "anthropic.com": [
+      "anthropic"
+    ],
+    "openai.com": [
+      "openai"
+    ],
+    "cohere.com": [
+      "cohere"
+    ],
+    "cohere.ai": [
+      "cohere"
+    ],
+    "glean.com": [
+      "glean"
+    ],
+    "writer.com": [
+      "writer"
+    ],
+    "arxiv.org": [
+      "research"
+    ],
+    "github.com": [
+      "code"
+    ]
+  },
+  "title_patterns": {
+    "job-search": [
+      "resume",
+      "cv",
+      "cover letter",
+      "job description"
+    ],
+    "meeting": [
+      "meeting",
+      "notes",
+      "transcript",
+      "action items"
+    ]
+  },
+  "email_senders": {
+    "job-search": [
+      "@anthropic.com",
+      "@openai.com",
+      "@lever.co",
+      "@greenhouse.io"
+    ]
+  },
+  "filename_patterns": {
+    "job-search": [
+      "resume",
+      "cv",
+      "cover.letter",
+      "jd",
+      "job.description"
+    ],
+    "meeting": [
+      "meeting",
+      "notes",
+      "transcript",
+      "action.items"
+    ]
+  },
+  "vault_folders": {
+    "career": "job-search",
+    "learning": "learning",
+    "projects": "project",
+    "references": "reference",
+    "daily": "reference"
+  },
+  "suggested_tags": {
+    "job-search": [
+      "anthropic",
+      "openai",
+      "cohere",
+      "glean",
+      "writer",
+      "job-description",
+      "se-role",
+      "recruiter",
+      "interview-prep"
+    ],
+    "learning": [
+      "rag",
+      "vector-db",
+      "prompt-engineering",
+      "llm",
+      "python",
+      "api-design",
+      "mcp"
+    ],
+    "project": [
+      "recall-local",
+      "tone-poet",
+      "myrsdlist",
+      "home-lab"
+    ],
+    "reference": [
+      "article",
+      "blog-post",
+      "tutorial",
+      "bookmark"
+    ],
+    "meeting": [
+      "action-items",
+      "transcript",
+      "follow-up"
+    ]
+  }
+}

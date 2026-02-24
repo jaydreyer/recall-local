@@ -7,10 +7,10 @@ Source plan: `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Gu
 - [x] Migrate bridge from `http.server` to FastAPI before adding new Phase 5 endpoints.
 - [x] Add API key validation helper in bridge (`X-API-Key` when configured).
 - [x] Add startup warning when `RECALL_API_KEY` is unset (local unauthenticated mode).
-- [ ] Add rate limiter with configurable window/limit env vars.
-- [ ] Add `GET /config/auto-tags` endpoint serving `config/auto_tag_rules.json`.
-- [ ] Add endpoint contract tests for auth success/failure and rate-limit behavior.
-- [ ] Document new env vars in `docker/.env.example`.
+- [x] Add rate limiter with configurable window/limit env vars.
+- [x] Add auto-tag rules endpoint (`GET /v1/auto-tag-rules`) with compatibility alias `GET /config/auto-tags`, serving `config/auto_tag_rules.json`.
+- [x] Add endpoint contract tests for auth success/failure and rate-limit behavior.
+- [x] Document new env vars in `docker/.env.example`.
 
 ## 5B. Group/Tag Metadata Model
 

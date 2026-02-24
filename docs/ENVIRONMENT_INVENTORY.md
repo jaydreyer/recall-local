@@ -85,6 +85,19 @@ Last updated: 2026-02-24
   - n8n container does not include `python3`; `Execute Command`-based Workflow 02 fails with `/bin/sh: python3: not found`.
   - Use HTTP bridge workflow for Workflow 02 in this environment.
 
+## Bridge API Controls (Phase 5A)
+
+- API identity: `operations-v1`
+- Canonical base paths: `/v1/*`
+- Shared config endpoint:
+  - canonical: `GET /v1/auto-tag-rules`
+  - compatibility alias: `GET /config/auto-tags`
+- Optional auth:
+  - `RECALL_API_KEY` enforces `X-API-Key` header when set.
+- Rate limiting env vars:
+  - `RECALL_API_RATE_LIMIT_WINDOW_SECONDS` (default `60`)
+  - `RECALL_API_RATE_LIMIT_MAX_REQUESTS` (default `120`)
+
 ## Execution Debug Rule (n8n)
 
 - For webhook failures, inspect n8n `Executions` first and use failed node + error details as source of truth before changing workflow wiring.

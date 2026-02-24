@@ -1,5 +1,31 @@
 # Recall.local Implementation Log
 
+## 2026-02-24 - Phase 5A closure: rate limits, auto-tag rules endpoint, and contract tests
+
+### Outcome
+
+- Completed remaining `5A` bridge platform items:
+  - added env-configurable in-memory rate limiting on bridge API routes.
+  - added shared auto-tag rules file at:
+    - `/Users/jaydreyer/projects/recall-local/config/auto_tag_rules.json`
+  - added canonical config endpoint:
+    - `GET /v1/auto-tag-rules`
+  - added compatibility aliases for existing clients:
+    - `GET /config/auto-tags`
+    - `GET /v1/config/auto-tags`
+- Added endpoint contract tests for auth and rate-limit behavior:
+  - `/Users/jaydreyer/projects/recall-local/tests/test_bridge_api_contract.py`
+- Updated env and planning docs to include new rate-limit vars and canonical auto-tag endpoint:
+  - `/Users/jaydreyer/projects/recall-local/docker/.env.example`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Checklists.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Guide.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/ENVIRONMENT_INVENTORY.md`
+
+### Validation
+
+- `python3 -m py_compile scripts/phase1/ingest_bridge_api.py`
+- `python3 -m unittest discover -s tests -p 'test_bridge_api_contract.py'`
+
 ## 2026-02-24 - REST API design update: versioned API identity + OpenAPI servers
 
 ### Outcome

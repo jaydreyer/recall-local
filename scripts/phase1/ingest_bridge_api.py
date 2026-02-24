@@ -5,9 +5,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
+import threading
+import time
 import uuid
+from collections import deque
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Literal, Optional
@@ -33,6 +37,36 @@ ALLOWED_INGEST_CHANNELS = ("webhook", "bookmarklet", "ios-share", "gmail-forward
 API_NAME = "operations-v1"
 API_MAJOR_VERSION = "v1"
 API_PREFIX = f"/{API_MAJOR_VERSION}"
+AUTO_TAG_RULES_PATH = ROOT / "config" / "auto_tag_rules.json"
+DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 60
+DEFAULT_RATE_LIMIT_MAX_REQUESTS = 120
+RATE_LIMIT_WINDOW_ENV = "RECALL_API_RATE_LIMIT_WINDOW_SECONDS"
+RATE_LIMIT_MAX_REQUESTS_ENV = "RECALL_API_RATE_LIMIT_MAX_REQUESTS"
+
+
+class InMemoryRateLimiter:
+    """Per-client fixed-window rate limiter."""
+
+    def __init__(self, *, window_seconds: int, max_requests: int):
+        self.window_seconds = max(window_seconds, 1)
+        self.max_requests = max(max_requests, 1)
+        self._events: dict[str, deque[float]] = {}
+        self._lock = threading.Lock()
+
+    def allow(self, *, client_id: str) -> tuple[bool, int]:
+        now = time.monotonic()
+        window_start = now - self.window_seconds
+        with self._lock:
+            client_events = self._events.setdefault(client_id, deque())
+            while client_events and client_events[0] <= window_start:
+                client_events.popleft()
+
+            if len(client_events) >= self.max_requests:
+                retry_after_seconds = max(1, int(math.ceil((client_events[0] + self.window_seconds) - now)))
+                return False, retry_after_seconds
+
+            client_events.append(now)
+            return True, 0
 
 
 class HealthResponse(BaseModel):
@@ -76,6 +110,38 @@ class MeetingWorkflowResponse(BaseModel):
     result: dict[str, Any]
 
 
+class AutoTagGroup(BaseModel):
+    id: str = Field(..., description="Stable group identifier.")
+    label: str = Field(..., description="Display name for UI surfaces.")
+    icon: str = Field(..., description="Icon token used by UI.")
+    color: str = Field(..., description="Hex color used for badges.")
+
+
+class AutoTagRulesResponse(BaseModel):
+    groups: list[AutoTagGroup] = Field(..., description="Configured group options for classification.")
+    url_patterns: dict[str, list[str]] = Field(
+        default_factory=dict, description="Group-level URL match patterns for auto-detection."
+    )
+    url_tag_patterns: dict[str, list[str]] = Field(
+        default_factory=dict, description="URL host patterns mapped to inferred tags."
+    )
+    title_patterns: dict[str, list[str]] = Field(
+        default_factory=dict, description="Group-level title keyword patterns."
+    )
+    email_senders: dict[str, list[str]] = Field(
+        default_factory=dict, description="Group-level email sender suffix patterns."
+    )
+    filename_patterns: dict[str, list[str]] = Field(
+        default_factory=dict, description="Group-level filename keyword patterns."
+    )
+    vault_folders: dict[str, str] = Field(
+        default_factory=dict, description="Vault folder name to group mapping."
+    )
+    suggested_tags: dict[str, list[str]] = Field(
+        default_factory=dict, description="Group-level suggested tags shown in clients."
+    )
+
+
 ERROR_EXAMPLE_VALIDATION = {
     "error": {
         "code": "validation_failed",
@@ -101,6 +167,47 @@ ERROR_EXAMPLE_WORKFLOW = {
         "details": [],
         "requestId": "req_a1b2c3d4e5f6",
     }
+}
+
+ERROR_EXAMPLE_RATE_LIMIT = {
+    "error": {
+        "code": "rate_limited",
+        "message": "Rate limit exceeded for client.",
+        "details": [{"field": "retry_after_seconds", "issue": "retry after 45 seconds"}],
+        "requestId": "req_a1b2c3d4e5f6",
+    }
+}
+
+ERROR_EXAMPLE_CONFIG_NOT_FOUND = {
+    "error": {
+        "code": "config_not_found",
+        "message": "Auto-tag rules config not found.",
+        "details": [{"field": "path", "issue": "missing file: config/auto_tag_rules.json"}],
+        "requestId": "req_a1b2c3d4e5f6",
+    }
+}
+
+ERROR_EXAMPLE_CONFIG_INVALID = {
+    "error": {
+        "code": "config_invalid",
+        "message": "Auto-tag rules config is invalid JSON: Expecting ',' delimiter.",
+        "details": [{"field": "path", "issue": "invalid file: config/auto_tag_rules.json"}],
+        "requestId": "req_a1b2c3d4e5f6",
+    }
+}
+
+AUTO_TAG_RULES_SUCCESS_EXAMPLE = {
+    "groups": [
+        {"id": "job-search", "label": "Job Search", "icon": "target", "color": "#f59e0b"},
+        {"id": "learning", "label": "Learning", "icon": "book", "color": "#8b5cf6"},
+    ],
+    "url_patterns": {"job-search": ["linkedin.com/jobs"], "learning": ["arxiv.org"]},
+    "url_tag_patterns": {"anthropic.com": ["anthropic"]},
+    "title_patterns": {"meeting": ["meeting", "notes", "action items"]},
+    "email_senders": {"job-search": ["@anthropic.com", "@openai.com"]},
+    "filename_patterns": {"meeting": ["meeting", "transcript"]},
+    "vault_folders": {"career": "job-search", "learning": "learning"},
+    "suggested_tags": {"job-search": ["interview-prep", "job-description"]},
 }
 
 INGEST_SUCCESS_EXAMPLE = {
@@ -301,17 +408,32 @@ MEETING_REQUEST_BODY = {
     },
 }
 
+RATE_LIMIT_ERROR_RESPONSE = {
+    429: {
+        "model": ErrorResponse,
+        "description": "Too many requests in the active rate-limit window.",
+        "content": {"application/json": {"example": ERROR_EXAMPLE_RATE_LIMIT}},
+    }
+}
+
 
 def create_app() -> FastAPI:
     server_local = os.getenv("RECALL_API_SERVER_LOCAL", "http://localhost:8090").strip() or "http://localhost:8090"
     server_ai_lab = os.getenv("RECALL_API_SERVER_AI_LAB", "http://100.116.103.78:8090").strip() or "http://100.116.103.78:8090"
+    rate_limit_window_seconds = _read_positive_int_env(RATE_LIMIT_WINDOW_ENV, DEFAULT_RATE_LIMIT_WINDOW_SECONDS)
+    rate_limit_max_requests = _read_positive_int_env(RATE_LIMIT_MAX_REQUESTS_ENV, DEFAULT_RATE_LIMIT_MAX_REQUESTS)
+    rate_limiter = InMemoryRateLimiter(
+        window_seconds=rate_limit_window_seconds,
+        max_requests=rate_limit_max_requests,
+    )
 
     app = FastAPI(
         title=API_NAME,
         version=API_MAJOR_VERSION,
         description=(
             "Recall.local bridge for ingestion, cited RAG querying, and meeting action extraction.\n\n"
-            "Authentication: if `RECALL_API_KEY` is configured, send it via `X-API-Key`."
+            "Authentication: if `RECALL_API_KEY` is configured, send it via `X-API-Key`.\n"
+            f"Rate limits: `{RATE_LIMIT_MAX_REQUESTS_ENV}` requests per `{RATE_LIMIT_WINDOW_ENV}` seconds."
         ),
         docs_url="/docs",
         redoc_url="/redoc",
@@ -325,6 +447,7 @@ def create_app() -> FastAPI:
             {"name": "Ingestions", "description": "Create ingestion operations from supported channels."},
             {"name": "RAG Queries", "description": "Run cited retrieval-augmented queries."},
             {"name": "Meeting Action Items", "description": "Extract action items and structured notes from meeting transcripts."},
+            {"name": "Auto Tag Rules", "description": "Read shared auto-tag configuration for dashboard and extension clients."},
         ],
     )
 
@@ -343,6 +466,41 @@ def create_app() -> FastAPI:
     async def health_alias() -> JSONResponse:
         return _json_response(200, {"status": "ok"})
 
+    @app.get(
+        f"{API_PREFIX}/auto-tag-rules",
+        tags=["Auto Tag Rules"],
+        summary="Read auto-tag rules",
+        description=(
+            "Returns shared auto-tag configuration used by dashboard, browser extension, and vault sync "
+            "flows for group and tag inference."
+        ),
+        response_model=AutoTagRulesResponse,
+        responses={
+            200: {"description": "Auto-tag rules loaded.", "content": {"application/json": {"example": AUTO_TAG_RULES_SUCCESS_EXAMPLE}}},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            404: {"model": ErrorResponse, "description": "Auto-tag config file is missing.", "content": {"application/json": {"example": ERROR_EXAMPLE_CONFIG_NOT_FOUND}}},
+            500: {"model": ErrorResponse, "description": "Auto-tag config could not be parsed.", "content": {"application/json": {"example": ERROR_EXAMPLE_CONFIG_INVALID}}},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+    )
+    async def get_auto_tag_rules(request: Request) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        return _read_auto_tag_rules(request_id=request_id)
+
+    @app.get("/config/auto-tags", include_in_schema=False)
+    @app.get(f"{API_PREFIX}/config/auto-tags", include_in_schema=False)
+    async def get_auto_tag_rules_alias(request: Request) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        return _read_auto_tag_rules(request_id=request_id)
+
     @app.post(
         f"{API_PREFIX}/ingestions",
         tags=["Ingestions"],
@@ -357,6 +515,7 @@ def create_app() -> FastAPI:
             207: {"description": "Partial success; one or more ingestion requests failed.", "content": {"application/json": {"example": INGEST_SUCCESS_EXAMPLE}}},
             400: {"model": ErrorResponse, "description": "Validation or payload normalization failure.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
             401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            **RATE_LIMIT_ERROR_RESPONSE,
         },
         openapi_extra={"requestBody": INGEST_REQUEST_BODY},
     )
@@ -365,9 +524,9 @@ def create_app() -> FastAPI:
         dry_run: bool = Query(False, description="If true, normalize and validate payload without persistence side effects."),
     ) -> JSONResponse:
         request_id = _request_id()
-        auth_error = _enforce_api_key_if_configured(request, request_id=request_id)
-        if auth_error is not None:
-            return auth_error
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
 
         try:
             payload = await _read_json_body(request)
@@ -395,9 +554,9 @@ def create_app() -> FastAPI:
         dry_run: bool = Query(False),
     ) -> JSONResponse:
         request_id = _request_id()
-        auth_error = _enforce_api_key_if_configured(request, request_id=request_id)
-        if auth_error is not None:
-            return auth_error
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
 
         try:
             payload = await _read_json_body(request)
@@ -419,9 +578,9 @@ def create_app() -> FastAPI:
         dry_run: bool = Query(False),
     ) -> JSONResponse:
         request_id = _request_id()
-        auth_error = _enforce_api_key_if_configured(request, request_id=request_id)
-        if auth_error is not None:
-            return auth_error
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
 
         try:
             payload = await _read_json_body(request)
@@ -445,6 +604,7 @@ def create_app() -> FastAPI:
             400: {"model": ErrorResponse, "description": "Missing query or invalid query options.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
             401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
             500: {"model": ErrorResponse, "description": "Workflow execution failed.", "content": {"application/json": {"example": ERROR_EXAMPLE_WORKFLOW}}},
+            **RATE_LIMIT_ERROR_RESPONSE,
         },
         openapi_extra={"requestBody": RAG_REQUEST_BODY},
     )
@@ -453,9 +613,9 @@ def create_app() -> FastAPI:
         dry_run: bool = Query(False, description="If true, skip SQLite writes and artifact persistence."),
     ) -> JSONResponse:
         request_id = _request_id()
-        auth_error = _enforce_api_key_if_configured(request, request_id=request_id)
-        if auth_error is not None:
-            return auth_error
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
 
         try:
             payload = await _read_json_body(request)
@@ -472,9 +632,9 @@ def create_app() -> FastAPI:
         dry_run: bool = Query(False),
     ) -> JSONResponse:
         request_id = _request_id()
-        auth_error = _enforce_api_key_if_configured(request, request_id=request_id)
-        if auth_error is not None:
-            return auth_error
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
 
         try:
             payload = await _read_json_body(request)
@@ -497,6 +657,7 @@ def create_app() -> FastAPI:
             400: {"model": ErrorResponse, "description": "Invalid or missing meeting payload fields.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
             401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
             500: {"model": ErrorResponse, "description": "Workflow execution failed.", "content": {"application/json": {"example": ERROR_EXAMPLE_WORKFLOW}}},
+            **RATE_LIMIT_ERROR_RESPONSE,
         },
         openapi_extra={"requestBody": MEETING_REQUEST_BODY},
     )
@@ -505,9 +666,9 @@ def create_app() -> FastAPI:
         dry_run: bool = Query(False, description="If true, run extraction without writing durable run artifacts."),
     ) -> JSONResponse:
         request_id = _request_id()
-        auth_error = _enforce_api_key_if_configured(request, request_id=request_id)
-        if auth_error is not None:
-            return auth_error
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
 
         try:
             payload = await _read_json_body(request)
@@ -525,9 +686,9 @@ def create_app() -> FastAPI:
         dry_run: bool = Query(False),
     ) -> JSONResponse:
         request_id = _request_id()
-        auth_error = _enforce_api_key_if_configured(request, request_id=request_id)
-        if auth_error is not None:
-            return auth_error
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
 
         try:
             payload = await _read_json_body(request)
@@ -546,6 +707,8 @@ def create_app() -> FastAPI:
         _ = _path
         return _error_response(status_code=404, code="not_found", message="Unknown path.", request_id=_request_id())
 
+    app.state.rate_limit_window_seconds = rate_limit_window_seconds
+    app.state.rate_limit_max_requests = rate_limit_max_requests
     return app
 
 
@@ -703,9 +866,6 @@ def _process_meeting_action_items(*, payload: dict[str, Any], dry_run: bool, req
     )
 
 
-APP = create_app()
-
-
 def _normalize_tag_filter(value: Any) -> list[str]:
     if value is None:
         return []
@@ -750,6 +910,78 @@ async def _read_json_body(request: Request) -> dict[str, Any]:
     return parsed
 
 
+def _read_auto_tag_rules(*, request_id: str) -> JSONResponse:
+    if not AUTO_TAG_RULES_PATH.exists():
+        return _error_response(
+            status_code=404,
+            code="config_not_found",
+            message="Auto-tag rules config not found.",
+            request_id=request_id,
+            details=[{"field": "path", "issue": f"missing file: {AUTO_TAG_RULES_PATH.relative_to(ROOT)}"}],
+        )
+
+    try:
+        payload = json.loads(AUTO_TAG_RULES_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return _error_response(
+            status_code=500,
+            code="config_invalid",
+            message=f"Auto-tag rules config is invalid JSON: {exc}",
+            request_id=request_id,
+            details=[{"field": "path", "issue": f"invalid file: {AUTO_TAG_RULES_PATH.relative_to(ROOT)}"}],
+        )
+
+    if not isinstance(payload, dict):
+        return _error_response(
+            status_code=500,
+            code="config_invalid",
+            message="Auto-tag rules config must be a JSON object.",
+            request_id=request_id,
+            details=[{"field": "path", "issue": f"invalid file: {AUTO_TAG_RULES_PATH.relative_to(ROOT)}"}],
+        )
+
+    return _json_response(200, payload)
+
+
+def _enforce_api_and_rate_limit(
+    request: Request,
+    *,
+    request_id: str,
+    rate_limiter: InMemoryRateLimiter,
+) -> Optional[JSONResponse]:
+    auth_error = _enforce_api_key_if_configured(request, request_id=request_id)
+    if auth_error is not None:
+        return auth_error
+    return _enforce_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+
+
+def _enforce_rate_limit(
+    request: Request,
+    *,
+    request_id: str,
+    rate_limiter: InMemoryRateLimiter,
+) -> Optional[JSONResponse]:
+    client_id = _rate_limit_client_id(request)
+    allowed, retry_after_seconds = rate_limiter.allow(client_id=client_id)
+    if allowed:
+        return None
+    return _error_response(
+        status_code=429,
+        code="rate_limited",
+        message="Rate limit exceeded for client.",
+        request_id=request_id,
+        details=[{"field": "retry_after_seconds", "issue": f"retry after {retry_after_seconds} seconds"}],
+    )
+
+
+def _rate_limit_client_id(request: Request) -> str:
+    api_key = request.headers.get("X-API-Key", "").strip()
+    if api_key:
+        return f"api-key:{api_key}"
+    client_host = request.client.host if request.client is not None else "unknown"
+    return f"client:{client_host}"
+
+
 def _enforce_api_key_if_configured(request: Request, *, request_id: str) -> Optional[JSONResponse]:
     expected = os.getenv("RECALL_API_KEY", "").strip()
     if not expected:
@@ -768,6 +1000,19 @@ def _enforce_api_key_if_configured(request: Request, *, request_id: str) -> Opti
 
 def _request_id() -> str:
     return f"req_{uuid.uuid4().hex[:12]}"
+
+
+def _read_positive_int_env(name: str, default_value: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default_value
+    try:
+        parsed = int(raw)
+    except ValueError:
+        return default_value
+    if parsed <= 0:
+        return default_value
+    return parsed
 
 
 def _error_response(
@@ -793,6 +1038,9 @@ def _json_response(status_code: int, payload: dict[str, Any]) -> JSONResponse:
     return JSONResponse(status_code=status_code, content=payload)
 
 
+APP = create_app()
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the Recall ingestion HTTP bridge.")
     parser.add_argument("--host", default="0.0.0.0", help="Host/interface to bind.")
@@ -803,10 +1051,17 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     api_key = os.getenv("RECALL_API_KEY", "").strip()
+    rate_limit_window_seconds = getattr(APP.state, "rate_limit_window_seconds", DEFAULT_RATE_LIMIT_WINDOW_SECONDS)
+    rate_limit_max_requests = getattr(APP.state, "rate_limit_max_requests", DEFAULT_RATE_LIMIT_MAX_REQUESTS)
     if api_key:
         print("Recall ingestion bridge API key enforcement enabled.")
     else:
         print("[WARN] RECALL_API_KEY is unset; bridge running without API key enforcement.")
+    print(
+        "Rate limiting enabled: "
+        f"{rate_limit_max_requests} requests/{rate_limit_window_seconds}s "
+        f"({RATE_LIMIT_MAX_REQUESTS_ENV}/{RATE_LIMIT_WINDOW_ENV})."
+    )
 
     print(f"Recall ingestion bridge listening on http://{args.host}:{args.port}")
     print(f"API docs: http://{args.host}:{args.port}/docs")

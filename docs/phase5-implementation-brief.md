@@ -164,7 +164,7 @@ The popup appears when the user clicks the toolbar button or uses the keyboard s
 
 Store in a JSON config file that both the Chrome extension and dashboard UI read from. Adding a new group is a single JSON edit — no code changes in either UI.
 
-The Chrome extension fetches this config from `GET /config/auto-tags` on the bridge API.
+The Chrome extension fetches this config from `GET /v1/auto-tag-rules` on the bridge API (with `GET /config/auto-tags` maintained as a compatibility alias).
 
 ```json
 // config/auto_tag_rules.json
@@ -231,7 +231,7 @@ The Chrome extension fetches this config from `GET /config/auto-tags` on the bri
 
 **Adding new groups:** Edit this JSON file — add a new entry to `groups`, add URL patterns, add suggested tags. No code changes needed.
 
-**New endpoint needed:** `GET /config/auto-tags` — serve the contents of `config/auto_tag_rules.json`.
+**New endpoint needed:** `GET /v1/auto-tag-rules` (compatibility alias: `GET /config/auto-tags`) — serve the contents of `config/auto_tag_rules.json`.
 
 ### API Payload
 All ingest endpoints accept optional `group` and `tags`:
@@ -559,7 +559,7 @@ Extract Ollama retry logic into shared decorator, apply to Anthropic/OpenAI/Gemi
 
 - The UI scaffolds are visual references, not production code. Use them for layout and UX direction but implement with proper project structure (Vite + React for dashboard, Manifest V3 for extension).
 - FastAPI migration is approved and should happen before endpoint expansion.
-- **Both the dashboard and Chrome extension read group/tag config from the same source** (`config/auto_tag_rules.json` served via `GET /config/auto-tags`). Adding a new group is a single JSON edit — no code changes in either UI.
+- **Both the dashboard and Chrome extension read group/tag config from the same source** (`config/auto_tag_rules.json` served via `GET /v1/auto-tag-rules`, with `GET /config/auto-tags` alias support). Adding a new group is a single JSON edit — no code changes in either UI.
 - The Obsidian vault sync should work both as a daemon (`python vault_sync.py --watch`) and as a one-shot triggered by the API (`POST /vault/sync`).
 - All new environment variables should be added to `docker/.env.example` with sensible defaults.
 - The `recall-artifacts/` directory in the vault must be excluded from ingestion to prevent circular feedback.
