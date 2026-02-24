@@ -1,5 +1,76 @@
 # Recall.local Implementation Log
 
+## 2026-02-24 - Canonical-route guardrail recorded for deferred alias removal
+
+### Outcome
+
+- Recorded endpoint migration policy for future cleanup:
+  - all new work must use canonical `/v1/*` routes.
+  - compatibility aliases remain legacy-only until explicit canonical-only cutover.
+- Added deferred `5F` checklist tasks for:
+  - migrating remaining alias-based callers.
+  - removing alias routes after migration verification.
+- Updated policy references in:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Guide.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Checklists.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/ENVIRONMENT_INVENTORY.md`
+
+## 2026-02-24 - Phase 5D kickoff: dashboard scaffold, activity/eval APIs, and recall-ui container
+
+### Outcome
+
+- Implemented Phase 5D dashboard app scaffold and runtime wiring:
+  - `/Users/jaydreyer/projects/recall-local/ui/dashboard/`
+  - React/Vite app with tabs:
+    - Ingest
+    - Query
+    - Activity
+    - Eval
+    - Vault
+  - API settings support:
+    - base URL
+    - optional API key (`X-API-Key`)
+  - canonical bridge route wiring:
+    - `POST /v1/ingestions`
+    - `POST /v1/rag-queries`
+    - `GET /v1/activities`
+    - `GET /v1/evaluations` (`?latest=true`)
+    - `POST /v1/evaluation-runs`
+    - `GET /v1/vault-files`
+    - `POST /v1/vault-syncs`
+- Added dashboard container assets for separate deployment:
+  - `/Users/jaydreyer/projects/recall-local/ui/dashboard/Dockerfile`
+  - `/Users/jaydreyer/projects/recall-local/ui/dashboard/nginx.conf`
+  - updated `/Users/jaydreyer/projects/recall-local/docker/docker-compose.yml` with `recall-ui` (`8170:80`).
+- Extended bridge API for dashboard Activity/Eval support in:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py`
+  - canonical endpoints:
+    - `GET /v1/activities`
+    - `GET /v1/evaluations`
+    - `POST /v1/evaluation-runs`
+  - compatibility aliases:
+    - `GET /v1/evaluations/latest`
+    - `GET /activity`
+    - `GET /eval/latest`
+    - `POST /eval/run`
+  - added CORS support via `RECALL_API_CORS_ORIGINS` (default `*`).
+- Extended ingestion SQLite persistence for activity metadata in:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingestion_pipeline.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase0/bootstrap_sqlite.py`
+  - `ingestion_log` now persists:
+    - `group_name`
+    - `tags_json`
+  - backward-compatible migration is applied at ingest runtime when columns are missing.
+- Added contract tests for the new Activity/Eval API routes:
+  - `/Users/jaydreyer/projects/recall-local/tests/test_bridge_api_contract.py`
+
+### Validation
+
+- `python3 -m py_compile scripts/phase1/ingest_bridge_api.py scripts/phase1/ingestion_pipeline.py scripts/phase0/bootstrap_sqlite.py`
+- `python3 -m unittest discover -s tests -p 'test_bridge_api_contract.py'`
+- `cd ui/dashboard && npm run lint`
+- `cd ui/dashboard && npm run build`
+
 ## 2026-02-24 - Phase 5C bridge runtime config update (default vault path)
 
 ### Outcome

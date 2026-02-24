@@ -7,16 +7,20 @@ import argparse
 import json
 import math
 import os
+import sqlite3
+import subprocess
 import sys
 import threading
 import time
 import uuid
 from collections import deque
 from dataclasses import asdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional
 
 import uvicorn
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, Path as ApiPath, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -44,6 +48,10 @@ DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 60
 DEFAULT_RATE_LIMIT_MAX_REQUESTS = 120
 RATE_LIMIT_WINDOW_ENV = "RECALL_API_RATE_LIMIT_WINDOW_SECONDS"
 RATE_LIMIT_MAX_REQUESTS_ENV = "RECALL_API_RATE_LIMIT_MAX_REQUESTS"
+DEFAULT_ACTIVITY_LIMIT = 25
+DEFAULT_RECENT_EVAL_RUNS = 5
+DEFAULT_EVAL_RUN_TIMEOUT_SECONDS = 900
+DEFAULT_CORS_ORIGINS = "*"
 CANONICAL_GROUP_ENUM = list(CANONICAL_GROUPS)
 
 
@@ -137,6 +145,60 @@ class VaultSyncResponse(BaseModel):
     ingested: list[dict[str, Any]]
     synced_at: str
     write_back_report: Optional[str] = None
+
+
+class ActivityItem(BaseModel):
+    ingest_id: str
+    source_type: str
+    source_ref: Optional[str] = None
+    channel: str
+    doc_id: Optional[str] = None
+    chunks_created: int
+    status: str
+    timestamp: str
+    group: str = Field(..., description="Canonical group for the ingestion event.")
+    tags: list[str] = Field(default_factory=list, description="Tag list persisted with the ingestion event.")
+
+
+class ActivityResponse(BaseModel):
+    workflow: Literal["workflow_05d_activity"]
+    count: int
+    limit: int
+    filter_group: Optional[str] = None
+    items: list[ActivityItem]
+
+
+class EvaluationRunStatus(BaseModel):
+    run_id: str
+    status: Literal["queued", "running", "completed", "failed"]
+    suite: str
+    backend: str
+    started_at: Optional[str] = None
+    ended_at: Optional[str] = None
+    error: Optional[str] = None
+    result: Optional[dict[str, Any]] = None
+
+
+class EvaluationLatestRun(BaseModel):
+    run_date: str
+    total: int
+    passed: int
+    failed: int
+    pass_rate: float
+    avg_latency_ms: Optional[float] = None
+
+
+class EvaluationLatestResponse(BaseModel):
+    workflow: Literal["workflow_05d_eval_latest"]
+    latest: Optional[EvaluationLatestRun] = None
+    recent: list[EvaluationLatestRun] = Field(default_factory=list)
+    active_runs: list[EvaluationRunStatus] = Field(default_factory=list)
+
+
+class EvaluationRunAcceptedResponse(BaseModel):
+    workflow: Literal["workflow_05d_eval_run"]
+    accepted: bool
+    run: EvaluationRunStatus
 
 
 class AutoTagGroup(BaseModel):
@@ -355,6 +417,110 @@ VAULT_SYNC_SUCCESS_EXAMPLE = {
     "synced_at": "2026-02-24T18:36:01+00:00",
 }
 
+ACTIVITY_SUCCESS_EXAMPLE = {
+    "workflow": "workflow_05d_activity",
+    "count": 2,
+    "limit": 25,
+    "filter_group": "job-search",
+    "items": [
+        {
+            "ingest_id": "d47f3b0f6f45444d9e8a99dd3f71bfcb",
+            "source_type": "url",
+            "source_ref": "https://anthropic.com/careers/solutions-engineer",
+            "channel": "bookmarklet",
+            "doc_id": "809d76ac5f8b4f7ca0f65f8a93e10382",
+            "chunks_created": 4,
+            "status": "completed",
+            "timestamp": "2026-02-24T18:40:00+00:00",
+            "group": "job-search",
+            "tags": ["anthropic", "se-role"],
+        },
+        {
+            "ingest_id": "af6f3f4f9bf1455ebea9099cd3d8a0e0",
+            "source_type": "gdoc",
+            "source_ref": "https://docs.google.com/document/d/abc123/edit",
+            "channel": "webhook",
+            "doc_id": "1d4caf80e0f94431ba7ef6e6d58fd6e2",
+            "chunks_created": 7,
+            "status": "completed",
+            "timestamp": "2026-02-24T17:22:10+00:00",
+            "group": "job-search",
+            "tags": ["interview-prep"],
+        },
+    ],
+}
+
+EVAL_LATEST_SUCCESS_EXAMPLE = {
+    "workflow": "workflow_05d_eval_latest",
+    "latest": {
+        "run_date": "2026-02-24T09:15:00+00:00",
+        "total": 15,
+        "passed": 14,
+        "failed": 1,
+        "pass_rate": 0.9333,
+        "avg_latency_ms": 1338.6,
+    },
+    "recent": [
+        {
+            "run_date": "2026-02-24T09:15:00+00:00",
+            "total": 15,
+            "passed": 14,
+            "failed": 1,
+            "pass_rate": 0.9333,
+            "avg_latency_ms": 1338.6,
+        }
+    ],
+    "active_runs": [
+        {
+            "run_id": "eval_a1b2c3d4e5f6",
+            "status": "running",
+            "suite": "job-search",
+            "backend": "webhook",
+            "started_at": "2026-02-24T09:20:00+00:00",
+            "ended_at": None,
+            "error": None,
+            "result": None,
+        }
+    ],
+}
+
+EVAL_RUN_ACCEPTED_EXAMPLE = {
+    "workflow": "workflow_05d_eval_run",
+    "accepted": True,
+    "run": {
+        "run_id": "eval_a1b2c3d4e5f6",
+        "status": "queued",
+        "suite": "core",
+        "backend": "webhook",
+        "started_at": None,
+        "ended_at": None,
+        "error": None,
+        "result": None,
+    },
+}
+
+EVAL_RUN_COMPLETED_EXAMPLE = {
+    "workflow": "workflow_05d_eval_run",
+    "accepted": True,
+    "run": {
+        "run_id": "eval_a1b2c3d4e5f6",
+        "status": "completed",
+        "suite": "core",
+        "backend": "webhook",
+        "started_at": "2026-02-24T09:20:00+00:00",
+        "ended_at": "2026-02-24T09:20:12+00:00",
+        "error": None,
+        "result": {
+            "status": "pass",
+            "passed": 10,
+            "total": 10,
+        },
+    },
+}
+
+EVAL_RUNS_LOCK = threading.Lock()
+EVAL_RUNS: dict[str, dict[str, Any]] = {}
+
 INGEST_REQUEST_BODY = {
     "required": True,
     "content": {
@@ -542,6 +708,51 @@ VAULT_SYNC_REQUEST_BODY = {
     },
 }
 
+EVAL_RUN_REQUEST_BODY = {
+    "required": False,
+    "content": {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "suite": {
+                        "type": "string",
+                        "description": "Eval suite selector.",
+                        "enum": ["core", "job-search", "learning", "both"],
+                        "default": "core",
+                    },
+                    "backend": {
+                        "type": "string",
+                        "description": "Execution backend passed to run_eval.py.",
+                        "enum": ["webhook", "direct"],
+                        "default": "webhook",
+                    },
+                    "webhook_url": {
+                        "type": "string",
+                        "description": "Optional webhook URL override when backend=webhook.",
+                    },
+                    "dry_run": {
+                        "oneOf": [{"type": "boolean"}, {"type": "string"}, {"type": "integer"}],
+                        "description": "If true, skip SQLite and artifact writes in run_eval.py.",
+                    },
+                    "wait": {
+                        "oneOf": [{"type": "boolean"}, {"type": "string"}, {"type": "integer"}],
+                        "description": "If true, wait for completion and return final result.",
+                    },
+                },
+                "additionalProperties": False,
+            },
+            "examples": {
+                "asyncCore": {"summary": "Queue async core suite run", "value": {"suite": "core"}},
+                "syncJobSearch": {
+                    "summary": "Run job-search suite synchronously",
+                    "value": {"suite": "job-search", "wait": True, "backend": "webhook"},
+                },
+            },
+        }
+    },
+}
+
 RATE_LIMIT_ERROR_RESPONSE = {
     429: {
         "model": ErrorResponse,
@@ -583,7 +794,17 @@ def create_app() -> FastAPI:
             {"name": "Meeting Action Items", "description": "Extract action items and structured notes from meeting transcripts."},
             {"name": "Auto Tag Rules", "description": "Read shared auto-tag configuration for dashboard and extension clients."},
             {"name": "Vault", "description": "List vault notes and trigger Obsidian vault sync operations."},
+            {"name": "Activities", "description": "Read recent ingestion activity for dashboard monitoring."},
+            {"name": "Evaluations", "description": "Read latest eval metrics and trigger eval runs."},
         ],
+    )
+    cors_origins = _cors_origins_from_env()
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
 
     @app.get(
@@ -946,6 +1167,213 @@ def create_app() -> FastAPI:
     async def create_vault_sync_alias(request: Request) -> JSONResponse:
         return await create_vault_sync(request)
 
+    @app.get(
+        f"{API_PREFIX}/activities",
+        tags=["Activities"],
+        summary="List recent ingestion activity",
+        description=(
+            "Returns recent ingestion events from SQLite `ingestion_log`, including group/tag metadata "
+            "when available."
+        ),
+        response_model=ActivityResponse,
+        responses={
+            200: {"description": "Recent activity loaded.", "content": {"application/json": {"example": ACTIVITY_SUCCESS_EXAMPLE}}},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            500: {"model": ErrorResponse, "description": "Activity query failed.", "content": {"application/json": {"example": ERROR_EXAMPLE_WORKFLOW}}},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+    )
+    async def get_activities(
+        request: Request,
+        limit: int = Query(DEFAULT_ACTIVITY_LIMIT, ge=1, le=200, description="Max activity items to return."),
+        group_filter: Optional[str] = Query(
+            default=None,
+            alias="group",
+            description="Optional group filter (`job-search|learning|project|reference|meeting`).",
+        ),
+    ) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        normalized_group = _normalize_group_filter(group_filter)
+        try:
+            items = _read_recent_activity(limit=limit, filter_group=normalized_group)
+        except Exception as exc:  # noqa: BLE001
+            return _error_response(
+                status_code=500,
+                code="workflow_failed",
+                message=f"Activity query failed: {exc}",
+                request_id=request_id,
+            )
+        return _json_response(
+            200,
+            {
+                "workflow": "workflow_05d_activity",
+                "count": len(items),
+                "limit": limit,
+                "filter_group": normalized_group,
+                "items": items,
+            },
+        )
+
+    @app.get("/activity", include_in_schema=False)
+    async def get_activities_alias(
+        request: Request,
+        limit: int = Query(DEFAULT_ACTIVITY_LIMIT, ge=1, le=200),
+        group_filter: Optional[str] = Query(default=None, alias="group"),
+    ) -> JSONResponse:
+        return await get_activities(request=request, limit=limit, group_filter=group_filter)
+
+    @app.get(
+        f"{API_PREFIX}/evaluations",
+        tags=["Evaluations"],
+        summary="List evaluation summaries",
+        description=(
+            "Returns evaluation aggregate metrics from SQLite `eval_results` plus currently active "
+            "evaluation runs started through this bridge process. Pass `latest=true` to request only "
+            "the newest summary."
+        ),
+        response_model=EvaluationLatestResponse,
+        responses={
+            200: {"description": "Evaluation summaries loaded.", "content": {"application/json": {"example": EVAL_LATEST_SUCCESS_EXAMPLE}}},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            500: {"model": ErrorResponse, "description": "Eval summary query failed.", "content": {"application/json": {"example": ERROR_EXAMPLE_WORKFLOW}}},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+    )
+    async def get_evaluations(
+        request: Request,
+        limit: int = Query(DEFAULT_RECENT_EVAL_RUNS, ge=1, le=50, description="Number of recent summaries to return."),
+        latest: bool = Query(False, description="If true, return only the latest evaluation summary."),
+    ) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        try:
+            recent_limit = 1 if latest else limit
+            latest_summary, recent = _read_latest_evaluations(recent_limit=recent_limit)
+            if latest and latest_summary is not None:
+                recent = [latest_summary]
+            active_runs = _list_eval_runs(include_terminal=False)
+        except Exception as exc:  # noqa: BLE001
+            return _error_response(
+                status_code=500,
+                code="workflow_failed",
+                message=f"Eval summary query failed: {exc}",
+                request_id=request_id,
+            )
+        return _json_response(
+            200,
+            {
+                "workflow": "workflow_05d_eval_latest",
+                "latest": latest_summary,
+                "recent": recent,
+                "active_runs": active_runs,
+            },
+        )
+
+    @app.get(f"{API_PREFIX}/evaluations/latest", include_in_schema=False)
+    @app.get("/eval/latest", include_in_schema=False)
+    async def get_latest_evaluations_alias(request: Request) -> JSONResponse:
+        return await get_evaluations(request=request, limit=1, latest=True)
+
+    @app.post(
+        f"{API_PREFIX}/evaluation-runs",
+        tags=["Evaluations"],
+        summary="Create evaluation run",
+        description=(
+            "Queues or executes an eval run via `scripts/eval/run_eval.py`. "
+            "Use `wait=true` to run synchronously and return the final summary."
+        ),
+        response_model=EvaluationRunAcceptedResponse,
+        responses={
+            200: {"description": "Synchronous eval run completed.", "content": {"application/json": {"example": EVAL_RUN_COMPLETED_EXAMPLE}}},
+            202: {"description": "Async eval run accepted.", "content": {"application/json": {"example": EVAL_RUN_ACCEPTED_EXAMPLE}}},
+            400: {"model": ErrorResponse, "description": "Invalid eval run options.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            500: {"model": ErrorResponse, "description": "Eval run execution failed.", "content": {"application/json": {"example": ERROR_EXAMPLE_WORKFLOW}}},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+        openapi_extra={"requestBody": EVAL_RUN_REQUEST_BODY},
+    )
+    async def create_evaluation_run(request: Request) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        try:
+            payload = await _read_json_body(request)
+        except ValueError as exc:
+            return _error_response(status_code=400, code="invalid_json", message=str(exc), request_id=request_id)
+
+        suite = str(payload.get("suite", "core")).strip().lower()
+        if suite not in {"core", "job-search", "learning", "both"}:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message=f"Invalid suite: {suite}",
+                request_id=request_id,
+                details=[{"field": "suite", "issue": "allowed values: core, job-search, learning, both"}],
+            )
+
+        backend = str(payload.get("backend", "webhook")).strip().lower()
+        if backend not in {"webhook", "direct"}:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message=f"Invalid backend: {backend}",
+                request_id=request_id,
+                details=[{"field": "backend", "issue": "allowed values: webhook, direct"}],
+            )
+
+        try:
+            dry_run = _normalize_bool(payload.get("dry_run", False), field_name="dry_run")
+            wait = _normalize_bool(payload.get("wait", False), field_name="wait")
+            webhook_url = _normalize_optional_string(payload.get("webhook_url"))
+        except ValueError as exc:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message=f"Invalid eval run options: {exc}",
+                request_id=request_id,
+            )
+
+        eval_run_id = _queue_eval_run(suite=suite, backend=backend)
+        if wait:
+            _execute_eval_run(
+                eval_run_id=eval_run_id,
+                suite=suite,
+                backend=backend,
+                webhook_url=webhook_url,
+                dry_run=dry_run,
+            )
+            run_state = _get_eval_run(eval_run_id)
+            return _json_response(200, {"workflow": "workflow_05d_eval_run", "accepted": True, "run": run_state})
+
+        thread = threading.Thread(
+            target=_execute_eval_run,
+            kwargs={
+                "eval_run_id": eval_run_id,
+                "suite": suite,
+                "backend": backend,
+                "webhook_url": webhook_url,
+                "dry_run": dry_run,
+            },
+            daemon=True,
+        )
+        thread.start()
+        run_state = _get_eval_run(eval_run_id)
+        return _json_response(202, {"workflow": "workflow_05d_eval_run", "accepted": True, "run": run_state})
+
+    @app.post("/eval/run", include_in_schema=False)
+    async def create_evaluation_run_alias(request: Request) -> JSONResponse:
+        return await create_evaluation_run(request)
+
     @app.get("/{_path:path}", include_in_schema=False)
     async def not_found_get(_path: str) -> JSONResponse:
         _ = _path
@@ -959,6 +1387,359 @@ def create_app() -> FastAPI:
     app.state.rate_limit_window_seconds = rate_limit_window_seconds
     app.state.rate_limit_max_requests = rate_limit_max_requests
     return app
+
+
+def _db_path() -> Path:
+    raw = os.getenv("RECALL_DB_PATH", "").strip()
+    if raw:
+        return Path(raw)
+    return ROOT / "data" / "recall.db"
+
+
+def _read_recent_activity(*, limit: int, filter_group: str | None) -> list[dict[str, Any]]:
+    db_path = _db_path()
+    if not db_path.exists():
+        return []
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        table_exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='ingestion_log'"
+        ).fetchone()
+        if table_exists is None:
+            return []
+
+        columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info(ingestion_log)").fetchall()}
+        has_group = "group_name" in columns
+        has_tags = "tags_json" in columns
+
+        if has_group and has_tags:
+            sql = (
+                "SELECT ingest_id, source_type, source_ref, channel, doc_id, chunks_created, status, timestamp, "
+                "group_name, tags_json "
+                "FROM ingestion_log "
+            )
+            params: list[Any] = []
+            if filter_group:
+                sql += "WHERE COALESCE(group_name, 'reference') = ? "
+                params.append(filter_group)
+            sql += "ORDER BY timestamp DESC LIMIT ?"
+            params.append(limit)
+            rows = conn.execute(sql, params).fetchall()
+        else:
+            sql = (
+                "SELECT ingest_id, source_type, source_ref, channel, doc_id, chunks_created, status, timestamp "
+                "FROM ingestion_log "
+            )
+            params = []
+            sql += "ORDER BY timestamp DESC LIMIT ?"
+            params.append(limit)
+            rows = conn.execute(sql, params).fetchall()
+
+        items: list[dict[str, Any]] = []
+        for row in rows:
+            group_value = normalize_group(row["group_name"]) if has_group and row["group_name"] else "reference"
+            if filter_group and group_value != filter_group:
+                continue
+
+            tags_value = _safe_parse_tags(row["tags_json"]) if has_tags else []
+            items.append(
+                {
+                    "ingest_id": row["ingest_id"],
+                    "source_type": row["source_type"],
+                    "source_ref": row["source_ref"],
+                    "channel": row["channel"],
+                    "doc_id": row["doc_id"],
+                    "chunks_created": int(row["chunks_created"] or 0),
+                    "status": row["status"],
+                    "timestamp": row["timestamp"],
+                    "group": group_value,
+                    "tags": tags_value,
+                }
+            )
+        return items
+    finally:
+        conn.close()
+
+
+def _safe_parse_tags(raw_tags: Any) -> list[str]:
+    if raw_tags is None:
+        return []
+    text = str(raw_tags).strip()
+    if not text:
+        return []
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return []
+    if isinstance(parsed, list):
+        return [str(item).strip() for item in parsed if str(item).strip()]
+    return []
+
+
+def _read_latest_evaluations(*, recent_limit: int) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    db_path = _db_path()
+    if not db_path.exists():
+        return None, []
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        table_exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='eval_results'"
+        ).fetchone()
+        if table_exists is None:
+            return None, []
+
+        rows = conn.execute(
+            """
+            SELECT run_date,
+                   COUNT(*) AS total,
+                   SUM(CASE WHEN passed THEN 1 ELSE 0 END) AS passed,
+                   AVG(latency_ms) AS avg_latency_ms
+            FROM eval_results
+            GROUP BY run_date
+            ORDER BY run_date DESC
+            LIMIT ?
+            """,
+            (recent_limit,),
+        ).fetchall()
+
+        summaries: list[dict[str, Any]] = []
+        for row in rows:
+            total = int(row["total"] or 0)
+            passed = int(row["passed"] or 0)
+            failed = max(total - passed, 0)
+            pass_rate = (passed / total) if total else 0.0
+            avg_latency = float(row["avg_latency_ms"]) if row["avg_latency_ms"] is not None else None
+            summaries.append(
+                {
+                    "run_date": row["run_date"],
+                    "total": total,
+                    "passed": passed,
+                    "failed": failed,
+                    "pass_rate": round(pass_rate, 4),
+                    "avg_latency_ms": round(avg_latency, 1) if avg_latency is not None else None,
+                }
+            )
+
+        latest = summaries[0] if summaries else None
+        return latest, summaries
+    finally:
+        conn.close()
+
+
+def _queue_eval_run(*, suite: str, backend: str) -> str:
+    eval_run_id = f"eval_{uuid.uuid4().hex[:12]}"
+    queued_at = _now_iso()
+    with EVAL_RUNS_LOCK:
+        EVAL_RUNS[eval_run_id] = {
+            "run_id": eval_run_id,
+            "status": "queued",
+            "suite": suite,
+            "backend": backend,
+            "queued_at": queued_at,
+            "started_at": None,
+            "ended_at": None,
+            "error": None,
+            "result": None,
+        }
+    return eval_run_id
+
+
+def _get_eval_run(eval_run_id: str) -> dict[str, Any]:
+    with EVAL_RUNS_LOCK:
+        payload = EVAL_RUNS.get(eval_run_id)
+        if payload is None:
+            return {
+                "run_id": eval_run_id,
+                "status": "failed",
+                "suite": "unknown",
+                "backend": "unknown",
+                "started_at": None,
+                "ended_at": _now_iso(),
+                "error": "run_not_found",
+                "result": None,
+            }
+        return dict(payload)
+
+
+def _list_eval_runs(*, include_terminal: bool) -> list[dict[str, Any]]:
+    with EVAL_RUNS_LOCK:
+        runs = [dict(item) for item in EVAL_RUNS.values()]
+    if not include_terminal:
+        runs = [item for item in runs if item.get("status") in {"queued", "running"}]
+    runs.sort(key=lambda item: item.get("queued_at") or "", reverse=True)
+    return runs
+
+
+def _execute_eval_run(
+    *,
+    eval_run_id: str,
+    suite: str,
+    backend: str,
+    webhook_url: str | None,
+    dry_run: bool,
+) -> None:
+    _update_eval_run(
+        eval_run_id,
+        status="running",
+        started_at=_now_iso(),
+        error=None,
+    )
+    try:
+        result = _run_eval_suite(
+            suite=suite,
+            backend=backend,
+            webhook_url=webhook_url,
+            dry_run=dry_run,
+        )
+    except Exception as exc:  # noqa: BLE001
+        _update_eval_run(
+            eval_run_id,
+            status="failed",
+            ended_at=_now_iso(),
+            error=str(exc),
+            result=None,
+        )
+        return
+
+    _update_eval_run(
+        eval_run_id,
+        status="completed",
+        ended_at=_now_iso(),
+        error=None,
+        result=result,
+    )
+
+
+def _update_eval_run(eval_run_id: str, **fields: Any) -> None:
+    with EVAL_RUNS_LOCK:
+        current = EVAL_RUNS.get(eval_run_id)
+        if current is None:
+            return
+        current.update(fields)
+
+
+def _run_eval_suite(
+    *,
+    suite: str,
+    backend: str,
+    webhook_url: str | None,
+    dry_run: bool,
+) -> dict[str, Any]:
+    suites = [suite]
+    if suite == "both":
+        suites = ["core", "job-search", "learning"]
+
+    run_results: list[dict[str, Any]] = []
+    for selected_suite in suites:
+        summary = _run_eval_once(
+            selected_suite=selected_suite,
+            backend=backend,
+            webhook_url=webhook_url,
+            dry_run=dry_run,
+        )
+        run_results.append(summary)
+
+    total = sum(int(item.get("total", 0) or 0) for item in run_results)
+    passed = sum(int(item.get("passed", 0) or 0) for item in run_results)
+    failed = max(total - passed, 0)
+    all_passed = all(str(item.get("status", "")).lower() == "pass" for item in run_results if item)
+    return {
+        "suite": suite,
+        "status": "pass" if all_passed else "fail",
+        "total": total,
+        "passed": passed,
+        "failed": failed,
+        "runs": run_results,
+    }
+
+
+def _run_eval_once(
+    *,
+    selected_suite: str,
+    backend: str,
+    webhook_url: str | None,
+    dry_run: bool,
+) -> dict[str, Any]:
+    cases_file = _eval_cases_file_for_suite(selected_suite)
+    command = [
+        sys.executable,
+        str(ROOT / "scripts" / "eval" / "run_eval.py"),
+        "--cases-file",
+        str(cases_file),
+        "--backend",
+        backend,
+    ]
+    if backend == "webhook":
+        resolved_webhook_url = webhook_url or _default_eval_webhook_url()
+        command.extend(["--webhook-url", resolved_webhook_url])
+    if dry_run:
+        command.append("--dry-run")
+
+    completed = subprocess.run(
+        command,
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+        timeout=DEFAULT_EVAL_RUN_TIMEOUT_SECONDS,
+        check=False,
+    )
+    if completed.returncode not in {0, 1}:
+        stderr = completed.stderr.strip() or completed.stdout.strip() or "unknown run_eval failure"
+        raise RuntimeError(f"Eval runner failed for suite={selected_suite}: {stderr}")
+
+    summary = _parse_eval_summary_output(completed.stdout)
+    summary["suite"] = selected_suite
+    summary["command_exit_code"] = completed.returncode
+    if completed.returncode == 1 and not summary.get("status"):
+        summary["status"] = "fail"
+    return summary
+
+
+def _eval_cases_file_for_suite(selected_suite: str) -> Path:
+    if selected_suite == "core":
+        return ROOT / "scripts" / "eval" / "eval_cases.json"
+    if selected_suite == "job-search":
+        return ROOT / "scripts" / "eval" / "job_search_eval_cases.json"
+    if selected_suite == "learning":
+        return ROOT / "scripts" / "eval" / "learning_eval_cases.json"
+    raise ValueError(f"Unsupported eval suite: {selected_suite}")
+
+
+def _default_eval_webhook_url() -> str:
+    explicit = os.getenv("RECALL_EVAL_WEBHOOK_URL", "").strip()
+    if explicit:
+        return explicit
+    n8n_host = os.getenv("N8N_HOST", "http://localhost:5678").strip() or "http://localhost:5678"
+    return f"{n8n_host.rstrip('/')}/webhook/recall-query"
+
+
+def _parse_eval_summary_output(raw_stdout: str) -> dict[str, Any]:
+    text = raw_stdout.strip()
+    if not text:
+        return {}
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return parsed
+    except json.JSONDecodeError:
+        pass
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        return {"raw_output": text}
+
+    try:
+        parsed = json.loads(text[start : end + 1])
+    except json.JSONDecodeError:
+        return {"raw_output": text}
+    if isinstance(parsed, dict):
+        return parsed
+    return {"raw_output": text}
 
 
 def _process_ingestion(*, channel: str, payload: dict[str, Any], dry_run: bool, request_id: str) -> JSONResponse:
@@ -1283,6 +2064,10 @@ def _request_id() -> str:
     return f"req_{uuid.uuid4().hex[:12]}"
 
 
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
 def _read_positive_int_env(name: str, default_value: int) -> int:
     raw = os.getenv(name, "").strip()
     if not raw:
@@ -1294,6 +2079,16 @@ def _read_positive_int_env(name: str, default_value: int) -> int:
     if parsed <= 0:
         return default_value
     return parsed
+
+
+def _cors_origins_from_env() -> list[str]:
+    raw = os.getenv("RECALL_API_CORS_ORIGINS", DEFAULT_CORS_ORIGINS).strip()
+    if not raw:
+        return [DEFAULT_CORS_ORIGINS]
+    if raw == "*":
+        return ["*"]
+    origins = [value.strip() for value in raw.split(",") if value.strip()]
+    return origins or [DEFAULT_CORS_ORIGINS]
 
 
 def _error_response(

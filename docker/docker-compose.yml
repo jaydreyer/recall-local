@@ -2,6 +2,15 @@
 # Existing Ollama/Qdrant/n8n/Open WebUI services stay as-is.
 
 services:
+  recall-ui:
+    build:
+      context: ../ui/dashboard
+      dockerfile: Dockerfile
+    container_name: recall-ui
+    ports:
+      - "8170:80"
+    restart: unless-stopped
+
   mkdocs:
     image: squidfunk/mkdocs-material:latest
     container_name: recall-mkdocs

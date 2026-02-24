@@ -29,6 +29,7 @@ Last updated: 2026-02-24
 - `caddy` container: `0.0.0.0:80,443`
 - `portainer` container: `0.0.0.0:9000`
 - `recall-mkdocs` container: `0.0.0.0:8100->8000`
+- `recall-ui` container: `0.0.0.0:8170->80` (defined in `docker/docker-compose.yml`; deployment verification pending on ai-lab)
 
 ## Data and Storage
 
@@ -86,13 +87,16 @@ Last updated: 2026-02-24
   - n8n container does not include `python3`; `Execute Command`-based Workflow 02 fails with `/bin/sh: python3: not found`.
   - Use HTTP bridge workflow for Workflow 02 in this environment.
 
-## Bridge API Controls (Phase 5A-5C)
+## Bridge API Controls (Phase 5A-5D)
 
 - API identity: `operations-v1`
 - Canonical base paths: `/v1/*`
 - Shared config endpoint:
   - canonical: `GET /v1/auto-tag-rules`
   - compatibility alias: `GET /config/auto-tags`
+- Canonical route policy:
+  - new clients/workflows/docs must use canonical `/v1/*` endpoints.
+  - compatibility aliases are retained only for backward compatibility during migration windows.
 - Canonical group model:
   - enum: `job-search|learning|project|reference|meeting`
   - fallback: invalid or missing group resolves to `reference`.
@@ -102,6 +106,23 @@ Last updated: 2026-02-24
 - Query payload support:
   - `POST /v1/rag-queries` accepts optional `filter_group` and `filter_tags`.
   - invalid `filter_group` values normalize to `reference`.
+- Activity API support:
+  - canonical: `GET /v1/activities`
+  - compatibility alias: `GET /activity`
+  - query params:
+    - `limit` (`1..200`, default `25`)
+    - `group` (optional canonical group filter)
+  - source table: `ingestion_log` with persisted `group_name` + `tags_json` columns.
+- Eval API support:
+  - canonical:
+    - `GET /v1/evaluations` (`?latest=true` for newest summary)
+    - `POST /v1/evaluation-runs`
+  - compatibility aliases:
+    - `GET /v1/evaluations/latest`
+    - `GET /eval/latest`
+    - `POST /eval/run`
+  - run behavior:
+    - `POST /v1/evaluation-runs` supports async queue mode (`wait=false`) and synchronous mode (`wait=true`) via `scripts/eval/run_eval.py`.
 - Vault support:
   - canonical:
     - `GET /v1/vault-files`
@@ -130,6 +151,8 @@ Last updated: 2026-02-24
 - Rate limiting env vars:
   - `RECALL_API_RATE_LIMIT_WINDOW_SECONDS` (default `60`)
   - `RECALL_API_RATE_LIMIT_MAX_REQUESTS` (default `120`)
+- CORS env var:
+  - `RECALL_API_CORS_ORIGINS` (default `*`, comma-separated origins supported)
 - Vault env vars:
   - `RECALL_VAULT_PATH` (default `~/obsidian-vault`)
   - `RECALL_VAULT_SYNC_MODE` (default `watch`)
@@ -156,7 +179,7 @@ Last updated: 2026-02-24
 - Phase 1: complete (`1A`-`1D` done; Workflow 02 webhook live and eval suite passing)
 - Phase 2: complete (`2A`-`2C` done; meeting pipeline + domain retrieval/evals operational)
 - Phase 3: complete (`3A` operator wrappers/forms, `3B` retrieval-quality track, `3C` ops hardening + portfolio bundle validated on ai-lab on 2026-02-24)
-- Phase 5: in progress (`5A`-`5C` complete locally; `5D` dashboard + `5E` extension + `5F` hardening pending)
+- Phase 5: in progress (`5A`-`5C` complete; `5D` dashboard kickoff implemented locally with API wiring and compose service; `5E` extension + `5F` hardening pending)
 
 ## Skills Baseline (local Codex)
 

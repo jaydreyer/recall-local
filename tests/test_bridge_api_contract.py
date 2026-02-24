@@ -3,7 +3,10 @@
 
 from __future__ import annotations
 
+import json
 import os
+import sqlite3
+import tempfile
 import unittest
 from contextlib import contextmanager
 from typing import Iterator
@@ -199,6 +202,155 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(mock_sync.call_args_list[0].kwargs["max_files"], 5)
         self.assertEqual(mock_sync.call_args_list[0].kwargs["vault_path"], "/tmp/vault")
         self.assertTrue(mock_sync.call_args_list[0].kwargs["dry_run"])
+
+    def test_activities_endpoint_supports_canonical_and_alias_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = os.path.join(temp_dir, "recall.db")
+            conn = sqlite3.connect(db_path)
+            conn.execute(
+                """
+                CREATE TABLE ingestion_log (
+                    ingest_id TEXT PRIMARY KEY,
+                    source_type TEXT NOT NULL,
+                    source_ref TEXT,
+                    channel TEXT NOT NULL,
+                    doc_id TEXT,
+                    chunks_created INTEGER DEFAULT 0,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    timestamp TEXT NOT NULL,
+                    group_name TEXT,
+                    tags_json TEXT
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO ingestion_log
+                    (ingest_id, source_type, source_ref, channel, doc_id, chunks_created, status, timestamp, group_name, tags_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "ingest-1",
+                    "url",
+                    "https://example.com/job",
+                    "bookmarklet",
+                    "doc-1",
+                    3,
+                    "completed",
+                    "2026-02-24T18:40:00+00:00",
+                    "job-search",
+                    json.dumps(["anthropic", "se-role"]),
+                ),
+            )
+            conn.execute(
+                """
+                INSERT INTO ingestion_log
+                    (ingest_id, source_type, source_ref, channel, doc_id, chunks_created, status, timestamp, group_name, tags_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "ingest-2",
+                    "url",
+                    "https://example.com/learn",
+                    "webhook",
+                    "doc-2",
+                    2,
+                    "completed",
+                    "2026-02-24T17:40:00+00:00",
+                    "learning",
+                    json.dumps(["rag"]),
+                ),
+            )
+            conn.commit()
+            conn.close()
+
+            env = {
+                "RECALL_API_KEY": "",
+                "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+                "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+                "RECALL_DB_PATH": db_path,
+            }
+            with build_client(env) as client:
+                canonical = client.get("/v1/activities?group=job-search")
+                alias = client.get("/activity?group=job-search")
+
+        self.assertEqual(canonical.status_code, 200)
+        self.assertEqual(alias.status_code, 200)
+        self.assertEqual(canonical.json()["workflow"], "workflow_05d_activity")
+        self.assertEqual(canonical.json()["count"], 1)
+        self.assertEqual(canonical.json()["items"][0]["group"], "job-search")
+        self.assertEqual(canonical.json(), alias.json())
+
+    def test_evaluations_collection_endpoint_supports_latest_query_param(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = os.path.join(temp_dir, "recall.db")
+            conn = sqlite3.connect(db_path)
+            conn.execute(
+                """
+                CREATE TABLE eval_results (
+                    eval_id TEXT PRIMARY KEY,
+                    question TEXT NOT NULL,
+                    expected_doc_id TEXT,
+                    actual_doc_id TEXT,
+                    citation_valid BOOLEAN,
+                    latency_ms INTEGER,
+                    passed BOOLEAN,
+                    run_date TEXT NOT NULL
+                )
+                """
+            )
+            conn.executemany(
+                """
+                INSERT INTO eval_results
+                    (eval_id, question, expected_doc_id, actual_doc_id, citation_valid, latency_ms, passed, run_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    ("eval-1", "q1", None, None, 1, 1000, 1, "2026-02-24T09:15:00+00:00"),
+                    ("eval-2", "q2", None, None, 1, 1100, 0, "2026-02-24T09:15:00+00:00"),
+                    ("eval-3", "q3", None, None, 1, 900, 1, "2026-02-24T08:15:00+00:00"),
+                ],
+            )
+            conn.commit()
+            conn.close()
+
+            env = {
+                "RECALL_API_KEY": "",
+                "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+                "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+                "RECALL_DB_PATH": db_path,
+            }
+            with build_client(env) as client:
+                canonical = client.get("/v1/evaluations?latest=true")
+                alias = client.get("/eval/latest")
+
+        self.assertEqual(canonical.status_code, 200)
+        self.assertEqual(alias.status_code, 200)
+        self.assertEqual(canonical.json()["workflow"], "workflow_05d_eval_latest")
+        self.assertEqual(canonical.json()["latest"]["run_date"], "2026-02-24T09:15:00+00:00")
+        self.assertEqual(canonical.json()["latest"]["total"], 2)
+        self.assertEqual(canonical.json()["latest"]["passed"], 1)
+        self.assertEqual(canonical.json()["latest"]["failed"], 1)
+        self.assertEqual(canonical.json(), alias.json())
+
+    def test_eval_run_endpoint_supports_wait_mode_and_alias(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        fake_summary = {"suite": "core", "status": "pass", "total": 3, "passed": 3, "failed": 0, "runs": []}
+        with patch("scripts.phase1.ingest_bridge_api._run_eval_suite", return_value=fake_summary):
+            with build_client(env) as client:
+                canonical = client.post("/v1/evaluation-runs", json={"suite": "core", "wait": True})
+                alias = client.post("/eval/run", json={"suite": "core", "wait": True})
+
+        self.assertEqual(canonical.status_code, 200)
+        self.assertEqual(alias.status_code, 200)
+        self.assertEqual(canonical.json()["workflow"], "workflow_05d_eval_run")
+        self.assertTrue(canonical.json()["accepted"])
+        self.assertEqual(canonical.json()["run"]["status"], "completed")
+        self.assertEqual(canonical.json()["run"]["result"]["status"], "pass")
 
 
 if __name__ == "__main__":

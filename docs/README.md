@@ -57,6 +57,8 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `../scripts/phase5/vault_sync.py`: Phase 5C Obsidian vault sync runtime (`--once` hash dedupe + `--watch` debounce mode with Syncthing-aware move handling).
 - `../scripts/phase5/run_vault_sync_now.sh`: Phase 5C one-command wrapper for one-shot vault sync.
 - `../scripts/phase5/run_vault_watch_now.sh`: Phase 5C one-command wrapper for continuous vault watch mode.
+- `../ui/dashboard/`: Phase 5D React/Vite dashboard app (Ingest, Query, Activity, Eval, Vault) with bridge API settings.
+- `../ui/dashboard/Dockerfile`: Phase 5D dashboard container build for `recall-ui`.
 - `../scripts/eval/run_phase3b_retrieval_experiment.sh`: Phase 3B retrieval experiment runner (`vector` baseline vs `hybrid+rereank` candidate).
 - `../scripts/eval/golden_sets/learning_golden_v1.json`: Versioned learning golden set with optional semantic-score references.
 - `../n8n/workflows/phase3a_bookmarklet_form_http.workflow.json`: Import-ready n8n bookmarklet-form workflow for bridge ingestion.

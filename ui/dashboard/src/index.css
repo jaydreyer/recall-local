@@ -1,0 +1,30 @@
+@import url("https://fonts.googleapis.com/css2?family=Chivo:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap");
+
+:root {
+  --font-body: "Chivo", "Avenir Next", sans-serif;
+  --font-mono: "Space Mono", "SF Mono", monospace;
+  --text-main: #eef3ff;
+  --text-muted: #a8b0c8;
+  --accent: #ef9f2f;
+  --accent-soft: #f2cc7d;
+  --line: rgba(188, 206, 255, 0.18);
+  --panel-bg: rgba(10, 13, 20, 0.88);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-body);
+  background: #0e1118;
+  color: var(--text-main);
+}

@@ -134,6 +134,7 @@ def ingest_request(request: IngestRequest, *, dry_run: bool = False) -> IngestRe
     conn: sqlite3.Connection | None = None
     if not dry_run:
         conn = sqlite3.connect(settings.db_path)
+        _ensure_ingestion_log_columns(conn)
         _insert_run_started(conn, run_id, request, started_at)
         _insert_ingestion_started(conn, ingest_id, request, started_at)
 
@@ -770,18 +771,57 @@ def _insert_run_started(conn: sqlite3.Connection, run_id: str, request: IngestRe
     conn.commit()
 
 
+def _ensure_ingestion_log_columns(conn: sqlite3.Connection) -> None:
+    columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(ingestion_log)").fetchall()}
+    if not columns:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ingestion_log (
+                ingest_id TEXT PRIMARY KEY,
+                source_type TEXT NOT NULL,
+                source_ref TEXT,
+                channel TEXT NOT NULL,
+                doc_id TEXT,
+                chunks_created INTEGER DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'pending',
+                timestamp TEXT NOT NULL,
+                group_name TEXT,
+                tags_json TEXT
+            )
+            """
+        )
+        conn.commit()
+        return
+    if "group_name" not in columns:
+        conn.execute("ALTER TABLE ingestion_log ADD COLUMN group_name TEXT")
+    if "tags_json" not in columns:
+        conn.execute("ALTER TABLE ingestion_log ADD COLUMN tags_json TEXT")
+    conn.commit()
+
+
 def _insert_ingestion_started(
     conn: sqlite3.Connection,
     ingest_id: str,
     request: IngestRequest,
     started_at: str,
 ) -> None:
+    normalized_group = normalize_group(request.group)
+    normalized_tags = [str(tag).strip() for tag in request.tags if str(tag).strip()]
     conn.execute(
         """
-        INSERT INTO ingestion_log (ingest_id, source_type, source_ref, channel, status, timestamp)
-        VALUES (?, ?, ?, ?, 'pending', ?)
+        INSERT INTO ingestion_log
+            (ingest_id, source_type, source_ref, channel, status, timestamp, group_name, tags_json)
+        VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)
         """,
-        (ingest_id, request.source_type, None, request.source_channel, started_at),
+        (
+            ingest_id,
+            request.source_type,
+            None,
+            request.source_channel,
+            started_at,
+            normalized_group,
+            json.dumps(normalized_tags),
+        ),
     )
     conn.commit()
 

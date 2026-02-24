@@ -22,7 +22,7 @@ Ship a demo-ready and daily-usable Recall.local where ingestion is low-friction 
 4. Obsidian sync runtime is now implemented (`scripts/phase5/vault_sync.py`) with one-shot + watch modes and bridge endpoints:
    - canonical: `GET /v1/vault-files`, `POST /v1/vault-syncs`
    - compatibility aliases: `GET /v1/vault/tree`, `POST /v1/vault/sync`
-5. No dedicated dashboard app or Chrome extension implementation exists yet.
+5. Dashboard kickoff is implemented locally under `ui/dashboard/` (React/Vite, five tabs, bridge wiring); Chrome extension implementation remains pending.
 
 ## Confirmed decisions (2026-02-24)
 
@@ -85,6 +85,10 @@ Compatibility aliases (kept for backward compatibility, hidden from OpenAPI docs
 5. `POST /meeting/actions`
 6. `POST /query/meeting`
 
+Compatibility policy:
+1. All new implementation work must target canonical `/v1/*` endpoints only.
+2. Compatibility aliases are legacy-only shims and must not be used for new clients, workflows, or docs examples.
+
 ### New endpoints (Phase 5)
 
 1. `GET /v1/auto-tag-rules` (compatibility alias: `GET /config/auto-tags`)
@@ -93,9 +97,9 @@ Compatibility aliases (kept for backward compatibility, hidden from OpenAPI docs
 4. `POST /ingest/gdoc`
 5. `POST /ingest/email`
 6. `POST /ingest/file` (multipart upload)
-7. `GET /activity` (`?group=` optional filter)
-8. `GET /eval/latest`
-9. `POST /eval/run`
+7. `GET /v1/activities` (`?group=` optional filter; compatibility alias: `GET /activity`)
+8. `GET /v1/evaluations` (`?latest=true` for newest summary; compatibility aliases: `GET /v1/evaluations/latest`, `GET /eval/latest`)
+9. `POST /v1/evaluation-runs` (compatibility alias: `POST /eval/run`)
 10. `GET /v1/vault-files`
 11. `POST /v1/vault-syncs`
 12. Compatibility aliases for current planning docs and clients:
@@ -182,6 +186,10 @@ Retrieval/query behavior:
 2. Optional API key header from env/local storage.
 3. Dashboard is read-write client only; bridge remains the execution backend.
 4. UI is deployed as separate `recall-ui` container.
+5. Dashboard Activity/Eval tabs consume canonical `operations-v1` routes:
+   - `GET /v1/activities`
+   - `GET /v1/evaluations` (`?latest=true` for newest summary)
+   - `POST /v1/evaluation-runs`
 
 ## Chrome extension plan
 
@@ -209,12 +217,13 @@ Retrieval/query behavior:
 1. `RECALL_API_KEY=`
 2. `RECALL_API_RATE_LIMIT_WINDOW_SECONDS=60`
 3. `RECALL_API_RATE_LIMIT_MAX_REQUESTS=120`
-4. `RECALL_VAULT_PATH=~/obsidian-vault`
-5. `RECALL_VAULT_SYNC_MODE=watch`
-6. `RECALL_VAULT_DEBOUNCE_SEC=5`
-7. `RECALL_VAULT_EXCLUDE_DIRS=_attachments,.obsidian,.trash,recall-artifacts`
-8. `RECALL_VAULT_WRITE_BACK=false`
-9. `RECALL_VAULT_IS_SYNCED=true`
+4. `RECALL_API_CORS_ORIGINS=*`
+5. `RECALL_VAULT_PATH=~/obsidian-vault`
+6. `RECALL_VAULT_SYNC_MODE=watch`
+7. `RECALL_VAULT_DEBOUNCE_SEC=5`
+8. `RECALL_VAULT_EXCLUDE_DIRS=_attachments,.obsidian,.trash,recall-artifacts`
+9. `RECALL_VAULT_WRITE_BACK=false`
+10. `RECALL_VAULT_IS_SYNCED=true`
 
 ## Recommended implementation order
 

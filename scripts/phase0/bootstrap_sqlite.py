@@ -51,7 +51,9 @@ CREATE TABLE IF NOT EXISTS ingestion_log (
     doc_id TEXT,
     chunks_created INTEGER DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'pending',
-    timestamp TEXT NOT NULL
+    timestamp TEXT NOT NULL,
+    group_name TEXT,
+    tags_json TEXT
 );
 """
 
