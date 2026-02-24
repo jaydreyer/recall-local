@@ -10,6 +10,7 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `Recall_local_Phase1D_Eval_Guide.md`: Eval harness runbook and troubleshooting protocol.
 - `Recall_local_Phase2_Guide.md`: Phase 2 sub-phases, execution order, and completion gate.
 - `Recall_local_Phase3_Guide.md`: Formal post-Phase-2 plan (UI-first operation, retrieval quality upgrades, and ops hardening).
+- `Recall_local_Phase3A_Operator_Runbook.md`: Operator-first runbook for no-curl ingestion/query/eval paths and UI payload templates.
 - `Recall_local_Phase2_Checklists.md`: Actionable implementation checklist for Phase 2 (`2B` and `2C`) including job-search domain mode tasks.
 - `Recall_local_Phase2_Demo_Rehearsal_Runbook.md`: One-command and manual script for logging a full clean Phase 2 rehearsal.
 - `Recall_local_RAG_Tuning_Playbook.md`: System-level RAG tuning summary (ingestion, retrieval, prompts, guardrails, reliability, evals).
@@ -27,6 +28,11 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `../scripts/phase2/job_search_manifest.example.json`: Starter manifest template for batch job-search ingestion.
 - `../scripts/phase2/learning_manifest.genieincodebottle.ai-lab.json`: Learning-lane manifest for non-interview AI training corpus.
 - `../scripts/rehearsal/run_phase2_demo_rehearsal.sh`: Automated Phase 2 rehearsal runner with timestamped log output.
+- `../scripts/phase3/run_ingest_manifest_now.sh`: Phase 3A one-command manifest ingestion wrapper.
+- `../scripts/phase3/run_query_mode_now.sh`: Phase 3A one-command query-mode wrapper (`default`, `job-search`, `learning`).
+- `../scripts/phase3/run_all_evals_now.sh`: Phase 3A one-command wrapper for all eval suites.
+- `../n8n/workflows/phase3a_bookmarklet_form_http.workflow.json`: Import-ready n8n bookmarklet-form workflow for bridge ingestion.
+- `../n8n/workflows/phase3a_meeting_action_form_http.workflow.json`: Import-ready n8n meeting-form workflow for Workflow 03 bridge route.
 
 ## Operational Documentation
 
@@ -35,6 +41,7 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `CONTEXT_KICKOFF_SHARING_GUIDE.md`: Shareable guide for adopting the context-kickoff pattern across projects.
 - `../n8n/workflows/PHASE1C_WORKFLOW02_WIRING.md`: Workflow 02 deployment and troubleshooting runbook.
 - `../n8n/workflows/PHASE2A_WORKFLOW03_WIRING.md`: Workflow 03 deployment and troubleshooting runbook.
+- `../n8n/workflows/PHASE3A_OPERATOR_FORMS_WIRING.md`: Phase 3A operator webhook/form import and smoke-test runbook.
 - `../scripts/phase2/verify_workflow03_bridge.py`: Workflow 03 bridge verification helper (contract + persisted evidence checks).
 
 ## Shareable Kit

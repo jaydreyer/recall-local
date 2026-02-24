@@ -1,0 +1,87 @@
+{
+  "name": "Recall Phase3A - Meeting Action Form (HTTP Bridge)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "recall-meeting-form",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-webhook-meeting-form",
+      "name": "Webhook Meeting Form",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "84fb93c4-5496-497a-bfda-337fb2afc390",
+      "position": [
+        280,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://100.116.103.78:8090/meeting/action-items",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.body ? $json.body : $json }}",
+        "options": {}
+      },
+      "id": "node-http-meeting-form",
+      "name": "HTTP Meeting Action Items",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        560,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { received: true, channel: 'meeting-form', bridge_result: $json } }}",
+        "options": {}
+      },
+      "id": "node-respond-meeting-form",
+      "name": "Respond to Form Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        840,
+        260
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Meeting Form": {
+      "main": [
+        [
+          {
+            "node": "HTTP Meeting Action Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Meeting Action Items": {
+      "main": [
+        [
+          {
+            "node": "Respond to Form Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

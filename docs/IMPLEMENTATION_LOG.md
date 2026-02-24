@@ -1,5 +1,70 @@
 # Recall.local Implementation Log
 
+## 2026-02-24 - Phase 3A webhook path normalization fix (short paths restored)
+
+### Outcome
+
+- Diagnosed Phase 3A workflow import behavior where webhook routes registered with generated path prefixes instead of short paths:
+  - observed DB path form: `workflowId/webhook%20node-name/recall-*`
+- Applied fix by ensuring webhook nodes include explicit `webhookId` in workflow exports:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase3a_bookmarklet_form_http.workflow.json`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase3a_meeting_action_form_http.workflow.json`
+- Verified short production endpoints now return `HTTP 200` on ai-lab:
+  - `POST http://localhost:5678/webhook/recall-bookmarklet-form`
+  - `POST http://localhost:5678/webhook/recall-meeting-form`
+- Updated wiring runbook note:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/PHASE3A_OPERATOR_FORMS_WIRING.md`
+
+## 2026-02-23 - Phase 3A operator wrappers validated on ai-lab + form workflow exports
+
+### Outcome
+
+- Synced local Phase 3A assets to ai-lab and performed spot-check:
+  - `rg` verification on `/home/jaydreyer/recall-local/docs` and `/home/jaydreyer/recall-local/scripts` confirmed wrapper/runbook content on host.
+- Ran new wrappers on ai-lab and captured evidence logs:
+  - ingest wrapper log:
+    - `/home/jaydreyer/recall-local/data/artifacts/phase3a/20260223T222659Z_run_ingest_manifest_now.log`
+  - query wrapper log:
+    - `/home/jaydreyer/recall-local/data/artifacts/phase3a/20260223T222813Z_run_query_mode_now.log`
+  - eval wrapper log:
+    - `/home/jaydreyer/recall-local/data/artifacts/phase3a/20260223T222813Z_run_all_evals_now.log`
+- Wrapper validation artifacts/results:
+  - Workflow 02 query artifact:
+    - `/home/jaydreyer/recall-local/data/artifacts_operator/rag/20260223T222819Z_5d4f9a6fb845424498f7c3d7a8f40f07.json`
+  - scheduled eval suite result JSON files:
+    - `/home/jaydreyer/recall-local/data/artifacts/evals/scheduled/20260223T222819Z_core_eval.json`
+    - `/home/jaydreyer/recall-local/data/artifacts/evals/scheduled/20260223T222819Z_job_search_eval.json`
+    - `/home/jaydreyer/recall-local/data/artifacts/evals/scheduled/20260223T222819Z_learning_eval.json`
+  - scheduled eval Markdown artifacts:
+    - `/home/jaydreyer/recall-local/data/artifacts/evals/20260223T222856Z_c95f8a32aadb49f68152a4fa6ea1d919.md`
+    - `/home/jaydreyer/recall-local/data/artifacts/evals/20260223T222942Z_2bdc9cdaf2f24437964c880ae3f2c294.md`
+    - `/home/jaydreyer/recall-local/data/artifacts/evals/20260223T223043Z_5831137a2f984e6fa8abc8362adfc836.md`
+- Added import-ready n8n operator form workflows:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase3a_bookmarklet_form_http.workflow.json`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase3a_meeting_action_form_http.workflow.json`
+- Added Phase 3A form wiring runbook:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/PHASE3A_OPERATOR_FORMS_WIRING.md`
+
+### Notes
+
+- ai-lab path `/home/jaydreyer/recall-local/data/artifacts/rag/` is root-owned; direct non-dry-run query wrapper writes fail there.
+- For wrapper validation in this thread, query run used:
+  - `DATA_ARTIFACTS=/home/jaydreyer/recall-local/data/artifacts_operator`
+
+## 2026-02-23 - Phase 3A kickoff: operator wrappers + runbook
+
+### Outcome
+
+- Started Phase 3A operator UX implementation with no-curl wrapper scripts:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase3/run_ingest_manifest_now.sh`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase3/run_query_mode_now.sh`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase3/run_all_evals_now.sh`
+- Added a dedicated Phase 3A operator runbook:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase3A_Operator_Runbook.md`
+  - includes Open WebUI payload templates (`default`, `job-search`, `learning`) and n8n form/webhook payload mappings for bookmarklet ingestion + meeting action extraction.
+- Updated docs index:
+  - `/Users/jaydreyer/projects/recall-local/docs/README.md`
+
 ## 2026-02-23 - Added formal Phase 3 guide + cleanup sweep fixes
 
 ### Outcome

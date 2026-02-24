@@ -1,0 +1,87 @@
+{
+  "name": "Recall Phase3A - Bookmarklet Form Ingest (HTTP Bridge)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "recall-bookmarklet-form",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-webhook-bookmarklet-form",
+      "name": "Webhook Bookmarklet Form",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "35c85cb6-657b-4775-85d0-21f92f28652a",
+      "position": [
+        280,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://recall-ingest-bridge:8090/ingest/bookmarklet",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.body ? $json.body : $json }}",
+        "options": {}
+      },
+      "id": "node-http-bookmarklet-form",
+      "name": "HTTP Bookmarklet Ingest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        560,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { received: true, channel: 'bookmarklet-form', bridge_result: $json } }}",
+        "options": {}
+      },
+      "id": "node-respond-bookmarklet-form",
+      "name": "Respond to Form Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        840,
+        260
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Bookmarklet Form": {
+      "main": [
+        [
+          {
+            "node": "HTTP Bookmarklet Ingest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Bookmarklet Ingest": {
+      "main": [
+        [
+          {
+            "node": "Respond to Form Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
