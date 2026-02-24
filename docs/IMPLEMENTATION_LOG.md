@@ -1,5 +1,18 @@
 # Recall.local Implementation Log
 
+## 2026-02-24 - Added Phase 3 completion summary and Phase 4 guide
+
+### Outcome
+
+- Added Phase 3 completion summary doc:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase3_Completion_Summary.md`
+  - includes final scope status, evidence paths, key outcomes, and follow-up items.
+- Added Phase 4 guide doc:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase4_Guide.md`
+  - defines sub-phases (`4A` reliability telemetry, `4B` CI/release guardrails, `4C` operator maintenance), acceptance checks, and a concrete milestone-1 backlog.
+- Updated docs index:
+  - `/Users/jaydreyer/projects/recall-local/docs/README.md`
+
 ## 2026-02-24 - Job-search eval consistency fix: target-company priorities case stabilized
 
 ### Outcome

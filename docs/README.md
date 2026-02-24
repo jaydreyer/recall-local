@@ -10,6 +10,8 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `Recall_local_Phase1D_Eval_Guide.md`: Eval harness runbook and troubleshooting protocol.
 - `Recall_local_Phase2_Guide.md`: Phase 2 sub-phases, execution order, and completion gate.
 - `Recall_local_Phase3_Guide.md`: Formal post-Phase-2 plan (UI-first operation, retrieval quality upgrades, and ops hardening).
+- `Recall_local_Phase3_Completion_Summary.md`: Phase 3 completion outcomes, evidence pointers, and residual follow-up.
+- `Recall_local_Phase4_Guide.md`: Phase 4 execution plan for reliability telemetry, CI/release guardrails, and maintenance hygiene.
 - `Recall_local_Phase3A_Operator_Runbook.md`: Operator-first runbook for no-curl ingestion/query/eval paths and UI payload templates.
 - `Recall_local_Phase3B_Retrieval_Quality_Runbook.md`: Hybrid/reranker retrieval controls, eval scoring lane, and baseline/candidate experiment runbook.
 - `Recall_local_Phase3C_Operations_Runbook.md`: Deterministic restart, service preflight, and backup/restore runbook for ops hardening.
