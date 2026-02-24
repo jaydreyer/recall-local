@@ -16,8 +16,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from dotenv import load_dotenv
-
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -80,6 +78,7 @@ class CaseResult:
 
 
 def load_settings() -> EvalSettings:
+    load_dotenv = _import_load_dotenv()
     load_dotenv(ROOT / "docker" / ".env")
     load_dotenv(ROOT / "docker" / ".env.example")
 
@@ -430,6 +429,14 @@ def _import_httpx():
     except ModuleNotFoundError as exc:
         raise RuntimeError("Missing dependency 'httpx'. Install with: pip install -r requirements.txt") from exc
     return httpx
+
+
+def _import_load_dotenv():
+    try:
+        from dotenv import load_dotenv  # noqa: PLC0415
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("Missing dependency 'python-dotenv'. Install with: pip install -r requirements.txt") from exc
+    return load_dotenv
 
 
 def _evaluate_payload(
