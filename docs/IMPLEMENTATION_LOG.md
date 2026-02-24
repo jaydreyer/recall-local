@@ -1,5 +1,17 @@
 # Recall.local Implementation Log
 
+## 2026-02-24 - Added Obsidian integration to Phase 4 backlog
+
+### Outcome
+
+- Updated Phase 4 guide with a dedicated Milestone 2 backlog for operator UX and Obsidian integration:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase4_Guide.md`
+- Backlog now explicitly tracks:
+  - Obsidian one-command ingest/query wrappers
+  - Obsidian integration runbook
+  - optional Obsidian HTTP action profile
+  - concrete acceptance checks for frictionless ingestion/query flow.
+
 ## 2026-02-24 - Phase 4A ai-lab soak evidence + hygiene remote check
 
 ### Outcome
