@@ -16,7 +16,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import httpx
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -411,6 +410,7 @@ def _execute_query(
         request_body["enable_reranker"] = enable_reranker
     if reranker_weight is not None:
         request_body["reranker_weight"] = reranker_weight
+    httpx = _import_httpx()
     response = httpx.post(webhook_url, json=request_body, timeout=90)
     response.raise_for_status()
 
@@ -422,6 +422,14 @@ def _execute_query(
     if isinstance(body, dict):
         return body
     raise ValueError("Webhook response was not a JSON object.")
+
+
+def _import_httpx():
+    try:
+        import httpx  # noqa: PLC0415
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("Missing dependency 'httpx'. Install with: pip install -r requirements.txt") from exc
+    return httpx
 
 
 def _evaluate_payload(
