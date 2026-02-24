@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Recall.local Extension Settings</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="options-body">
+    <main class="options-panel">
+      <header class="options-header">
+        <h1>Recall.local Extension Settings</h1>
+        <p>Configure bridge URL and API key used by popup and context menu capture.</p>
+      </header>
+
+      <form id="settings-form" class="settings-form">
+        <label class="field-label" for="api-base-url">API base URL</label>
+        <input id="api-base-url" name="api-base-url" type="url" required placeholder="http://localhost:8090" />
+
+        <label class="field-label" for="api-key">API key (optional)</label>
+        <input id="api-key" name="api-key" type="password" placeholder="X-API-Key value" />
+
+        <div class="button-row">
+          <button id="save-settings" class="primary-button" type="submit">Save settings</button>
+          <button id="test-connection" class="ghost-button" type="button">Test connection</button>
+        </div>
+      </form>
+
+      <p id="options-status" class="status muted">Settings are loaded from chrome.storage.local.</p>
+    </main>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

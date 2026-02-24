@@ -58,12 +58,12 @@ Source plan: `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Gu
 
 ## 5E. Chrome Extension
 
-- [ ] Create `chrome-extension/` Manifest V3 scaffold.
-- [ ] Build popup UI with group/tag auto-detect from shared config endpoint.
-- [ ] Add context menu ingest for page/link/selection.
-- [ ] Add keyboard shortcut (`Ctrl+Shift+R` equivalent command mapping).
-- [ ] Add extension config storage (`api_base_url`, `api_key`).
-- [ ] Validate extension flow against auth-enabled bridge.
+- [x] Create `chrome-extension/` Manifest V3 scaffold.
+- [x] Build popup UI with group/tag auto-detect from shared config endpoint.
+- [x] Add context menu ingest for page/link/selection.
+- [x] Add keyboard shortcut (`Ctrl+Shift+R` equivalent command mapping).
+- [x] Add extension config storage (`api_base_url`, `api_key`).
+- [x] Validate extension flow against auth-enabled bridge.
 
 ## 5E.1. Chrome Gmail Content Script (Deferred)
 

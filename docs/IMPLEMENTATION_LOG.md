@@ -1,5 +1,75 @@
 # Recall.local Implementation Log
 
+## 2026-02-24 - Phase 5E ai-lab sync + auth-enabled extension-flow validation
+
+### What was executed
+
+- Per mandatory sync rule, synced local `5E` extension/docs updates from Mac to ai-lab:
+  - attempted full sync:
+    - `rsync -avz --delete -e "ssh -i ~/.ssh/codex_ai_lab" --exclude '.git/' /Users/jaydreyer/projects/recall-local/ jaydreyer@100.116.103.78:/home/jaydreyer/recall-local/`
+  - observed known runtime-owned artifact permission failures under `data/artifacts/rag` (`rsync` exit `23`), then applied targeted fallback sync:
+    - `rsync -avz -e "ssh -i ~/.ssh/codex_ai_lab" --files-from=<phase5e-file-list> /Users/jaydreyer/projects/recall-local/ jaydreyer@100.116.103.78:/home/jaydreyer/recall-local/`
+- Ran required remote content spot-check after sync:
+  - `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "cd /home/jaydreyer/recall-local && rg -n 'open-recall-popup|contextMenus|/v1/auto-tag-rules|chrome-extension|Phase 5E kickoff|auth-enabled bridge' chrome-extension docs/Recall_local_Phase5_Checklists.md docs/IMPLEMENTATION_LOG.md docs/ENVIRONMENT_INVENTORY.md docs/README.md"`
+- Executed auth-enabled bridge validation using extension-equivalent requests inside ai-lab bridge container runtime:
+  - used `fastapi.testclient.TestClient(create_app())` with `RECALL_API_KEY=phase5e-test-key`
+  - verified `GET /v1/auto-tag-rules`:
+    - without `X-API-Key` => `401 unauthorized`
+    - with `X-API-Key` => `200` and `groups=5`
+  - verified `POST /v1/ingestions?dry_run=true` (extension-style `channel=bookmarklet` payload):
+    - without `X-API-Key` => `401 unauthorized`
+    - with `X-API-Key` => `200` on stable sample (`https://example.com`) with normalized `group` + `tags`.
+
+### Results
+
+- Sync gate: pass via targeted fallback sync; remote spot-check confirms extension/docs symbols are present on ai-lab.
+- Auth gate: pass for extension flow shape against auth-enabled bridge behavior:
+  - key required when `RECALL_API_KEY` is set.
+  - extension payload contract accepted on canonical endpoint (`/v1/ingestions`).
+- Updated `5E` checklist state:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Checklists.md`
+  - marked auth-enabled bridge validation item complete.
+
+## 2026-02-24 - Phase 5E kickoff: Chrome extension base scaffold (popup, context menu, shortcut)
+
+### Outcome
+
+- Implemented `5E` base extension scaffold under:
+  - `/Users/jaydreyer/projects/recall-local/chrome-extension/manifest.json`
+  - `/Users/jaydreyer/projects/recall-local/chrome-extension/background.js`
+  - `/Users/jaydreyer/projects/recall-local/chrome-extension/popup.html`
+  - `/Users/jaydreyer/projects/recall-local/chrome-extension/popup.js`
+  - `/Users/jaydreyer/projects/recall-local/chrome-extension/options.html`
+  - `/Users/jaydreyer/projects/recall-local/chrome-extension/options.js`
+  - `/Users/jaydreyer/projects/recall-local/chrome-extension/shared.js`
+  - `/Users/jaydreyer/projects/recall-local/chrome-extension/styles.css`
+- Added Manifest V3 wiring for:
+  - popup action UI
+  - background service worker (`type: module`)
+  - context menu handlers for page/link/selection capture
+  - keyboard command mapping (`Ctrl+Shift+R` / `Command+Shift+R`)
+  - local storage for extension settings.
+- Implemented popup capture flow:
+  - loads active-tab URL/title and optional highlighted selection text
+  - fetches shared group/tag rules from canonical bridge endpoint `GET /v1/auto-tag-rules`
+  - falls back to in-extension default rules when bridge config is unavailable
+  - posts canonical ingest payloads to `POST /v1/ingestions` using `channel=bookmarklet`.
+- Implemented extension settings page with persisted config fields:
+  - `api_base_url`
+  - `api_key`
+  - bridge health and config test actions against `/v1/healthz` + `/v1/auto-tag-rules`.
+- Updated checklist progress in:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Checklists.md`
+  - marked first five `5E` items complete; auth-enabled runtime validation remains open.
+
+### Validation
+
+- `jq . chrome-extension/manifest.json`
+- `node --check chrome-extension/background.js`
+- `node --check chrome-extension/popup.js`
+- `node --check chrome-extension/options.js`
+- `node --check chrome-extension/shared.js`
+
 ## 2026-02-24 - Canonical-route guardrail recorded for deferred alias removal
 
 ### Outcome

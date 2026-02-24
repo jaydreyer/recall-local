@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Recall.local Capture</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="popup-body">
+    <main class="panel">
+      <header class="panel-header">
+        <div class="brand-block">
+          <span class="brand-mark">RL</span>
+          <div>
+            <h1 class="brand-title">Recall.local</h1>
+            <p class="brand-subtitle">Quick Capture</p>
+          </div>
+        </div>
+        <button id="open-options" class="ghost-button" type="button">Settings</button>
+      </header>
+
+      <p id="status-message" class="status muted">Loading tab context...</p>
+
+      <section class="context-card">
+        <p id="page-title" class="context-title">Untitled page</p>
+        <p id="page-url" class="context-url">No active tab URL</p>
+      </section>
+
+      <section class="section">
+        <h2 class="section-title">Group</h2>
+        <div id="group-list" class="group-list"></div>
+      </section>
+
+      <section class="section">
+        <div class="section-row">
+          <h2 class="section-title">Tags</h2>
+          <span class="section-note">Auto-detected</span>
+        </div>
+        <div id="tag-list" class="tag-list"></div>
+        <div class="tag-editor">
+          <input id="tag-input" class="tag-input" type="text" placeholder="Type a tag and press Enter" />
+          <button id="add-tag" class="ghost-button" type="button">Add</button>
+        </div>
+        <div id="suggested-tags" class="suggested-tags"></div>
+      </section>
+
+      <section class="section">
+        <label class="checkbox-row">
+          <input id="include-selection" type="checkbox" />
+          <span>Include highlighted text from the active page</span>
+        </label>
+        <p id="selection-preview" class="selection-preview">No active text selection detected.</p>
+      </section>
+
+      <footer class="panel-footer">
+        <button id="capture-btn" class="primary-button" type="button">Send to Recall.local</button>
+      </footer>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
