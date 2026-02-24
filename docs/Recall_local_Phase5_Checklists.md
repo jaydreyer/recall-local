@@ -22,22 +22,22 @@ Source plan: `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Gu
 
 ## 5C. Obsidian Integration
 
-- [ ] Implement one-shot vault sync (`--once`) with hash-based change detection.
-- [ ] Implement watch mode (`--watch`) with debounce window.
-- [ ] Exclude `.obsidian`, `.trash`, `_attachments`, and `recall-artifacts`.
-- [ ] Exclude Syncthing temp files (`.syncthing.*` and `.tmp`).
-- [ ] Handle Syncthing rename flow via `on_moved` event handling.
-- [ ] Derive group from folder mapping in `config/auto_tag_rules.json`.
-- [ ] Parse Obsidian metadata:
-  - [ ] `[[wiki-links]]`
-  - [ ] hashtag tags
-  - [ ] frontmatter
-- [ ] Add optional write-back for Recall artifacts to `recall-artifacts/` (default disabled).
-- [ ] Add bridge endpoints:
-  - [ ] `GET /vault/tree`
-  - [ ] `POST /vault/sync`
-- [ ] Add tests for changed-file detection and excluded-path behavior.
-- [ ] Document Mac-primary + Syncthing mirror setup for ai-lab watcher deployment.
+- [x] Implement one-shot vault sync (`--once`) with hash-based change detection.
+- [x] Implement watch mode (`--watch`) with debounce window.
+- [x] Exclude `.obsidian`, `.trash`, `_attachments`, and `recall-artifacts`.
+- [x] Exclude Syncthing temp files (`.syncthing.*` and `.tmp`).
+- [x] Handle Syncthing rename flow via `on_moved` event handling.
+- [x] Derive group from folder mapping in `config/auto_tag_rules.json`.
+- [x] Parse Obsidian metadata:
+  - [x] `[[wiki-links]]`
+  - [x] hashtag tags
+  - [x] frontmatter
+- [x] Add optional write-back for Recall artifacts to `recall-artifacts/` (default disabled).
+- [x] Add bridge endpoints:
+  - [x] canonical: `GET /v1/vault-files`, `POST /v1/vault-syncs`
+  - [x] compatibility aliases: `GET /v1/vault/tree`, `POST /v1/vault/sync` (also unversioned `/vault/*`)
+- [x] Add tests for changed-file detection and excluded-path behavior.
+- [x] Document Mac-primary + Syncthing mirror setup for ai-lab watcher deployment.
 
 ## 5D. Dashboard UI
 

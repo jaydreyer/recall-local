@@ -14,6 +14,7 @@ services:
               python3 scripts/phase1/ingest_bridge_api.py --host 0.0.0.0 --port 8090"
     volumes:
       - /home/jaydreyer/recall-local:/home/jaydreyer/recall-local
+      - /home/jaydreyer/obsidian-vault:/home/jaydreyer/obsidian-vault
     environment:
       - OLLAMA_HOST=http://ollama:11434
       - QDRANT_HOST=http://qdrant:6333
@@ -24,6 +25,10 @@ services:
       - RECALL_DB_PATH=/home/jaydreyer/recall-local/data/recall.db
       - RECALL_URL_VERIFY_TLS=true
       - RECALL_URL_ALLOW_INSECURE_FALLBACK=true
+      - RECALL_VAULT_PATH=/home/jaydreyer/obsidian-vault
+      - RECALL_VAULT_DEBOUNCE_SEC=5
+      - RECALL_VAULT_EXCLUDE_DIRS=_attachments,.obsidian,.trash,recall-artifacts
+      - RECALL_VAULT_WRITE_BACK=false
     networks:
       - ollama_default
       - qdrant_default

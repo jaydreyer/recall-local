@@ -54,6 +54,9 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `../scripts/phase4/run_eval_soak_now.sh`: Phase 4A soak wrapper for repeated core/job-search eval runs plus thresholded trend summary output.
 - `../scripts/phase4/summarize_eval_trend.py`: Phase 4A trend aggregator that emits pass-rate/latency/failure-histogram JSON + Markdown artifacts.
 - `../scripts/phase4/run_repo_hygiene_check.sh`: Phase 4C hygiene checker for `._*` metadata files, ai-lab dirty repo state, and stale stashes.
+- `../scripts/phase5/vault_sync.py`: Phase 5C Obsidian vault sync runtime (`--once` hash dedupe + `--watch` debounce mode with Syncthing-aware move handling).
+- `../scripts/phase5/run_vault_sync_now.sh`: Phase 5C one-command wrapper for one-shot vault sync.
+- `../scripts/phase5/run_vault_watch_now.sh`: Phase 5C one-command wrapper for continuous vault watch mode.
 - `../scripts/eval/run_phase3b_retrieval_experiment.sh`: Phase 3B retrieval experiment runner (`vector` baseline vs `hybrid+rereank` candidate).
 - `../scripts/eval/golden_sets/learning_golden_v1.json`: Versioned learning golden set with optional semantic-score references.
 - `../n8n/workflows/phase3a_bookmarklet_form_http.workflow.json`: Import-ready n8n bookmarklet-form workflow for bridge ingestion.

@@ -30,6 +30,7 @@ from scripts.phase1.group_model import CANONICAL_GROUPS, normalize_group  # noqa
 from scripts.phase1.ingest_from_payload import payload_to_requests  # noqa: E402
 from scripts.phase1.ingestion_pipeline import ingest_request  # noqa: E402
 from scripts.phase1.rag_query import run_rag_query  # noqa: E402
+from scripts.phase5.vault_sync import list_vault_tree, run_vault_sync_once  # noqa: E402
 from scripts.phase2.meeting_action_items import run_meeting_action_items  # noqa: E402
 from scripts.phase2.meeting_from_payload import payload_to_meeting_kwargs  # noqa: E402
 
@@ -110,6 +111,32 @@ class MeetingWorkflowResponse(BaseModel):
     workflow: Literal["workflow_03_meeting_action_items"]
     dry_run: bool
     result: dict[str, Any]
+
+
+class VaultTreeResponse(BaseModel):
+    workflow: Literal["workflow_05c_vault_tree"]
+    vault_path: str
+    generated_at: str
+    file_count: int
+    tree: dict[str, Any]
+    files: list[dict[str, Any]]
+
+
+class VaultSyncResponse(BaseModel):
+    workflow: Literal["workflow_05c_vault_sync"]
+    mode: Literal["once"]
+    dry_run: bool
+    vault_path: str
+    state_db_path: str
+    scanned_files: int
+    changed_files: int
+    skipped_unchanged_files: int
+    removed_files: int
+    ingested_files: int
+    errors: list[dict[str, Any]]
+    ingested: list[dict[str, Any]]
+    synced_at: str
+    write_back_report: Optional[str] = None
 
 
 class AutoTagGroup(BaseModel):
@@ -274,6 +301,60 @@ MEETING_SUCCESS_EXAMPLE = {
     },
 }
 
+VAULT_TREE_SUCCESS_EXAMPLE = {
+    "workflow": "workflow_05c_vault_tree",
+    "vault_path": "/home/jaydreyer/obsidian-vault",
+    "generated_at": "2026-02-24T18:35:12+00:00",
+    "file_count": 2,
+    "tree": {
+        "name": ".",
+        "type": "directory",
+        "children": [
+            {
+                "name": "career",
+                "type": "directory",
+                "children": [{"name": "anthropic-prep.md", "type": "file", "path": "career/anthropic-prep.md"}],
+            },
+            {"name": "daily.md", "type": "file", "path": "daily.md"},
+        ],
+    },
+    "files": [
+        {
+            "path": "career/anthropic-prep.md",
+            "title": "Anthropic Interview Prep",
+            "group": "job-search",
+            "modified_at": "2026-02-24T18:30:00+00:00",
+        },
+        {"path": "daily.md", "title": "daily", "group": "reference", "modified_at": "2026-02-24T18:10:00+00:00"},
+    ],
+}
+
+VAULT_SYNC_SUCCESS_EXAMPLE = {
+    "workflow": "workflow_05c_vault_sync",
+    "mode": "once",
+    "dry_run": False,
+    "vault_path": "/home/jaydreyer/obsidian-vault",
+    "state_db_path": "/home/jaydreyer/recall-local/data/vault_sync_state.db",
+    "scanned_files": 10,
+    "changed_files": 2,
+    "skipped_unchanged_files": 8,
+    "removed_files": 0,
+    "ingested_files": 2,
+    "errors": [],
+    "ingested": [
+        {
+            "vault_path": "career/anthropic-prep.md",
+            "group": "job-search",
+            "tags": ["anthropic", "interview"],
+            "wiki_links": ["Behavioral Questions"],
+            "status": "completed",
+            "run_id": "run_abc123",
+            "doc_id": "doc_abc123",
+        }
+    ],
+    "synced_at": "2026-02-24T18:36:01+00:00",
+}
+
 INGEST_REQUEST_BODY = {
     "required": True,
     "content": {
@@ -427,6 +508,40 @@ MEETING_REQUEST_BODY = {
     },
 }
 
+VAULT_SYNC_REQUEST_BODY = {
+    "required": False,
+    "content": {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "dry_run": {
+                        "oneOf": [{"type": "boolean"}, {"type": "string"}, {"type": "integer"}],
+                        "description": "If true, run sync without durable ingestion/state writes.",
+                    },
+                    "max_files": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Optional cap on files processed for this sync request.",
+                    },
+                    "vault_path": {
+                        "type": "string",
+                        "description": "Optional path override for RECALL_VAULT_PATH.",
+                    },
+                },
+                "additionalProperties": False,
+            },
+            "examples": {
+                "defaultSync": {"summary": "Normal sync run", "value": {}},
+                "dryRunLimited": {
+                    "summary": "Dry-run sync with cap",
+                    "value": {"dry_run": True, "max_files": 25},
+                },
+            },
+        }
+    },
+}
+
 RATE_LIMIT_ERROR_RESPONSE = {
     429: {
         "model": ErrorResponse,
@@ -467,6 +582,7 @@ def create_app() -> FastAPI:
             {"name": "RAG Queries", "description": "Run cited retrieval-augmented queries."},
             {"name": "Meeting Action Items", "description": "Extract action items and structured notes from meeting transcripts."},
             {"name": "Auto Tag Rules", "description": "Read shared auto-tag configuration for dashboard and extension clients."},
+            {"name": "Vault", "description": "List vault notes and trigger Obsidian vault sync operations."},
         ],
     )
 
@@ -716,6 +832,120 @@ def create_app() -> FastAPI:
 
         return _process_meeting_action_items(payload=payload, dry_run=dry_run, request_id=request_id)
 
+    @app.get(
+        f"{API_PREFIX}/vault-files",
+        tags=["Vault"],
+        summary="List vault files",
+        description=(
+            "Returns vault markdown notes as both a flat list and a directory tree representation. "
+            "Excluded folders and Syncthing temp files are omitted."
+        ),
+        response_model=VaultTreeResponse,
+        responses={
+            200: {"description": "Vault tree generated.", "content": {"application/json": {"example": VAULT_TREE_SUCCESS_EXAMPLE}}},
+            400: {"model": ErrorResponse, "description": "Vault path is missing or invalid.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            500: {"model": ErrorResponse, "description": "Vault listing failed.", "content": {"application/json": {"example": ERROR_EXAMPLE_WORKFLOW}}},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+    )
+    async def get_vault_files(request: Request) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        try:
+            payload = list_vault_tree()
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message=f"Invalid vault configuration: {exc}",
+                request_id=request_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return _error_response(
+                status_code=500,
+                code="workflow_failed",
+                message=f"Vault listing failed: {exc}",
+                request_id=request_id,
+            )
+        return _json_response(200, payload)
+
+    @app.get(f"{API_PREFIX}/vault/tree", include_in_schema=False)
+    @app.get("/vault/tree", include_in_schema=False)
+    async def get_vault_files_alias(request: Request) -> JSONResponse:
+        return await get_vault_files(request)
+
+    @app.post(
+        f"{API_PREFIX}/vault-syncs",
+        tags=["Vault"],
+        summary="Create vault sync operation",
+        description=(
+            "Runs one-shot vault sync with hash-based change detection and metadata extraction "
+            "for wiki-links, hashtags, and frontmatter."
+        ),
+        response_model=VaultSyncResponse,
+        responses={
+            200: {"description": "Vault sync completed.", "content": {"application/json": {"example": VAULT_SYNC_SUCCESS_EXAMPLE}}},
+            400: {"model": ErrorResponse, "description": "Sync options are invalid.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            500: {"model": ErrorResponse, "description": "Vault sync execution failed.", "content": {"application/json": {"example": ERROR_EXAMPLE_WORKFLOW}}},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+        openapi_extra={"requestBody": VAULT_SYNC_REQUEST_BODY},
+    )
+    async def create_vault_sync(request: Request) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        try:
+            payload = await _read_json_body(request)
+        except ValueError as exc:
+            return _error_response(status_code=400, code="invalid_json", message=str(exc), request_id=request_id)
+
+        try:
+            dry_run_value = _normalize_bool(payload.get("dry_run", False), field_name="dry_run")
+            max_files_value = _normalize_optional_positive_int(payload.get("max_files"))
+            vault_path_value = _normalize_optional_string(payload.get("vault_path"))
+        except ValueError as exc:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message=f"Invalid vault sync options: {exc}",
+                request_id=request_id,
+            )
+
+        try:
+            result = run_vault_sync_once(
+                vault_path=vault_path_value,
+                dry_run=dry_run_value,
+                max_files=max_files_value,
+            )
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message=f"Invalid vault configuration: {exc}",
+                request_id=request_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return _error_response(
+                status_code=500,
+                code="workflow_failed",
+                message=f"Vault sync failed: {exc}",
+                request_id=request_id,
+            )
+        return _json_response(200, result)
+
+    @app.post(f"{API_PREFIX}/vault/sync", include_in_schema=False)
+    @app.post("/vault/sync", include_in_schema=False)
+    async def create_vault_sync_alias(request: Request) -> JSONResponse:
+        return await create_vault_sync(request)
+
     @app.get("/{_path:path}", include_in_schema=False)
     async def not_found_get(_path: str) -> JSONResponse:
         _ = _path
@@ -815,7 +1045,11 @@ def _process_rag_query(*, payload: dict[str, Any], dry_run: bool, request_id: st
         retrieval_mode_value = str(retrieval_mode) if retrieval_mode is not None else None
         hybrid_alpha_value = float(hybrid_alpha) if hybrid_alpha is not None else None
         reranker_weight_value = float(reranker_weight) if reranker_weight is not None else None
-        enable_reranker_value = _normalize_bool(enable_reranker) if enable_reranker is not None else None
+        enable_reranker_value = (
+            _normalize_bool(enable_reranker, field_name="enable_reranker")
+            if enable_reranker is not None
+            else None
+        )
     except (TypeError, ValueError) as exc:
         return _error_response(
             status_code=400,
@@ -912,7 +1146,7 @@ def _normalize_group_filter(value: Any) -> str | None:
     return normalize_group(raw)
 
 
-def _normalize_bool(value: Any) -> bool:
+def _normalize_bool(value: Any, *, field_name: str = "value") -> bool:
     if isinstance(value, bool):
         return value
     if isinstance(value, (int, float)):
@@ -923,7 +1157,23 @@ def _normalize_bool(value: Any) -> bool:
             return True
         if normalized in {"0", "false", "no", "off", ""}:
             return False
-    raise ValueError("enable_reranker must be boolean-like.")
+    raise ValueError(f"{field_name} must be boolean-like.")
+
+
+def _normalize_optional_positive_int(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    parsed = int(value)
+    if parsed <= 0:
+        raise ValueError("max_files must be a positive integer.")
+    return parsed
+
+
+def _normalize_optional_string(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 async def _read_json_body(request: Request) -> dict[str, Any]:

@@ -1,5 +1,105 @@
 # Recall.local Implementation Log
 
+## 2026-02-24 - Phase 5C bridge runtime config update (default vault path)
+
+### Outcome
+
+- Updated bridge compose runtime env so vault endpoints resolve a default path without request-level overrides:
+  - `/Users/jaydreyer/projects/recall-local/docker/phase1b-ingest-bridge.compose.yml`
+  - added:
+    - `RECALL_VAULT_PATH=/home/jaydreyer/obsidian-vault`
+    - `RECALL_VAULT_DEBOUNCE_SEC=5`
+    - `RECALL_VAULT_EXCLUDE_DIRS=_attachments,.obsidian,.trash,recall-artifacts`
+    - `RECALL_VAULT_WRITE_BACK=false`
+- Added bridge compose bind mount so container can access host vault mirror path:
+  - `/home/jaydreyer/obsidian-vault:/home/jaydreyer/obsidian-vault`
+- Operational step on ai-lab:
+  - ensured `/home/jaydreyer/obsidian-vault` directory exists before bridge restart.
+ - Runtime verification after compose recreate on ai-lab:
+   - container env shows `RECALL_VAULT_PATH=/home/jaydreyer/obsidian-vault`
+   - container mount shows `/home/jaydreyer/obsidian-vault -> /home/jaydreyer/obsidian-vault`
+   - `GET /v1/vault-files` returns `HTTP 200` with `workflow_05c_vault_tree` and `file_count=0` (empty vault baseline).
+
+## 2026-02-24 - Phase 5C ai-lab sync + runtime validation
+
+### What was executed
+
+- Attempted required full sync gate:
+  - `rsync -avz --delete -e "ssh -i ~/.ssh/codex_ai_lab" --exclude '.git/' /Users/jaydreyer/projects/recall-local/ jaydreyer@100.116.103.78:/home/jaydreyer/recall-local/`
+- Observed known runtime-owned artifact permission failures under `data/artifacts/rag` and `__pycache__` (`rsync` exit `23`), then applied documented fallback:
+  - targeted sync via `--files-from` for changed Phase 5C files only.
+- Per sync gate rule, ran remote content spot-check:
+  - `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "cd /home/jaydreyer/recall-local && rg -n 'vault-syncs|vault-files|run_vault_sync_once|on_moved|\\.syncthing\\.|workflow_05c_vault_sync' scripts/phase1 scripts/phase5 tests"`
+- Restarted bridge service to load synced code:
+  - `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "docker restart recall-ingest-bridge"`
+- Bridge contract/runtime smoke checks on ai-lab host:
+  - OpenAPI probe confirmed `/v1/vault-files` and `/v1/vault-syncs` are present.
+  - `GET /v1/vault-files` and `GET /v1/vault/tree` return `400 validation_failed` when default vault path is not configured in container runtime.
+  - `POST /v1/vault-syncs` and `POST /v1/vault/sync` with `{"dry_run":true,"max_files":1,"vault_path":"/home/jaydreyer/recall-local/docs"}` return `HTTP 200` and `workflow_05c_vault_sync`.
+- Watcher smoke validation on ai-lab host:
+  - first run failed due missing `watchdog` dependency.
+  - installed runtime dependency on host python:
+    - `python3 -m pip install --user --break-system-packages watchdog`
+  - re-ran watch test against temp vault, renamed note file, and verified moved-event trigger:
+    - log marker: `"trigger": "moved"`.
+- One-shot vault sync remediation:
+  - observed `attempt to write a readonly database` on `scripts/phase5/vault_sync.py --once`.
+  - root cause: `data/vault_sync_state.db` was root-owned from prior root-context runs.
+  - fix applied on ai-lab:
+    - `docker exec recall-ingest-bridge sh -lc 'chown 1000:1000 /home/jaydreyer/recall-local/data/vault_sync_state.db'`
+  - post-fix verification:
+    - `python3 scripts/phase5/vault_sync.py --once` returns `ingested_files=1` and `errors=[]`.
+
+### Results
+
+- Remote spot-check: pass (new vault symbols present on ai-lab in expected files).
+- Bridge runtime route checks: pass for canonical and compatibility sync routes with dry-run payload.
+- Watcher smoke: pass after `watchdog` install (rename flow produced moved-triggered sync event).
+
+## 2026-02-24 - Phase 5C closure: Obsidian vault sync runtime + vault API endpoints
+
+### Outcome
+
+- Completed `5C` Obsidian integration runtime in:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase5/vault_sync.py`
+  - one-shot sync (`--once`) with hash-based dedupe state in SQLite (`data/vault_sync_state.db`)
+  - watch mode (`--watch`) with debounce and explicit `on_moved` handling for Syncthing rename events
+  - Obsidian metadata extraction:
+    - `[[wiki-links]]`
+    - hashtag tags
+    - frontmatter
+  - folder-to-group mapping via `config/auto_tag_rules.json` `vault_folders`
+  - exclusion handling for `.obsidian`, `.trash`, `_attachments`, `recall-artifacts`, `.syncthing.*`, and `.tmp`
+  - optional write-back reports to `recall-artifacts/sync-reports/` when `RECALL_VAULT_WRITE_BACK=true`
+- Added Phase 5C operator wrappers:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase5/run_vault_sync_now.sh`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase5/run_vault_watch_now.sh`
+- Extended bridge API with vault resource endpoints in:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py`
+  - canonical endpoints:
+    - `GET /v1/vault-files`
+    - `POST /v1/vault-syncs`
+  - compatibility aliases:
+    - `GET /v1/vault/tree`, `GET /vault/tree`
+    - `POST /v1/vault/sync`, `POST /vault/sync`
+- Added/expanded tests:
+  - `/Users/jaydreyer/projects/recall-local/tests/test_phase5c_vault_sync.py`
+  - `/Users/jaydreyer/projects/recall-local/tests/test_bridge_api_contract.py`
+- Updated env/docs for 5C runtime and deployment notes:
+  - `/Users/jaydreyer/projects/recall-local/docker/.env.example`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Checklists.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Guide.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/README.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/ENVIRONMENT_INVENTORY.md`
+- Added `watchdog` dependency:
+  - `/Users/jaydreyer/projects/recall-local/requirements.txt`
+
+### Validation
+
+- `python3 -m py_compile scripts/phase5/vault_sync.py scripts/phase1/ingest_bridge_api.py`
+- `python3 -m unittest discover -s tests -p 'test_phase5c_vault_sync.py'`
+- `python3 -m unittest discover -s tests -p 'test_bridge_api_contract.py'`
+
 ## 2026-02-24 - Phase 5B ai-lab sync + runtime validation
 
 ### What was executed

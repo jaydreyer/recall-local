@@ -36,6 +36,7 @@ Last updated: 2026-02-24
 - Processed documents: `/home/jaydreyer/recall-local/data/processed`
 - Artifacts: `/home/jaydreyer/recall-local/data/artifacts`
 - SQLite DB: `/home/jaydreyer/recall-local/data/recall.db`
+- Vault sync state DB (Phase 5C): `/home/jaydreyer/recall-local/data/vault_sync_state.db`
 
 ## Qdrant
 
@@ -85,7 +86,7 @@ Last updated: 2026-02-24
   - n8n container does not include `python3`; `Execute Command`-based Workflow 02 fails with `/bin/sh: python3: not found`.
   - Use HTTP bridge workflow for Workflow 02 in this environment.
 
-## Bridge API Controls (Phase 5A-5B)
+## Bridge API Controls (Phase 5A-5C)
 
 - API identity: `operations-v1`
 - Canonical base paths: `/v1/*`
@@ -101,11 +102,43 @@ Last updated: 2026-02-24
 - Query payload support:
   - `POST /v1/rag-queries` accepts optional `filter_group` and `filter_tags`.
   - invalid `filter_group` values normalize to `reference`.
+- Vault support:
+  - canonical:
+    - `GET /v1/vault-files`
+    - `POST /v1/vault-syncs`
+  - compatibility aliases:
+    - `GET /v1/vault/tree` and `GET /vault/tree`
+    - `POST /v1/vault/sync` and `POST /vault/sync`
+  - sync implementation path: `scripts/phase5/vault_sync.py`
+  - wrappers:
+    - `scripts/phase5/run_vault_sync_now.sh`
+    - `scripts/phase5/run_vault_watch_now.sh`
+  - runtime validation (ai-lab, 2026-02-24):
+    - OpenAPI includes `/v1/vault-files` and `/v1/vault-syncs`.
+    - `POST /v1/vault-syncs` dry-run with explicit `vault_path` returns `HTTP 200`.
+    - before vault env+mount wiring, `GET /v1/vault-files` returned `400 validation_failed` (invalid default vault path).
+    - after vault env+mount wiring, `GET /v1/vault-files` returns `HTTP 200` (empty tree when vault has no notes).
+  - bridge container runtime env (ai-lab compose):
+    - `RECALL_VAULT_PATH=/home/jaydreyer/obsidian-vault`
+    - `RECALL_VAULT_DEBOUNCE_SEC=5`
+    - `RECALL_VAULT_EXCLUDE_DIRS=_attachments,.obsidian,.trash,recall-artifacts`
+    - `RECALL_VAULT_WRITE_BACK=false`
+  - bridge compose mount (ai-lab):
+    - `/home/jaydreyer/obsidian-vault:/home/jaydreyer/obsidian-vault`
 - Optional auth:
   - `RECALL_API_KEY` enforces `X-API-Key` header when set.
 - Rate limiting env vars:
   - `RECALL_API_RATE_LIMIT_WINDOW_SECONDS` (default `60`)
   - `RECALL_API_RATE_LIMIT_MAX_REQUESTS` (default `120`)
+- Vault env vars:
+  - `RECALL_VAULT_PATH` (default `~/obsidian-vault`)
+  - `RECALL_VAULT_SYNC_MODE` (default `watch`)
+  - `RECALL_VAULT_DEBOUNCE_SEC` (default `5`)
+  - `RECALL_VAULT_EXCLUDE_DIRS` (default `_attachments,.obsidian,.trash,recall-artifacts`)
+  - `RECALL_VAULT_WRITE_BACK` (default `false`)
+  - `RECALL_VAULT_IS_SYNCED` (default `true`)
+- ai-lab host dependency note (watch mode):
+  - `watchdog` required for `--watch` mode (`pip install watchdog`).
 
 ## Execution Debug Rule (n8n)
 
@@ -123,6 +156,7 @@ Last updated: 2026-02-24
 - Phase 1: complete (`1A`-`1D` done; Workflow 02 webhook live and eval suite passing)
 - Phase 2: complete (`2A`-`2C` done; meeting pipeline + domain retrieval/evals operational)
 - Phase 3: complete (`3A` operator wrappers/forms, `3B` retrieval-quality track, `3C` ops hardening + portfolio bundle validated on ai-lab on 2026-02-24)
+- Phase 5: in progress (`5A`-`5C` complete locally; `5D` dashboard + `5E` extension + `5F` hardening pending)
 
 ## Skills Baseline (local Codex)
 

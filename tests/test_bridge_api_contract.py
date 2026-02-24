@@ -143,6 +143,63 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(mock_rag.call_args.kwargs["filter_group"], "reference")
 
+    def test_vault_tree_endpoint_returns_payload(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        payload = {
+            "workflow": "workflow_05c_vault_tree",
+            "vault_path": "/tmp/vault",
+            "generated_at": "2026-02-24T18:35:12+00:00",
+            "file_count": 1,
+            "tree": {"name": ".", "type": "directory", "children": []},
+            "files": [{"path": "notes/a.md", "title": "a", "group": "reference", "modified_at": "2026-02-24T18:30:00+00:00"}],
+        }
+        with patch("scripts.phase1.ingest_bridge_api.list_vault_tree", return_value=payload):
+            with build_client(env) as client:
+                response = client.get("/v1/vault-files")
+                alias = client.get("/v1/vault/tree")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(alias.status_code, 200)
+        self.assertEqual(response.json()["workflow"], "workflow_05c_vault_tree")
+        self.assertEqual(alias.json(), response.json())
+
+    def test_vault_sync_endpoint_accepts_body_and_runs_sync(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        sync_payload = {
+            "workflow": "workflow_05c_vault_sync",
+            "mode": "once",
+            "dry_run": True,
+            "vault_path": "/tmp/vault",
+            "state_db_path": "/tmp/state.db",
+            "scanned_files": 1,
+            "changed_files": 1,
+            "skipped_unchanged_files": 0,
+            "removed_files": 0,
+            "ingested_files": 1,
+            "errors": [],
+            "ingested": [],
+            "synced_at": "2026-02-24T18:36:01+00:00",
+        }
+        with patch("scripts.phase1.ingest_bridge_api.run_vault_sync_once", return_value=sync_payload) as mock_sync:
+            with build_client(env) as client:
+                response = client.post("/v1/vault-syncs", json={"dry_run": True, "max_files": 5, "vault_path": "/tmp/vault"})
+                alias = client.post("/v1/vault/sync", json={"dry_run": True})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(alias.status_code, 200)
+        self.assertEqual(response.json()["workflow"], "workflow_05c_vault_sync")
+        self.assertEqual(mock_sync.call_args_list[0].kwargs["max_files"], 5)
+        self.assertEqual(mock_sync.call_args_list[0].kwargs["vault_path"], "/tmp/vault")
+        self.assertTrue(mock_sync.call_args_list[0].kwargs["dry_run"])
+
 
 if __name__ == "__main__":
     unittest.main()

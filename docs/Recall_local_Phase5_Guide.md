@@ -19,7 +19,10 @@ Ship a demo-ready and daily-usable Recall.local where ingestion is low-friction 
    - `POST /meeting/action-items`
 2. n8n workflows and bridge path are operational for ingestion/query/meeting pipelines.
 3. Phase 4 telemetry and CI scaffolding are in place but soak thresholds are currently red.
-4. No dedicated dashboard app, Chrome extension, or Obsidian sync implementation exists yet.
+4. Obsidian sync runtime is now implemented (`scripts/phase5/vault_sync.py`) with one-shot + watch modes and bridge endpoints:
+   - canonical: `GET /v1/vault-files`, `POST /v1/vault-syncs`
+   - compatibility aliases: `GET /v1/vault/tree`, `POST /v1/vault/sync`
+5. No dedicated dashboard app or Chrome extension implementation exists yet.
 
 ## Confirmed decisions (2026-02-24)
 
@@ -93,8 +96,11 @@ Compatibility aliases (kept for backward compatibility, hidden from OpenAPI docs
 7. `GET /activity` (`?group=` optional filter)
 8. `GET /eval/latest`
 9. `POST /eval/run`
-10. `GET /vault/tree`
-11. `POST /vault/sync`
+10. `GET /v1/vault-files`
+11. `POST /v1/vault-syncs`
+12. Compatibility aliases for current planning docs and clients:
+   - `GET /v1/vault/tree`, `GET /vault/tree`
+   - `POST /v1/vault/sync`, `POST /vault/sync`
 
 ## Data contract updates (ingestion + retrieval)
 
@@ -139,6 +145,23 @@ Retrieval/query behavior:
 4. Extract `[[wiki-links]]`, hashtag tags, and frontmatter fields.
 5. Exclude Syncthing transient files (`.syncthing.*`, `.tmp`) from ingestion.
 6. Write-back remains disabled unless explicitly enabled.
+
+### Operator deployment notes (Mac-primary + ai-lab mirror)
+
+1. Keep the primary vault on Mac at `~/obsidian-vault` and mirror it to ai-lab at the same path using Syncthing.
+2. Set environment on ai-lab:
+   - `RECALL_VAULT_PATH=~/obsidian-vault`
+   - `RECALL_VAULT_SYNC_MODE=watch`
+   - `RECALL_VAULT_DEBOUNCE_SEC=5`
+   - `RECALL_VAULT_EXCLUDE_DIRS=_attachments,.obsidian,.trash,recall-artifacts`
+   - `RECALL_VAULT_WRITE_BACK=false`
+3. Run one-shot sync for validation:
+   - `scripts/phase5/run_vault_sync_now.sh`
+4. Run watcher for continuous ingestion:
+   - `scripts/phase5/run_vault_watch_now.sh`
+5. Use bridge endpoints for UI/automation flows:
+   - `GET /v1/vault-files`
+   - `POST /v1/vault-syncs`
 
 ## Dashboard implementation plan
 
