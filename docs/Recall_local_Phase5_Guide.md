@@ -201,7 +201,7 @@ Retrieval/query behavior:
 
 1. Auth + rate limiting on bridge (Phase 5A).
 2. Pytest suite target: 25-30 tests with mocks.
-3. Docker compose consolidation into a single operator entrypoint.
+3. Docker compose consolidation into a single operator entrypoint (`scripts/phase5/run_operator_stack_now.sh`).
 4. Cloud provider retry parity in `scripts/llm_client.py`.
 
 ## Environment additions (Phase 5)

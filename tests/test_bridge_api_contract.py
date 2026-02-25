@@ -354,6 +354,88 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(canonical.json()["run"]["status"], "completed")
         self.assertEqual(canonical.json()["run"]["result"]["status"], "pass")
 
+    def test_health_endpoint_is_canonical_only(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        with build_client(env) as client:
+            canonical = client.get("/v1/healthz")
+            legacy_healthz = client.get("/healthz")
+            legacy_health = client.get("/health")
+
+        self.assertEqual(canonical.status_code, 200)
+        self.assertEqual(canonical.json(), {"status": "ok"})
+        self.assertEqual(legacy_healthz.status_code, 404)
+        self.assertEqual(legacy_healthz.json()["error"]["code"], "not_found")
+        self.assertEqual(legacy_health.status_code, 404)
+        self.assertEqual(legacy_health.json()["error"]["code"], "not_found")
+
+    def test_ingestion_requires_channel_on_canonical_endpoint(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        with build_client(env) as client:
+            response = client.post("/v1/ingestions?dry_run=true", json={"type": "url", "content": "https://example.com"})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"]["code"], "validation_failed")
+        self.assertEqual(response.json()["error"]["details"][0]["field"], "channel")
+
+    def test_openapi_schema_lists_canonical_paths_only(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        with build_client(env) as client:
+            response = client.get("/openapi.json")
+
+        self.assertEqual(response.status_code, 200)
+        schema = response.json()
+        paths = set(schema.get("paths", {}).keys())
+        required_paths = {
+            "/v1/healthz",
+            "/v1/auto-tag-rules",
+            "/v1/ingestions",
+            "/v1/rag-queries",
+            "/v1/meeting-action-items",
+            "/v1/activities",
+            "/v1/evaluations",
+            "/v1/evaluation-runs",
+            "/v1/vault-files",
+            "/v1/vault-syncs",
+        }
+        forbidden_paths = {
+            "/config/auto-tags",
+            "/healthz",
+            "/health",
+            "/ingest/{channel}",
+            "/ingestions",
+            "/query/rag",
+            "/rag/query",
+            "/rag-queries",
+            "/meeting/action-items",
+            "/meeting/actions",
+            "/query/meeting",
+            "/meeting-action-items",
+            "/activity",
+            "/eval/latest",
+            "/eval/run",
+            "/v1/evaluations/latest",
+            "/v1/vault/tree",
+            "/vault/tree",
+            "/v1/vault/sync",
+            "/vault/sync",
+        }
+        for path in required_paths:
+            self.assertIn(path, paths)
+        for path in forbidden_paths:
+            self.assertNotIn(path, paths)
+
     def test_legacy_ingestion_query_and_meeting_aliases_return_not_found(self) -> None:
         env = {
             "RECALL_API_KEY": "",

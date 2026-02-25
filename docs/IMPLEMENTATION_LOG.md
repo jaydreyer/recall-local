@@ -1,5 +1,76 @@
 # Recall.local Implementation Log
 
+## 2026-02-25 - Phase 5F operator-entrypoint sync to ai-lab + spot-check
+
+### What was executed
+
+- Synced operator-entrypoint updates from Mac to ai-lab:
+  - `rsync -avz -e "ssh -i ~/.ssh/codex_ai_lab" --files-from=/tmp/recall_phase5f_operator_sync_files.txt /Users/jaydreyer/projects/recall-local/ jaydreyer@100.116.103.78:/home/jaydreyer/recall-local/`
+- Ran required remote content spot-check:
+  - `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "cd /home/jaydreyer/recall-local && rg -n 'run_operator_stack_now\\.sh|Phase5_Operator_Entrypoint_Runbook|Consolidate compose runtime entrypoint' scripts/phase5/run_operator_stack_now.sh docs/Recall_local_Phase5_Operator_Entrypoint_Runbook.md docs/Recall_local_Phase5_Checklists.md"`
+
+### Results
+
+- Sync gate passed with `rsync` exit code `0`.
+- Spot-check confirmed new operator entrypoint script, runbook, and checklist completion marker are present on ai-lab.
+
+## 2026-02-25 - Phase 5F compose/runtime consolidation: single operator entrypoint
+
+### What was executed
+
+- Added consolidated compose/runtime operator entrypoint script:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase5/run_operator_stack_now.sh`
+  - command surface:
+    - `up`
+    - `down`
+    - `restart`
+    - `status`
+    - `logs`
+    - `preflight`
+    - `config`
+  - compose consolidation strategy:
+    - uses both compose files as one runtime surface:
+      - `/Users/jaydreyer/projects/recall-local/docker/phase1b-ingest-bridge.compose.yml`
+      - `/Users/jaydreyer/projects/recall-local/docker/docker-compose.yml`
+  - optional operator preflight pass through:
+    - `--preflight` on `up`/`restart` invokes `/Users/jaydreyer/projects/recall-local/scripts/phase3/run_service_preflight_now.sh`
+    - supports `--bridge-url` and `--n8n-host` overrides for preflight routing.
+- Added dedicated runbook:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Operator_Entrypoint_Runbook.md`
+- Updated docs index and Phase 5 references:
+  - `/Users/jaydreyer/projects/recall-local/docs/README.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Guide.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Checklists.md` (compose-entrypoint item marked complete)
+
+### Validation
+
+- `bash -n /Users/jaydreyer/projects/recall-local/scripts/phase5/run_operator_stack_now.sh`
+- `/Users/jaydreyer/projects/recall-local/scripts/phase5/run_operator_stack_now.sh help`
+
+### Results
+
+- Operators now have one script entrypoint for compose/runtime lifecycle and preflight actions during Phase `5F`.
+
+## 2026-02-25 - Phase 5F coverage gate reached (27 tests) with canonical-route hardening assertions
+
+### What was executed
+
+- Expanded bridge contract coverage in:
+  - `/Users/jaydreyer/projects/recall-local/tests/test_bridge_api_contract.py`
+- Added new hardening assertions for canonical-only API behavior:
+  - canonical-only health routing (`GET /v1/healthz` is valid; `/healthz` and `/health` are `404 not_found`).
+  - canonical ingestion validation (`POST /v1/ingestions` requires `channel`).
+  - OpenAPI schema guardrail (required canonical `/v1/*` paths present; legacy alias paths absent).
+- Re-ran test suites:
+  - `python3 -m unittest discover -s tests -p 'test_bridge_api_contract.py'`
+  - `python3 -m unittest discover -s tests`
+
+### Results
+
+- Bridge contract suite: `14` tests passing.
+- Full repository suite: `27` tests passing.
+- Phase 5F coverage target (`25-30`) achieved and checklist item marked complete.
+
 ## 2026-02-25 - Phase 5F canonical-only cutover ai-lab sync + remote spot-check
 
 ### What was executed

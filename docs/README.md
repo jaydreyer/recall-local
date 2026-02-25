@@ -14,6 +14,7 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `Recall_local_Phase4_Guide.md`: Phase 4 execution plan for reliability telemetry, CI/release guardrails, and maintenance hygiene.
 - `Recall_local_Phase5_Guide.md`: Phase 5 execution plan for dashboard UI, Chrome extension, Obsidian integration, and final hardening.
 - `Recall_local_Phase5_Checklists.md`: Actionable implementation checklist for Phase 5 workstreams and completion gate.
+- `Recall_local_Phase5_Operator_Entrypoint_Runbook.md`: Single compose/runtime entrypoint runbook for Phase 5 hardening operations.
 - `phase5-implementation-brief.md`: Architecture review brief and recommendation source for Phase 5 planning decisions.
 - `scaffolds/recall-dashboard.jsx`: Dashboard UI concept scaffold used as implementation reference.
 - `scaffolds/recall-chrome-popup.jsx`: Chrome popup UX concept scaffold used as implementation reference.
@@ -57,6 +58,7 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `../scripts/phase5/vault_sync.py`: Phase 5C Obsidian vault sync runtime (`--once` hash dedupe + `--watch` debounce mode with Syncthing-aware move handling).
 - `../scripts/phase5/run_vault_sync_now.sh`: Phase 5C one-command wrapper for one-shot vault sync.
 - `../scripts/phase5/run_vault_watch_now.sh`: Phase 5C one-command wrapper for continuous vault watch mode.
+- `../scripts/phase5/run_operator_stack_now.sh`: Phase 5F one-command compose/runtime entrypoint (up/down/restart/status/logs/preflight/config).
 - `../ui/dashboard/`: Phase 5D React/Vite dashboard app (Ingest, Query, Activity, Eval, Vault) with bridge API settings.
 - `../ui/dashboard/Dockerfile`: Phase 5D dashboard container build for `recall-ui`.
 - `../chrome-extension/`: Phase 5E/5E.1 Chrome extension implementation (Manifest V3 popup, context menu capture, shortcut command, settings page, Gmail content script prefill).
