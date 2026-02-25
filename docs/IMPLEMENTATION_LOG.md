@@ -1,5 +1,89 @@
 # Recall.local Implementation Log
 
+## 2026-02-25 - Phase 5E.1 browser smoke via Playwright (Gmail injection + sender-prefill + DOM reinjection)
+
+### What was executed
+
+- Added and executed a Chromium extension smoke harness:
+  - script: `/Users/jaydreyer/projects/recall-local/output/playwright/phase5e1_gmail_smoke.cjs`
+  - execution command:
+    - `NODE_PATH=<tmp-playwright-node_modules> node output/playwright/phase5e1_gmail_smoke.cjs`
+- Smoke harness behavior:
+  - loads unpacked extension from `chrome-extension/` with Chromium persistent context.
+  - routes `https://mail.google.com/*` to a controlled Gmail-like fixture DOM.
+  - validates:
+    - Gmail toolbar button injection (`[data-recall-gmail-button]`).
+    - sender-aware prefill persisted in extension storage (`recall_gmail_prefill`).
+    - group/tag inference from sender domain (`recruiter@openai.com` -> `group=job-search`, tag includes `openai`).
+    - DOM churn resilience by removing toolbar and confirming button reinjection on replacement toolbar.
+- Artifacts written:
+  - `/Users/jaydreyer/projects/recall-local/output/playwright/phase5e1_gmail_smoke_result.json`
+  - `/Users/jaydreyer/projects/recall-local/output/playwright/phase5e1_gmail_smoke.png`
+
+### Results
+
+- Smoke result: `success=true`
+- Gmail injection: pass
+- Sender-aware prefill: pass
+- DOM reinjection after mutation: pass
+
+## 2026-02-25 - Phase 5E.1 ai-lab sync + remote spot-check
+
+### What was executed
+
+- Synced local Phase 5E.1 changes from Mac to ai-lab using targeted file sync:
+  - `rsync -avz -e "ssh -i ~/.ssh/codex_ai_lab" --files-from=/tmp/recall_5e1_sync_files.txt /Users/jaydreyer/projects/recall-local/ jaydreyer@100.116.103.78:/home/jaydreyer/recall-local/`
+- Ran required remote content spot-check on ai-lab:
+  - `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "cd /home/jaydreyer/recall-local && rg -n \"recall_gmail_prefill|recall_open_popup_from_gmail|channel: state.gmailPrefill ? \\\"gmail-forward\\\"|https://mail.google.com/*|test_phase5e1_gmail_extension\" chrome-extension/manifest.json chrome-extension/background.js chrome-extension/gmail.js chrome-extension/popup.js tests/test_phase5e1_gmail_extension.py"`
+
+### Results
+
+- Sync gate passed with `rsync` exit code `0`.
+- Spot-check confirmed ai-lab contains the new Gmail content-script registration, popup-routing logic, and Phase 5E.1 regression test symbols.
+
+## 2026-02-25 - Phase 5E.1 kickoff: Gmail content script injection + sender-aware popup prefill
+
+### What was executed
+
+- Implemented Gmail content script runtime in:
+  - `/Users/jaydreyer/projects/recall-local/chrome-extension/gmail.js`
+  - features:
+    - DOM toolbar injection for `mail.google.com` with a `⊡ Recall` action button.
+    - MutationObserver + periodic rescan reinjection to tolerate Gmail DOM churn.
+    - extraction of subject, sender, body text, and attachment names from fallback selector sets.
+    - sender-aware group/tag prefill using `email_senders` + `url_tag_patterns` from `/v1/auto-tag-rules` (fallback rules included when endpoint is unavailable).
+    - prefill persistence in extension local storage (`recall_gmail_prefill`) and popup-open message to background worker.
+- Updated extension wiring:
+  - `/Users/jaydreyer/projects/recall-local/chrome-extension/manifest.json`
+    - registered Gmail content script for `https://mail.google.com/*`.
+  - `/Users/jaydreyer/projects/recall-local/chrome-extension/background.js`
+    - added runtime message listener to open popup on Gmail button action.
+  - `/Users/jaydreyer/projects/recall-local/chrome-extension/popup.js`
+    - consumes and clears Gmail prefill payload.
+    - applies sender-aware group/tag defaults in popup state.
+    - routes Gmail-prefilled captures through canonical `POST /v1/ingestions` with `channel=gmail-forward`.
+  - `/Users/jaydreyer/projects/recall-local/chrome-extension/shared.js`
+    - added fallback `email_senders` defaults for offline/fallback rules mode.
+- Added Phase 5E.1 regression checks:
+  - `/Users/jaydreyer/projects/recall-local/tests/test_phase5e1_gmail_extension.py`
+  - validates:
+    - manifest content-script registration for Gmail.
+    - DOM resilience primitives and sender-aware prefill symbols in `gmail.js`.
+    - popup prefill consumption + `gmail-forward` channel routing.
+- Updated tracking docs:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Checklists.md` (`5E.1` items marked complete)
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Guide.md` (removed deferred labeling on `5E.1` sections)
+  - `/Users/jaydreyer/projects/recall-local/docs/README.md` (index entry updated to include Gmail content script)
+  - `/Users/jaydreyer/projects/recall-local/docs/ENVIRONMENT_INVENTORY.md` (Phase 5 status updated for local `5E.1` completion)
+
+### Validation
+
+- `node --check chrome-extension/gmail.js`
+- `node --check chrome-extension/background.js`
+- `node --check chrome-extension/popup.js`
+- `python3 -m unittest discover -s tests -p 'test_phase5e1_gmail_extension.py'`
+- `python3 -m unittest discover -s tests`
+
 ## 2026-02-25 - Phase 5F ai-lab sync + remote spot-check for canonical callers and retry parity
 
 ### What was executed

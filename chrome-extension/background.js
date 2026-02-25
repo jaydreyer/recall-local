@@ -175,3 +175,25 @@ chrome.commands.onCommand.addListener(async (command) => {
   setBadge(tab?.id, "OPEN", BADGE_COLORS.info);
 });
 
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type !== "recall_open_popup_from_gmail") {
+    return undefined;
+  }
+
+  (async () => {
+    try {
+      if (chrome.action.openPopup) {
+        await chrome.action.openPopup();
+        sendResponse({ ok: true });
+        return;
+      }
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      setBadge(tab?.id, "OPEN", BADGE_COLORS.info);
+      sendResponse({ ok: true, fallback: true });
+    } catch (error) {
+      sendResponse({ ok: false, error: String(error?.message || error) });
+    }
+  })();
+
+  return true;
+});

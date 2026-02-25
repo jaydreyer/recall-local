@@ -47,7 +47,9 @@ export const FALLBACK_AUTO_TAG_RULES = {
     "job-search": ["resume", "cv", "cover letter", "job description"],
     meeting: ["meeting", "notes", "transcript", "action items"]
   },
-  email_senders: {},
+  email_senders: {
+    "job-search": ["@anthropic.com", "@openai.com", "@lever.co", "@greenhouse.io"]
+  },
   filename_patterns: {},
   vault_folders: {},
   suggested_tags: {
@@ -239,4 +241,3 @@ export async function fetchAutoTagRules(config) {
     };
   }
 }
-

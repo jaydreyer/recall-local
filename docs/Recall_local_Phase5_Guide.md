@@ -33,7 +33,7 @@ Ship a demo-ready and daily-usable Recall.local where ingestion is low-friction 
 2. Dashboard deploys as a separate `recall-ui` container (static Vite build via nginx).
 3. Obsidian write-back is opt-in:
    - `RECALL_VAULT_WRITE_BACK=false` by default in `.env.example`.
-4. Chrome Gmail content script is deferred to `5E.1` after extension base stability.
+4. Chrome Gmail content script moved into `5E.1` after extension base stability.
 5. Auth policy is optional local mode:
    - if `RECALL_API_KEY` unset: no auth enforcement and startup warning is logged.
    - if `RECALL_API_KEY` set: enforce `X-API-Key`.
@@ -48,7 +48,7 @@ Ship a demo-ready and daily-usable Recall.local where ingestion is low-friction 
 | `5C` Obsidian integration | Vault one-shot + watcher sync, metadata extraction, optional write-back artifacts. | Vault notes can be synced on demand with dedupe/change detection and queried with source attribution. |
 | `5D` Dashboard UI | React dashboard with Ingest, Query, Activity, Eval, Vault tabs using bridge endpoints. | Operator can ingest/query/monitor from one UI without curl/n8n payload editing. |
 | `5E` Chrome extension | Popup, context menu, keyboard shortcut, auto-tagging base experience. | User can capture current page/selection in <= 2 clicks with auto group/tag defaults. |
-| `5E.1` Chrome Gmail assist (deferred) | Content script injection and sender-aware prefill for Gmail. | Gmail capture works without regressing base extension stability. |
+| `5E.1` Chrome Gmail assist | Content script injection and sender-aware prefill for Gmail. | Gmail capture works without regressing base extension stability. |
 | `5F` Final hardening + demo packaging | Tests, compose consolidation, retry parity, polish docs/demo script. | Reproducible demo run and CI gate with sufficient unit coverage and runbook completeness. |
 
 ## Architecture decisions for Phase 5
@@ -66,7 +66,7 @@ Ship a demo-ready and daily-usable Recall.local where ingestion is low-friction 
 5. API auth model:
    - if `RECALL_API_KEY` is empty: local/trusted mode with startup warning
    - if set: require `X-API-Key` on extension/dashboard calls
-6. Extension Gmail integration is explicitly deferred until base extension quality gate is met.
+6. Extension Gmail integration follows base-extension stability gates and uses popup-prefill flow.
 
 ## Endpoint plan (bridge)
 
@@ -203,7 +203,7 @@ Retrieval/query behavior:
 3. Keyboard shortcut to open popup.
 4. Config and API key stored in `chrome.storage.local`.
 
-### v1.1 feature set (deferred)
+### v1.1 feature set
 
 1. Gmail helper script for extracting subject/sender/body.
 2. Reuse popup flow for confirmation/override.
@@ -245,7 +245,7 @@ Retrieval/query behavior:
 13. Chrome extension base (`popup`, `context menu`, `shortcut`).
 14. Cloud provider retry parity.
 15. Demo packaging + README polish.
-16. `5E.1` Gmail content script after base extension stabilization.
+16. `5E.1` Gmail content script and sender-aware prefill (post-base extension stabilization).
 
 ## Acceptance gate
 

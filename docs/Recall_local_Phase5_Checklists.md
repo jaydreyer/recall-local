@@ -65,11 +65,11 @@ Source plan: `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Gu
 - [x] Add extension config storage (`api_base_url`, `api_key`).
 - [x] Validate extension flow against auth-enabled bridge.
 
-## 5E.1. Chrome Gmail Content Script (Deferred)
+## 5E.1. Chrome Gmail Content Script
 
-- [ ] Add Gmail DOM injection content script once base extension is stable.
-- [ ] Add sender-aware prefill using `email_senders` auto-tag rules.
-- [ ] Validate DOM-change resilience and fallback behavior.
+- [x] Add Gmail DOM injection content script once base extension is stable.
+- [x] Add sender-aware prefill using `email_senders` auto-tag rules.
+- [x] Validate DOM-change resilience and fallback behavior.
 
 ## 5F. Final Hardening + Demo Readiness
 

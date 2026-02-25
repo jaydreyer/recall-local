@@ -15,8 +15,12 @@ const state = {
   group: "reference",
   tags: [],
   selectionText: "",
-  rulesWarning: ""
+  rulesWarning: "",
+  gmailPrefill: null
 };
+
+const GMAIL_PREFILL_STORAGE_KEY = "recall_gmail_prefill";
+const GMAIL_PREFILL_MAX_AGE_MS = 10 * 60 * 1000;
 
 const refs = {
   status: document.getElementById("status-message"),
@@ -57,10 +61,67 @@ async function readSelectedText(tabId) {
       target: { tabId },
       func: () => String(window.getSelection()?.toString() || "")
     });
-    return sanitizeSelection(result?.result || "");
+  return sanitizeSelection(result?.result || "");
   } catch (_error) {
     return "";
   }
+}
+
+function isGmailTab(url) {
+  try {
+    const parsed = new URL(String(url || ""));
+    return parsed.hostname === "mail.google.com";
+  } catch (_error) {
+    return false;
+  }
+}
+
+function getStorage(keys) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.get(keys, (result) => {
+      const runtimeError = chrome.runtime.lastError;
+      if (runtimeError) {
+        reject(new Error(runtimeError.message));
+        return;
+      }
+      resolve(result || {});
+    });
+  });
+}
+
+function removeStorage(keys) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.remove(keys, () => {
+      const runtimeError = chrome.runtime.lastError;
+      if (runtimeError) {
+        reject(new Error(runtimeError.message));
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+async function loadAndConsumeGmailPrefill() {
+  if (!isGmailTab(state.activeTab?.url)) {
+    return null;
+  }
+
+  const data = await getStorage([GMAIL_PREFILL_STORAGE_KEY]);
+  const prefill = data?.[GMAIL_PREFILL_STORAGE_KEY];
+  if (!prefill || typeof prefill !== "object") {
+    return null;
+  }
+
+  const createdAt = Number(prefill.createdAt || 0);
+  const now = Date.now();
+  if (!createdAt || now - createdAt > GMAIL_PREFILL_MAX_AGE_MS) {
+    await removeStorage([GMAIL_PREFILL_STORAGE_KEY]);
+    return null;
+  }
+
+  await removeStorage([GMAIL_PREFILL_STORAGE_KEY]);
+  return prefill;
 }
 
 function renderContext() {
@@ -203,15 +264,23 @@ async function submitCapture() {
   updateStatus("Sending to Recall.local...", "muted");
 
   const payload = {
-    channel: "bookmarklet",
-    source: "chrome-extension-popup",
+    channel: state.gmailPrefill ? "gmail-forward" : "bookmarklet",
+    source: state.gmailPrefill ? "chrome-extension-gmail" : "chrome-extension-popup",
     url: state.activeTab.url,
     title: state.activeTab.title || "Untitled page",
     group: state.group,
     tags: uniqueStrings(state.tags.map(sanitizeTag).filter(Boolean))
   };
 
-  if (refs.includeSelection.checked && state.selectionText) {
+  if (state.gmailPrefill) {
+    payload.subject = state.gmailPrefill.subject || state.activeTab.title || "";
+    payload.from = state.gmailPrefill.senderEmail || "";
+    payload.text = state.selectionText || state.gmailPrefill.bodyText || "";
+    payload.metadata = {
+      email_from_name: state.gmailPrefill.senderName || "",
+      attachment_names: Array.isArray(state.gmailPrefill.attachmentNames) ? state.gmailPrefill.attachmentNames : []
+    };
+  } else if (refs.includeSelection.checked && state.selectionText) {
     payload.text = state.selectionText;
   }
 
@@ -262,6 +331,24 @@ async function initialize() {
   state.config = await loadExtensionConfig();
   state.activeTab = await activeTab();
   state.selectionText = await readSelectedText(state.activeTab?.id);
+  state.gmailPrefill = await loadAndConsumeGmailPrefill();
+  if (state.gmailPrefill) {
+    if (state.gmailPrefill.url) {
+      state.activeTab = {
+        ...(state.activeTab || {}),
+        url: state.gmailPrefill.url
+      };
+    }
+    if (state.gmailPrefill.subject) {
+      state.activeTab = {
+        ...(state.activeTab || {}),
+        title: state.gmailPrefill.subject
+      };
+    }
+    if (state.gmailPrefill.bodyText) {
+      state.selectionText = sanitizeSelection(state.gmailPrefill.bodyText);
+    }
+  }
   renderContext();
   renderSelectionPreview();
 
@@ -277,12 +364,23 @@ async function initialize() {
     rules
   );
 
-  state.group = detected.group || "reference";
-  state.tags = uniqueStrings((detected.tags || []).map(sanitizeTag).filter(Boolean));
+  const prefillGroup = sanitizeTag(state.gmailPrefill?.group || "");
+  const prefillTags = Array.isArray(state.gmailPrefill?.tags) ? state.gmailPrefill.tags : [];
+  state.group = prefillGroup || detected.group || "reference";
+  state.tags = uniqueStrings(
+    [...(detected.tags || []), ...prefillTags]
+      .map(sanitizeTag)
+      .filter(Boolean)
+  );
 
   renderGroupButtons();
   renderTags();
   renderSuggestedTags();
+
+  if (state.gmailPrefill) {
+    updateStatus(`Gmail prefill loaded for ${state.gmailPrefill.senderEmail || "message sender"}.`, "ok");
+    return;
+  }
 
   if (warning) {
     updateStatus(`${warning}. Using fallback rules.`, "warn");
@@ -294,4 +392,3 @@ async function initialize() {
 initialize().catch((error) => {
   updateStatus(`Popup init failed: ${error.message}`, "error");
 });
-
