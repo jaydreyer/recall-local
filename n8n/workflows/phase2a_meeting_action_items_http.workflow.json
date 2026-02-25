@@ -21,7 +21,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://100.116.103.78:8090/meeting/action-items",
+        "url": "http://100.116.103.78:8090/v1/meeting-action-items",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ $json.body }}",

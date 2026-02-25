@@ -71,10 +71,10 @@ curl -sS http://localhost:8090/healthz
 5. Confirm node `HTTP RAG Query` URL is:
 
 ```text
-http://100.116.103.78:8090/query/rag
+http://100.116.103.78:8090/v1/rag-queries
 ```
 
-If your n8n and bridge containers are on the same Docker network, `http://recall-ingest-bridge:8090/query/rag` also works.
+If your n8n and bridge containers are on the same Docker network, `http://recall-ingest-bridge:8090/v1/rag-queries` also works.
 6. Confirm `HTTP RAG Query` JSON body expression is:
 
 ```text

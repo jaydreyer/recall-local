@@ -22,10 +22,10 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://recall-ingest-bridge:8090/ingest/bookmarklet",
+        "url": "http://recall-ingest-bridge:8090/v1/ingestions",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ $json.body ? $json.body : $json }}",
+        "jsonBody": "={{ Object.assign({}, $json.body ? $json.body : $json, { channel: 'bookmarklet' }) }}",
         "options": {}
       },
       "id": "node-http-bookmarklet-form",

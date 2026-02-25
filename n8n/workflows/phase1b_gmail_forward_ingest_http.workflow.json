@@ -23,10 +23,10 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://recall-ingest-bridge:8090/ingest/gmail-forward",
+        "url": "http://recall-ingest-bridge:8090/v1/ingestions",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ $json }}",
+        "jsonBody": "={{ Object.assign({}, $json, { channel: 'gmail-forward' }) }}",
         "options": {}
       },
       "id": "node-http-ingest-gmail",

@@ -21,7 +21,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://100.116.103.78:8090/query/rag",
+        "url": "http://100.116.103.78:8090/v1/rag-queries",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ $json.body }}",

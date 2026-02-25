@@ -67,6 +67,9 @@ Last updated: 2026-02-24
   - OpenAI: pass
   - Gemini: pass after model update to `gemini-2.5-flash`
 - `.env.example` default Gemini model: `gemini-2.5-flash`
+- Generation retry controls (applies to Ollama + cloud providers):
+  - `RECALL_GENERATE_RETRIES` (default `3`)
+  - `RECALL_GENERATE_BACKOFF_SECONDS` (default `1.5`)
 
 ## n8n Ingestion Webhook
 

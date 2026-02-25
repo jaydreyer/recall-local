@@ -1,5 +1,84 @@
 # Recall.local Implementation Log
 
+## 2026-02-25 - Phase 5F ai-lab sync + remote spot-check for canonical callers and retry parity
+
+### What was executed
+
+- Synced all current local Phase 5F changes from Mac to ai-lab using targeted file sync:
+  - generated file list from local git/untracked deltas
+  - `rsync -avz -e "ssh -i ~/.ssh/codex_ai_lab" --files-from=/tmp/recall_local_sync_files.txt /Users/jaydreyer/projects/recall-local/ jaydreyer@100.116.103.78:/home/jaydreyer/recall-local/`
+- Ran required remote file-content spot-check after sync:
+  - `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "cd /home/jaydreyer/recall-local && rg -n \"_post_json_with_retries|RECALL_GENERATE_RETRIES|v1/rag-queries|bookmarklet|test_phase5f_llm_retry_parity\" scripts/llm_client.py docker/.env.example n8n/workflows/phase1c_recall_rag_query_http.workflow.json n8n/workflows/phase3a_bookmarklet_form_http.workflow.json tests/test_phase5f_llm_retry_parity.py"`
+
+### Results
+
+- Sync gate passed with `rsync` exit code `0`.
+- Remote spot-check confirmed ai-lab has updated canonical n8n workflow routes and cloud retry-parity code/test symbols.
+
+## 2026-02-25 - Phase 5F hardening: cloud-provider retry parity in `llm_client`
+
+### What was executed
+
+- Added shared generation retry helper logic in:
+  - `/Users/jaydreyer/projects/recall-local/scripts/llm_client.py`
+  - cloud providers (`anthropic`, `openai`, `gemini`) now route HTTP POST calls through a common retry path with:
+    - shared env controls: `RECALL_GENERATE_RETRIES`, `RECALL_GENERATE_BACKOFF_SECONDS`
+    - retryable failures: transport/request errors and HTTP `408`, `429`, and `5xx`
+    - fail-fast behavior for non-retryable HTTP statuses (for example `401`/`403`/`4xx` validation/auth errors)
+- Added Phase 5F regression coverage:
+  - `/Users/jaydreyer/projects/recall-local/tests/test_phase5f_llm_retry_parity.py`
+  - verifies:
+    - Anthropic retries on timeout and succeeds on subsequent response.
+    - OpenAI retries on `429` and succeeds on subsequent response.
+    - Gemini does not retry on `401`.
+- Added reliability env vars to:
+  - `/Users/jaydreyer/projects/recall-local/docker/.env.example`
+  - `RECALL_GENERATE_RETRIES`
+  - `RECALL_GENERATE_BACKOFF_SECONDS`
+  - `RECALL_OLLAMA_GENERATE_TIMEOUT_SECONDS`
+  - `RECALL_EMBED_RETRIES`
+  - `RECALL_EMBED_BACKOFF_SECONDS`
+- Updated Phase 5 tracking docs:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Checklists.md` (marked cloud-provider retry parity item complete)
+  - `/Users/jaydreyer/projects/recall-local/docs/ENVIRONMENT_INVENTORY.md` (recorded shared generation retry controls)
+
+### Results
+
+- Generation retry/backoff behavior is now consistent across local and cloud providers in the LLM client.
+- Retry policy is explicit, test-covered, and configurable from environment defaults.
+
+## 2026-02-25 - Phase 5F kickoff: canonical n8n caller cutover to `/v1/*` + workflow route regression test
+
+### What was executed
+
+- Migrated remaining active n8n HTTP caller workflows from compatibility alias routes to canonical `operations-v1` routes:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase1b_recall_ingest_webhook_http.workflow.json`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase1b_gmail_forward_ingest_http.workflow.json`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase1c_recall_rag_query_http.workflow.json`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase2a_meeting_action_items_http.workflow.json`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase3a_bookmarklet_form_http.workflow.json`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase3a_meeting_action_form_http.workflow.json`
+- For canonical ingestion endpoint migration (`POST /v1/ingestions`), updated n8n JSON body expressions to set explicit channel values per workflow:
+  - `webhook`
+  - `gmail-forward`
+  - `bookmarklet`
+- Updated operator wiring docs for canonical targets and channel-aware ingestion payload guidance:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/PHASE1B_CHANNEL_WIRING.md`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/PHASE1C_WORKFLOW02_WIRING.md`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/PHASE2A_WORKFLOW03_WIRING.md`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/PHASE3A_OPERATOR_FORMS_WIRING.md`
+- Added regression coverage to prevent alias-route drift in n8n workflow JSON:
+  - `/Users/jaydreyer/projects/recall-local/tests/test_phase5f_canonical_workflow_routes.py`
+- Updated Phase 5 status docs/checklist:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Guide.md` (baseline updated to reflect canonical bridge + extension completion)
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Checklists.md` (marked canonical caller-migration item complete)
+
+### Results
+
+- Active n8n HTTP workflow definitions now target canonical `/v1/*` bridge endpoints only.
+- Ingestion workflows preserve channel semantics with explicit `channel` assignment in canonical request bodies.
+- Phase `5F` canonical-caller migration task has begun with executable routes/doc updates plus guardrail tests for future regressions.
+
 ## 2026-02-24 - Phase 5E browser smoke (popup + context-menu/shortcut wiring) via Playwright
 
 ### What was executed

@@ -13,16 +13,19 @@ Ship a demo-ready and daily-usable Recall.local where ingestion is low-friction 
 
 ## Current baseline (start state)
 
-1. Bridge API exists at `scripts/phase1/ingest_bridge_api.py` with:
-   - `POST /ingest/{webhook|bookmarklet|ios-share|gmail-forward}`
-   - `POST /query/rag`
-   - `POST /meeting/action-items`
+1. Bridge API exists at `scripts/phase1/ingest_bridge_api.py` with canonical routes:
+   - `POST /v1/ingestions`
+   - `POST /v1/rag-queries`
+   - `POST /v1/meeting-action-items`
+   - compatibility aliases remain available during migration windows.
 2. n8n workflows and bridge path are operational for ingestion/query/meeting pipelines.
 3. Phase 4 telemetry and CI scaffolding are in place but soak thresholds are currently red.
 4. Obsidian sync runtime is now implemented (`scripts/phase5/vault_sync.py`) with one-shot + watch modes and bridge endpoints:
    - canonical: `GET /v1/vault-files`, `POST /v1/vault-syncs`
    - compatibility aliases: `GET /v1/vault/tree`, `POST /v1/vault/sync`
-5. Dashboard kickoff is implemented locally under `ui/dashboard/` (React/Vite, five tabs, bridge wiring); Chrome extension implementation remains pending.
+5. Dashboard and Chrome extension base implementations are complete locally:
+   - `ui/dashboard/` (React/Vite, five tabs, canonical bridge wiring)
+   - `chrome-extension/` (Manifest V3 popup, context menu ingest, keyboard shortcut, settings/auth flow)
 
 ## Confirmed decisions (2026-02-24)
 

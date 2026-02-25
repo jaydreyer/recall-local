@@ -169,6 +169,50 @@ def _ollama_generate(prompt: str, system: str, temperature: float) -> str:
     raise RuntimeError("Generation call failed without an error response")
 
 
+def _generation_retry_config() -> tuple[int, float]:
+    retries = _int_env("RECALL_GENERATE_RETRIES", default=3, minimum=1)
+    backoff_seconds = _float_env("RECALL_GENERATE_BACKOFF_SECONDS", default=1.5, minimum=0.0)
+    return retries, backoff_seconds
+
+
+def _is_retryable_generation_error(exc: Exception) -> bool:
+    if isinstance(exc, httpx.RequestError):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        status_code = exc.response.status_code
+        return status_code == 408 or status_code == 429 or status_code >= 500
+    return False
+
+
+def _post_json_with_retries(
+    *,
+    url: str,
+    headers: dict[str, str],
+    payload: dict[str, Any],
+    timeout_seconds: float,
+) -> httpx.Response:
+    retries, backoff_seconds = _generation_retry_config()
+    last_error: Exception | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            response = httpx.post(
+                url,
+                headers=headers,
+                json=payload,
+                timeout=timeout_seconds,
+            )
+            response.raise_for_status()
+            return response
+        except Exception as exc:  # noqa: BLE001
+            last_error = exc
+            if attempt >= retries or not _is_retryable_generation_error(exc):
+                raise
+            time.sleep(backoff_seconds * attempt)
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("Generation call failed without an error response")
+
+
 def _anthropic_generate(prompt: str, system: str, temperature: float, max_tokens: int) -> str:
     api_key = _require_env("ANTHROPIC_API_KEY")
     model = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
@@ -187,13 +231,12 @@ def _anthropic_generate(prompt: str, system: str, temperature: float, max_tokens
     if system:
         payload["system"] = system
 
-    response = httpx.post(
-        "https://api.anthropic.com/v1/messages",
+    response = _post_json_with_retries(
+        url="https://api.anthropic.com/v1/messages",
         headers=headers,
-        json=payload,
-        timeout=120,
+        payload=payload,
+        timeout_seconds=120,
     )
-    response.raise_for_status()
     content = response.json().get("content", [])
     if not content:
         raise RuntimeError("Anthropic response missing content")
@@ -213,18 +256,17 @@ def _openai_generate(prompt: str, system: str, temperature: float, max_tokens: i
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
 
-    response = httpx.post(
-        "https://api.openai.com/v1/chat/completions",
+    response = _post_json_with_retries(
+        url="https://api.openai.com/v1/chat/completions",
         headers=headers,
-        json={
+        payload={
             "model": model,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
         },
-        timeout=120,
+        timeout_seconds=120,
     )
-    response.raise_for_status()
     return response.json()["choices"][0]["message"]["content"].strip()
 
 
@@ -241,13 +283,12 @@ def _gemini_generate(prompt: str, system: str, temperature: float, max_tokens: i
         },
     }
 
-    response = httpx.post(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+    response = _post_json_with_retries(
+        url=f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
         headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
-        json=payload,
-        timeout=120,
+        payload=payload,
+        timeout_seconds=120,
     )
-    response.raise_for_status()
 
     data = response.json()
     candidates = data.get("candidates", [])

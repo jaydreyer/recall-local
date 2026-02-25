@@ -75,8 +75,8 @@ Source plan: `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Gu
 
 - [ ] Reach target coverage depth (25-30 tests, mocked external services).
 - [ ] Consolidate compose runtime entrypoint for operator usage.
-- [ ] Add cloud provider retry parity in LLM client layer.
-- [ ] Canonical-only API cutover (deferred): migrate remaining n8n/script callers from compatibility aliases to canonical `/v1/*` routes.
+- [x] Add cloud provider retry parity in LLM client layer.
+- [x] Canonical-only API cutover (deferred): migrate remaining n8n/script callers from compatibility aliases to canonical `/v1/*` routes.
 - [ ] Canonical-only API cutover (deferred): remove compatibility alias routes from bridge after caller migration is verified.
 - [ ] Update docs index + runbooks for new Phase 5 flows.
 - [ ] Record demo run script covering:

@@ -34,10 +34,10 @@ Node sequence:
 `HTTP Request` settings:
 
 - Method: `POST`
-- URL: `http://recall-ingest-bridge:8090/ingest/webhook`
+- URL: `http://recall-ingest-bridge:8090/v1/ingestions`
 - Send Body: `true`
 - Body Content Type: `JSON`
-- JSON Body: `={{ $json }}`
+- JSON Body: `={{ Object.assign({}, $json, { channel: 'webhook' }) }}`
 
 This unified webhook now supports additional payload controls:
 
@@ -65,10 +65,10 @@ Node sequence:
 `HTTP Request` settings:
 
 - Method: `POST`
-- URL: `http://recall-ingest-bridge:8090/ingest/gmail-forward`
+- URL: `http://recall-ingest-bridge:8090/v1/ingestions`
 - Send Body: `true`
 - Body Content Type: `JSON`
-- JSON Body: `={{ $json }}`
+- JSON Body: `={{ Object.assign({}, $json, { channel: 'gmail-forward' }) }}`
 
 Expected input shape (minimum):
 
@@ -118,9 +118,15 @@ Sample file:
 Direct bridge route for bookmarklet testing:
 
 ```bash
-curl -sS -X POST http://localhost:8090/ingest/bookmarklet \
+python3 - <<'PY' | curl -sS -X POST http://localhost:8090/v1/ingestions \
   -H 'content-type: application/json' \
-  -d @/home/jaydreyer/recall-local/n8n/workflows/payload_examples/bookmarklet_ingest_payload_example.json
+  -d @-
+import json
+from pathlib import Path
+payload = json.loads(Path("/home/jaydreyer/recall-local/n8n/workflows/payload_examples/bookmarklet_ingest_payload_example.json").read_text())
+payload["channel"] = "bookmarklet"
+print(json.dumps(payload))
+PY
 ```
 
 ## Google Docs payload contract
