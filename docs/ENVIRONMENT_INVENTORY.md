@@ -1,6 +1,6 @@
 # Recall.local Environment Inventory
 
-Last updated: 2026-02-24
+Last updated: 2026-02-25
 
 ## Decision Snapshot
 
@@ -173,7 +173,7 @@ Last updated: 2026-02-24
 - Phase 1: complete (`1A`-`1D` done; Workflow 02 webhook live and eval suite passing)
 - Phase 2: complete (`2A`-`2C` done; meeting pipeline + domain retrieval/evals operational)
 - Phase 3: complete (`3A` operator wrappers/forms, `3B` retrieval-quality track, `3C` ops hardening + portfolio bundle validated on ai-lab on 2026-02-24)
-- Phase 5: in progress (`5A`-`5C` complete; `5D` dashboard kickoff implemented locally with API wiring and compose service; `5E` base extension scaffold + auth-enabled bridge-flow validation complete; `5E.1` Gmail content-script prefill implementation complete locally; `5F` hardening in progress)
+- Phase 5: in progress (`5A`-`5E.1` complete; `5F` hardening checkpoints complete for canonical-only API cutover, coverage gate, compose operator entrypoint, and demo run script; completion gate verification still open)
 
 ## Skills Baseline (local Codex)
 

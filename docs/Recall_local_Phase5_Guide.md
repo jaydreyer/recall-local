@@ -203,6 +203,7 @@ Retrieval/query behavior:
 2. Pytest suite target: 25-30 tests with mocks.
 3. Docker compose consolidation into a single operator entrypoint (`scripts/phase5/run_operator_stack_now.sh`).
 4. Cloud provider retry parity in `scripts/llm_client.py`.
+5. One-command demo evidence runner (`scripts/phase5/run_phase5_demo_now.sh`).
 
 ## Environment additions (Phase 5)
 
@@ -233,7 +234,7 @@ Retrieval/query behavior:
 12. Dashboard UI implementation (5 tabs).
 13. Chrome extension base (`popup`, `context menu`, `shortcut`).
 14. Cloud provider retry parity.
-15. Demo packaging + README polish.
+15. Demo packaging + README polish (`scripts/phase5/run_phase5_demo_now.sh` + runbook/docs index updates).
 16. `5E.1` Gmail content script and sender-aware prefill (post-base extension stabilization).
 
 ## Acceptance gate

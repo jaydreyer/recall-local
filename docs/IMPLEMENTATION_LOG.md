@@ -1,5 +1,70 @@
 # Recall.local Implementation Log
 
+## 2026-02-25 - Phase 5F demo runner sync to ai-lab + spot-check
+
+### What was executed
+
+- Synced demo-runner batch updates from Mac to ai-lab:
+  - `rsync -avz -e "ssh -i ~/.ssh/codex_ai_lab" --files-from=/tmp/recall_phase5_demo_sync_files.txt /Users/jaydreyer/projects/recall-local/ jaydreyer@100.116.103.78:/home/jaydreyer/recall-local/`
+- Synced the latest demo-runner script revision after vault-lane host-awareness update:
+  - `rsync -avz -e "ssh -i ~/.ssh/codex_ai_lab" /Users/jaydreyer/projects/recall-local/scripts/phase5/run_phase5_demo_now.sh jaydreyer@100.116.103.78:/home/jaydreyer/recall-local/scripts/phase5/run_phase5_demo_now.sh`
+- Ran required remote content spot-checks:
+  - `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "cd /home/jaydreyer/recall-local && rg -n 'run_phase5_demo_now\\.sh|Recall_local_Phase5_Demo_Runbook|Record demo run script covering|run_operator_stack_now\\.sh help >/dev/null|run_phase5_demo_now\\.sh --help >/dev/null' scripts/phase5/run_phase5_demo_now.sh docs/Recall_local_Phase5_Demo_Runbook.md docs/Recall_local_Phase5_Checklists.md .github/workflows/quality_checks.yml"`
+  - `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "cd /home/jaydreyer/recall-local && rg -n 'local -a cmd|dashboard ingest/query calls' scripts/phase5/run_phase5_demo_now.sh"`
+
+### Results
+
+- Sync gate passed with `rsync` exit code `0`.
+- Spot-check confirmed ai-lab has the new demo runner script, runbook entry, checklist completion marker, and wrapper-smoke CI references.
+
+## 2026-02-25 - Phase 5F demo packaging: one-command demo runner + runbook
+
+### What was executed
+
+- Added Phase `5F` demo runner script:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase5/run_phase5_demo_now.sh`
+  - lanes covered:
+    - dashboard ingest/query
+    - extension capture gate (unit + optional browser smoke)
+    - Obsidian sync/query
+    - eval gate check
+  - execution controls:
+    - `--mode dry-run|live`
+    - `--eval-suite`, `--eval-backend`, `--require-eval-pass`
+    - optional Gmail browser smoke execution
+  - artifact output:
+    - `data/artifacts/demos/phase5/<timestamp>/`
+    - timestamped per-lane request/response JSON + run summary JSON
+- Added demo runbook:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Demo_Runbook.md`
+- Updated docs/checklist/index references:
+  - `/Users/jaydreyer/projects/recall-local/docs/README.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Guide.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Checklists.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/ENVIRONMENT_INVENTORY.md`
+- Extended CI wrapper smoke checks:
+  - `/Users/jaydreyer/projects/recall-local/.github/workflows/quality_checks.yml`
+  - now includes:
+    - `scripts/phase5/run_operator_stack_now.sh help`
+    - `scripts/phase5/run_phase5_demo_now.sh --help`
+
+### Validation
+
+- `bash -n /Users/jaydreyer/projects/recall-local/scripts/phase5/run_phase5_demo_now.sh`
+- `/Users/jaydreyer/projects/recall-local/scripts/phase5/run_phase5_demo_now.sh --help`
+- `/Users/jaydreyer/projects/recall-local/scripts/phase5/run_operator_stack_now.sh help`
+- `python3 -m unittest discover -s tests -p 'test_phase5e1_gmail_extension.py'`
+- Demo-runner dry-run attempt against ai-lab bridge:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase5/run_phase5_demo_now.sh --bridge-url http://100.116.103.78:8090 --mode dry-run --eval-suite core`
+  - lanes `1-4` passed (health, dashboard ingest/query, extension contract tests, vault sync/query)
+  - lane `5` blocked by current ai-lab runtime route availability (`POST /v1/evaluation-runs` returned `404`).
+
+### Results
+
+- Phase `5F` now has a recorded one-command demo runner and dedicated runbook.
+- Checklist item `Record demo run script covering ...` is complete.
+- Remaining completion-gate validation depends on running against a bridge runtime that exposes `/v1/evaluation-runs`.
+
 ## 2026-02-25 - Phase 5F operator-entrypoint sync to ai-lab + spot-check
 
 ### What was executed

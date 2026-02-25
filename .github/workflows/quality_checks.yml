@@ -68,6 +68,8 @@ jobs:
           scripts/phase3/run_restore_now.sh --help >/dev/null
           scripts/phase4/run_eval_soak_now.sh --help >/dev/null
           scripts/phase4/run_repo_hygiene_check.sh --help >/dev/null
+          scripts/phase5/run_operator_stack_now.sh help >/dev/null
+          scripts/phase5/run_phase5_demo_now.sh --help >/dev/null
           python scripts/phase4/summarize_eval_trend.py --help >/dev/null
           python scripts/eval/run_eval.py --help >/dev/null
           echo "Wrapper smoke checks passed."

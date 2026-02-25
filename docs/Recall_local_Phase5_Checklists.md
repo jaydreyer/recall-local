@@ -79,11 +79,11 @@ Source plan: `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Gu
 - [x] Canonical-only API cutover (deferred): migrate remaining n8n/script callers from compatibility aliases to canonical `/v1/*` routes.
 - [x] Canonical-only API cutover (deferred): remove compatibility alias routes from bridge after caller migration is verified.
 - [x] Update docs index + runbooks for new Phase 5 flows.
-- [ ] Record demo run script covering:
-  - [ ] dashboard ingest/query
-  - [ ] extension capture
-  - [ ] Obsidian sync/query
-  - [ ] eval gate check
+- [x] Record demo run script covering:
+  - [x] dashboard ingest/query
+  - [x] extension capture
+  - [x] Obsidian sync/query
+  - [x] eval gate check
 
 ## Completion Checklist
 
