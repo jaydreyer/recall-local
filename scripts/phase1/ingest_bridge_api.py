@@ -21,7 +21,7 @@ from typing import Any, Literal, Optional
 
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, Path as ApiPath, Query, Request
+from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -817,11 +817,6 @@ def create_app() -> FastAPI:
     async def healthz_v1() -> JSONResponse:
         return _json_response(200, {"status": "ok"})
 
-    @app.get("/healthz", include_in_schema=False)
-    @app.get("/health", include_in_schema=False)
-    async def health_alias() -> JSONResponse:
-        return _json_response(200, {"status": "ok"})
-
     @app.get(
         f"{API_PREFIX}/auto-tag-rules",
         tags=["Auto Tag Rules"],
@@ -840,16 +835,6 @@ def create_app() -> FastAPI:
         },
     )
     async def get_auto_tag_rules(request: Request) -> JSONResponse:
-        request_id = _request_id()
-        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
-        if control_error is not None:
-            return control_error
-
-        return _read_auto_tag_rules(request_id=request_id)
-
-    @app.get("/config/auto-tags", include_in_schema=False)
-    @app.get(f"{API_PREFIX}/config/auto-tags", include_in_schema=False)
-    async def get_auto_tag_rules_alias(request: Request) -> JSONResponse:
         request_id = _request_id()
         control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
         if control_error is not None:
@@ -903,52 +888,6 @@ def create_app() -> FastAPI:
         payload_without_channel.pop("channel", None)
         return _process_ingestion(channel=channel, payload=payload_without_channel, dry_run=dry_run, request_id=request_id)
 
-    @app.post("/ingest/{channel}", include_in_schema=False)
-    async def create_ingestion_legacy(
-        request: Request,
-        channel: str = ApiPath(..., description="Legacy ingestion channel selector."),
-        dry_run: bool = Query(False),
-    ) -> JSONResponse:
-        request_id = _request_id()
-        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
-        if control_error is not None:
-            return control_error
-
-        try:
-            payload = await _read_json_body(request)
-        except ValueError as exc:
-            return _error_response(status_code=400, code="invalid_json", message=str(exc), request_id=request_id)
-
-        payload_channel = channel.strip()
-        payload_body = payload
-        if not payload_channel:
-            payload_channel = str(payload.get("channel", "")).strip()
-            payload_body = dict(payload)
-            payload_body.pop("channel", None)
-
-        return _process_ingestion(channel=payload_channel, payload=payload_body, dry_run=dry_run, request_id=request_id)
-
-    @app.post("/ingestions", include_in_schema=False)
-    async def create_ingestion_alias_unversioned(
-        request: Request,
-        dry_run: bool = Query(False),
-    ) -> JSONResponse:
-        request_id = _request_id()
-        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
-        if control_error is not None:
-            return control_error
-
-        try:
-            payload = await _read_json_body(request)
-        except ValueError as exc:
-            return _error_response(status_code=400, code="invalid_json", message=str(exc), request_id=request_id)
-
-        payload_channel = str(payload.get("channel", "")).strip()
-        payload_body = dict(payload)
-        payload_body.pop("channel", None)
-
-        return _process_ingestion(channel=payload_channel, payload=payload_body, dry_run=dry_run, request_id=request_id)
-
     @app.post(
         f"{API_PREFIX}/rag-queries",
         tags=["RAG Queries"],
@@ -967,25 +906,6 @@ def create_app() -> FastAPI:
     async def create_rag_query(
         request: Request,
         dry_run: bool = Query(False, description="If true, skip SQLite writes and artifact persistence."),
-    ) -> JSONResponse:
-        request_id = _request_id()
-        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
-        if control_error is not None:
-            return control_error
-
-        try:
-            payload = await _read_json_body(request)
-        except ValueError as exc:
-            return _error_response(status_code=400, code="invalid_json", message=str(exc), request_id=request_id)
-
-        return _process_rag_query(payload=payload, dry_run=dry_run, request_id=request_id)
-
-    @app.post("/rag-queries", include_in_schema=False)
-    @app.post("/query/rag", include_in_schema=False)
-    @app.post("/rag/query", include_in_schema=False)
-    async def create_rag_query_legacy(
-        request: Request,
-        dry_run: bool = Query(False),
     ) -> JSONResponse:
         request_id = _request_id()
         control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
@@ -1020,26 +940,6 @@ def create_app() -> FastAPI:
     async def create_meeting_action_items(
         request: Request,
         dry_run: bool = Query(False, description="If true, run extraction without writing durable run artifacts."),
-    ) -> JSONResponse:
-        request_id = _request_id()
-        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
-        if control_error is not None:
-            return control_error
-
-        try:
-            payload = await _read_json_body(request)
-        except ValueError as exc:
-            return _error_response(status_code=400, code="invalid_json", message=str(exc), request_id=request_id)
-
-        return _process_meeting_action_items(payload=payload, dry_run=dry_run, request_id=request_id)
-
-    @app.post("/meeting-action-items", include_in_schema=False)
-    @app.post("/meeting/action-items", include_in_schema=False)
-    @app.post("/meeting/actions", include_in_schema=False)
-    @app.post("/query/meeting", include_in_schema=False)
-    async def create_meeting_action_items_legacy(
-        request: Request,
-        dry_run: bool = Query(False),
     ) -> JSONResponse:
         request_id = _request_id()
         control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
@@ -1093,11 +993,6 @@ def create_app() -> FastAPI:
                 request_id=request_id,
             )
         return _json_response(200, payload)
-
-    @app.get(f"{API_PREFIX}/vault/tree", include_in_schema=False)
-    @app.get("/vault/tree", include_in_schema=False)
-    async def get_vault_files_alias(request: Request) -> JSONResponse:
-        return await get_vault_files(request)
 
     @app.post(
         f"{API_PREFIX}/vault-syncs",
@@ -1162,11 +1057,6 @@ def create_app() -> FastAPI:
             )
         return _json_response(200, result)
 
-    @app.post(f"{API_PREFIX}/vault/sync", include_in_schema=False)
-    @app.post("/vault/sync", include_in_schema=False)
-    async def create_vault_sync_alias(request: Request) -> JSONResponse:
-        return await create_vault_sync(request)
-
     @app.get(
         f"{API_PREFIX}/activities",
         tags=["Activities"],
@@ -1218,14 +1108,6 @@ def create_app() -> FastAPI:
             },
         )
 
-    @app.get("/activity", include_in_schema=False)
-    async def get_activities_alias(
-        request: Request,
-        limit: int = Query(DEFAULT_ACTIVITY_LIMIT, ge=1, le=200),
-        group_filter: Optional[str] = Query(default=None, alias="group"),
-    ) -> JSONResponse:
-        return await get_activities(request=request, limit=limit, group_filter=group_filter)
-
     @app.get(
         f"{API_PREFIX}/evaluations",
         tags=["Evaluations"],
@@ -1275,11 +1157,6 @@ def create_app() -> FastAPI:
                 "active_runs": active_runs,
             },
         )
-
-    @app.get(f"{API_PREFIX}/evaluations/latest", include_in_schema=False)
-    @app.get("/eval/latest", include_in_schema=False)
-    async def get_latest_evaluations_alias(request: Request) -> JSONResponse:
-        return await get_evaluations(request=request, limit=1, latest=True)
 
     @app.post(
         f"{API_PREFIX}/evaluation-runs",
@@ -1369,10 +1246,6 @@ def create_app() -> FastAPI:
         thread.start()
         run_state = _get_eval_run(eval_run_id)
         return _json_response(202, {"workflow": "workflow_05d_eval_run", "accepted": True, "run": run_state})
-
-    @app.post("/eval/run", include_in_schema=False)
-    async def create_evaluation_run_alias(request: Request) -> JSONResponse:
-        return await create_evaluation_run(request)
 
     @app.get("/{_path:path}", include_in_schema=False)
     async def not_found_get(_path: str) -> JSONResponse:

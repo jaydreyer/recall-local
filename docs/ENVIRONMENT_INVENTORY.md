@@ -82,7 +82,7 @@ Last updated: 2026-02-24
 ## n8n Query Webhook (Workflow 02)
 
 - Query webhook endpoint (local on server): `http://localhost:5678/webhook/recall-query`
-- Backing bridge endpoint (server): `http://localhost:8090/v1/rag-queries` (legacy alias `POST /query/rag` is still supported)
+- Backing bridge endpoint (server): `http://localhost:8090/v1/rag-queries`
 - Validation status:
   - Bridge route: `HTTP 200` for dry-run query payload (verified 2026-02-22)
   - n8n production webhook: `HTTP 200` with cited RAG JSON payload (verified 2026-02-22)
@@ -96,10 +96,9 @@ Last updated: 2026-02-24
 - Canonical base paths: `/v1/*`
 - Shared config endpoint:
   - canonical: `GET /v1/auto-tag-rules`
-  - compatibility alias: `GET /config/auto-tags`
 - Canonical route policy:
-  - new clients/workflows/docs must use canonical `/v1/*` endpoints.
-  - compatibility aliases are retained only for backward compatibility during migration windows.
+  - canonical `/v1/*` endpoints are required for all clients, workflows, and docs.
+  - compatibility aliases were removed during Phase `5F` canonical-only cutover.
 - Canonical group model:
   - enum: `job-search|learning|project|reference|meeting`
   - fallback: invalid or missing group resolves to `reference`.
@@ -111,7 +110,6 @@ Last updated: 2026-02-24
   - invalid `filter_group` values normalize to `reference`.
 - Activity API support:
   - canonical: `GET /v1/activities`
-  - compatibility alias: `GET /activity`
   - query params:
     - `limit` (`1..200`, default `25`)
     - `group` (optional canonical group filter)
@@ -120,19 +118,12 @@ Last updated: 2026-02-24
   - canonical:
     - `GET /v1/evaluations` (`?latest=true` for newest summary)
     - `POST /v1/evaluation-runs`
-  - compatibility aliases:
-    - `GET /v1/evaluations/latest`
-    - `GET /eval/latest`
-    - `POST /eval/run`
   - run behavior:
     - `POST /v1/evaluation-runs` supports async queue mode (`wait=false`) and synchronous mode (`wait=true`) via `scripts/eval/run_eval.py`.
 - Vault support:
   - canonical:
     - `GET /v1/vault-files`
     - `POST /v1/vault-syncs`
-  - compatibility aliases:
-    - `GET /v1/vault/tree` and `GET /vault/tree`
-    - `POST /v1/vault/sync` and `POST /vault/sync`
   - sync implementation path: `scripts/phase5/vault_sync.py`
   - wrappers:
     - `scripts/phase5/run_vault_sync_now.sh`

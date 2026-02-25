@@ -72,7 +72,7 @@ Ship a demo-ready and daily-usable Recall.local where ingestion is low-friction 
 
 API identity: `operations-v1` (major-versioned API surface; canonical endpoints are under `/v1`).
 
-### Existing endpoints (canonical + compatibility aliases)
+### Existing endpoints (canonical only)
 
 Canonical REST endpoints:
 1. `POST /v1/ingestions`
@@ -80,34 +80,23 @@ Canonical REST endpoints:
 3. `POST /v1/meeting-action-items`
 4. `GET /v1/healthz`
 
-Compatibility aliases (kept for backward compatibility, hidden from OpenAPI docs):
-1. `POST /ingest/{webhook|bookmarklet|ios-share|gmail-forward}`
-2. `POST /query/rag`
-3. `POST /rag/query`
-4. `POST /meeting/action-items`
-5. `POST /meeting/actions`
-6. `POST /query/meeting`
-
 Compatibility policy:
-1. All new implementation work must target canonical `/v1/*` endpoints only.
-2. Compatibility aliases are legacy-only shims and must not be used for new clients, workflows, or docs examples.
+1. Canonical `/v1/*` endpoints are required.
+2. Legacy compatibility aliases were removed as part of Phase `5F` cutover.
 
 ### New endpoints (Phase 5)
 
-1. `GET /v1/auto-tag-rules` (compatibility alias: `GET /config/auto-tags`)
+1. `GET /v1/auto-tag-rules`
 2. `POST /ingest/url`
 3. `POST /ingest/text`
 4. `POST /ingest/gdoc`
 5. `POST /ingest/email`
 6. `POST /ingest/file` (multipart upload)
-7. `GET /v1/activities` (`?group=` optional filter; compatibility alias: `GET /activity`)
-8. `GET /v1/evaluations` (`?latest=true` for newest summary; compatibility aliases: `GET /v1/evaluations/latest`, `GET /eval/latest`)
-9. `POST /v1/evaluation-runs` (compatibility alias: `POST /eval/run`)
+7. `GET /v1/activities` (`?group=` optional filter)
+8. `GET /v1/evaluations` (`?latest=true` for newest summary)
+9. `POST /v1/evaluation-runs`
 10. `GET /v1/vault-files`
 11. `POST /v1/vault-syncs`
-12. Compatibility aliases for current planning docs and clients:
-   - `GET /v1/vault/tree`, `GET /vault/tree`
-   - `POST /v1/vault/sync`, `POST /vault/sync`
 
 ## Data contract updates (ingestion + retrieval)
 
@@ -233,7 +222,7 @@ Retrieval/query behavior:
 1. FastAPI migration (replace `http.server` bridge implementation).
 2. API key auth + startup warning behavior.
 3. Rate limiting middleware.
-4. Auto-tag rules config (`config/auto_tag_rules.json`) + `GET /v1/auto-tag-rules` (keep `GET /config/auto-tags` alias).
+4. Auto-tag rules config (`config/auto_tag_rules.json`) + `GET /v1/auto-tag-rules`.
 5. Pytest scaffolding + target test coverage.
 6. Docker compose consolidation (including separate `recall-ui` container).
 7. New bridge endpoints (`ingest/file`, `activity`, `eval`, `vault`, `config`).

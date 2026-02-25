@@ -71,7 +71,7 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertTrue(third.json()["error"]["details"])
         self.assertEqual(third.json()["error"]["details"][0]["field"], "retry_after_seconds")
 
-    def test_auto_tag_rules_endpoint_supports_canonical_and_alias_paths(self) -> None:
+    def test_auto_tag_rules_endpoint_is_canonical_only(self) -> None:
         env = {
             "RECALL_API_KEY": "",
             "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
@@ -82,9 +82,9 @@ class BridgeApiContractTests(unittest.TestCase):
             alias = client.get("/config/auto-tags")
 
         self.assertEqual(canonical.status_code, 200)
-        self.assertEqual(alias.status_code, 200)
+        self.assertEqual(alias.status_code, 404)
+        self.assertEqual(alias.json()["error"]["code"], "not_found")
         self.assertIn("groups", canonical.json())
-        self.assertEqual(canonical.json(), alias.json())
 
     def test_ingestion_propagates_group_and_tags_with_reference_fallback(self) -> None:
         env = {
@@ -146,7 +146,7 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(mock_rag.call_args.kwargs["filter_group"], "reference")
 
-    def test_vault_tree_endpoint_returns_payload(self) -> None:
+    def test_vault_tree_endpoint_returns_payload_and_alias_is_removed(self) -> None:
         env = {
             "RECALL_API_KEY": "",
             "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
@@ -166,9 +166,9 @@ class BridgeApiContractTests(unittest.TestCase):
                 alias = client.get("/v1/vault/tree")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(alias.status_code, 200)
+        self.assertEqual(alias.status_code, 404)
+        self.assertEqual(alias.json()["error"]["code"], "not_found")
         self.assertEqual(response.json()["workflow"], "workflow_05c_vault_tree")
-        self.assertEqual(alias.json(), response.json())
 
     def test_vault_sync_endpoint_accepts_body_and_runs_sync(self) -> None:
         env = {
@@ -197,13 +197,14 @@ class BridgeApiContractTests(unittest.TestCase):
                 alias = client.post("/v1/vault/sync", json={"dry_run": True})
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(alias.status_code, 200)
+        self.assertEqual(alias.status_code, 404)
+        self.assertEqual(alias.json()["error"]["code"], "not_found")
         self.assertEqual(response.json()["workflow"], "workflow_05c_vault_sync")
         self.assertEqual(mock_sync.call_args_list[0].kwargs["max_files"], 5)
         self.assertEqual(mock_sync.call_args_list[0].kwargs["vault_path"], "/tmp/vault")
         self.assertTrue(mock_sync.call_args_list[0].kwargs["dry_run"])
 
-    def test_activities_endpoint_supports_canonical_and_alias_paths(self) -> None:
+    def test_activities_endpoint_is_canonical_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             db_path = os.path.join(temp_dir, "recall.db")
             conn = sqlite3.connect(db_path)
@@ -275,11 +276,11 @@ class BridgeApiContractTests(unittest.TestCase):
                 alias = client.get("/activity?group=job-search")
 
         self.assertEqual(canonical.status_code, 200)
-        self.assertEqual(alias.status_code, 200)
+        self.assertEqual(alias.status_code, 404)
+        self.assertEqual(alias.json()["error"]["code"], "not_found")
         self.assertEqual(canonical.json()["workflow"], "workflow_05d_activity")
         self.assertEqual(canonical.json()["count"], 1)
         self.assertEqual(canonical.json()["items"][0]["group"], "job-search")
-        self.assertEqual(canonical.json(), alias.json())
 
     def test_evaluations_collection_endpoint_supports_latest_query_param(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -325,15 +326,15 @@ class BridgeApiContractTests(unittest.TestCase):
                 alias = client.get("/eval/latest")
 
         self.assertEqual(canonical.status_code, 200)
-        self.assertEqual(alias.status_code, 200)
+        self.assertEqual(alias.status_code, 404)
+        self.assertEqual(alias.json()["error"]["code"], "not_found")
         self.assertEqual(canonical.json()["workflow"], "workflow_05d_eval_latest")
         self.assertEqual(canonical.json()["latest"]["run_date"], "2026-02-24T09:15:00+00:00")
         self.assertEqual(canonical.json()["latest"]["total"], 2)
         self.assertEqual(canonical.json()["latest"]["passed"], 1)
         self.assertEqual(canonical.json()["latest"]["failed"], 1)
-        self.assertEqual(canonical.json(), alias.json())
 
-    def test_eval_run_endpoint_supports_wait_mode_and_alias(self) -> None:
+    def test_eval_run_endpoint_supports_wait_mode_and_alias_removed(self) -> None:
         env = {
             "RECALL_API_KEY": "",
             "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
@@ -346,11 +347,34 @@ class BridgeApiContractTests(unittest.TestCase):
                 alias = client.post("/eval/run", json={"suite": "core", "wait": True})
 
         self.assertEqual(canonical.status_code, 200)
-        self.assertEqual(alias.status_code, 200)
+        self.assertEqual(alias.status_code, 404)
+        self.assertEqual(alias.json()["error"]["code"], "not_found")
         self.assertEqual(canonical.json()["workflow"], "workflow_05d_eval_run")
         self.assertTrue(canonical.json()["accepted"])
         self.assertEqual(canonical.json()["run"]["status"], "completed")
         self.assertEqual(canonical.json()["run"]["result"]["status"], "pass")
+
+    def test_legacy_ingestion_query_and_meeting_aliases_return_not_found(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        with build_client(env) as client:
+            responses = [
+                client.post("/ingest/bookmarklet", json={"url": "https://example.com"}),
+                client.post("/ingestions", json={"channel": "bookmarklet", "url": "https://example.com"}),
+                client.post("/query/rag", json={"query": "test"}),
+                client.post("/rag/query", json={"query": "test"}),
+                client.post("/rag-queries", json={"query": "test"}),
+                client.post("/meeting/action-items", json={"meeting_title": "t", "transcript": "x"}),
+                client.post("/meeting/actions", json={"meeting_title": "t", "transcript": "x"}),
+                client.post("/query/meeting", json={"meeting_title": "t", "transcript": "x"}),
+            ]
+
+        for response in responses:
+            self.assertEqual(response.status_code, 404)
+            self.assertEqual(response.json()["error"]["code"], "not_found")
 
 
 if __name__ == "__main__":

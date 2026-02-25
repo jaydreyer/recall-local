@@ -1,5 +1,63 @@
 # Recall.local Implementation Log
 
+## 2026-02-25 - Phase 5F canonical-only cutover ai-lab sync + remote spot-check
+
+### What was executed
+
+- Synced canonical-only cutover updates from Mac to ai-lab:
+  - `rsync -avz -e "ssh -i ~/.ssh/codex_ai_lab" --files-from=/tmp/recall_phase5f_cutover_sync_files.txt /Users/jaydreyer/projects/recall-local/ jaydreyer@100.116.103.78:/home/jaydreyer/recall-local/`
+- Ran required remote content spot-check:
+  - `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "cd /home/jaydreyer/recall-local && rg -n 'f\"{API_PREFIX}/rag-queries\"|/query/rag' scripts/phase1/ingest_bridge_api.py"`
+  - `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "cd /home/jaydreyer/recall-local && rg -n 'test_legacy_ingestion_query_and_meeting_aliases_return_not_found|Canonical-only API cutover.*remove compatibility alias routes' tests/test_bridge_api_contract.py docs/Recall_local_Phase5_Checklists.md"`
+
+### Results
+
+- Sync gate passed with `rsync` exit code `0`.
+- Spot-check confirmed canonical route marker is present and legacy `/query/rag` route declaration is absent in bridge route decorators.
+- Spot-check confirmed alias-removal regression test and checklist completion marker are present on ai-lab.
+
+## 2026-02-25 - Phase 5F canonical-only API cutover: removed compatibility alias routes
+
+### What was executed
+
+- Removed compatibility alias endpoints from bridge API in:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py`
+- Retained canonical `operations-v1` routes only:
+  - `POST /v1/ingestions`
+  - `POST /v1/rag-queries`
+  - `POST /v1/meeting-action-items`
+  - `GET /v1/auto-tag-rules`
+  - `GET /v1/activities`
+  - `GET /v1/evaluations` (`?latest=true` supported)
+  - `POST /v1/evaluation-runs`
+  - `GET /v1/vault-files`
+  - `POST /v1/vault-syncs`
+  - `GET /v1/healthz`
+- Removed former alias handlers including:
+  - `/config/auto-tags`
+  - `/ingest/{channel}`, `/ingestions`
+  - `/query/rag`, `/rag/query`, `/rag-queries`
+  - `/meeting/action-items`, `/meeting/actions`, `/query/meeting`, `/meeting-action-items` (unversioned)
+  - `/v1/vault/tree`, `/vault/tree`
+  - `/v1/vault/sync`, `/vault/sync`
+  - `/activity`
+  - `/v1/evaluations/latest`, `/eval/latest`
+  - `/eval/run`
+  - `/healthz`, `/health` (unversioned)
+- Updated bridge contract tests to canonical-only expectations:
+  - `/Users/jaydreyer/projects/recall-local/tests/test_bridge_api_contract.py`
+  - canonical route assertions remain positive.
+  - former alias paths now assert `404 not_found`.
+- Updated phase/docs tracking for canonical-only policy:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Checklists.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Guide.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/ENVIRONMENT_INVENTORY.md`
+
+### Results
+
+- Bridge API routing is now canonical-only under `/v1/*`.
+- Compatibility alias surface is removed and guarded by contract tests to prevent reintroduction.
+
 ## 2026-02-25 - Phase 5E.1 browser smoke via Playwright (Gmail injection + sender-prefill + DOM reinjection)
 
 ### What was executed
