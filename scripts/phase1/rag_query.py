@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sqlite3
 import sys
 import time
@@ -54,6 +55,11 @@ JOB_SEARCH_GROUNDING_PREFIX = (
     "For Jay's interview and role preparation, anchor this in his experience, impact, "
     "business value, and company fit. "
 )
+UUID_PATTERN = re.compile(
+    r"^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$",
+    flags=re.IGNORECASE,
+)
+HEX_IDENTIFIER_PATTERN = re.compile(r"^[a-f0-9]{16,}$", flags=re.IGNORECASE)
 
 
 @dataclass
@@ -227,12 +233,21 @@ def run_rag_query(
                 retrieved=retrieved,
                 reason=fallback_reason,
             )
+        postprocess_reasons: list[str] = []
+        consistency_reason = _normalize_unanswerable_consistency(response)
+        if consistency_reason is not None:
+            postprocess_reasons.append(consistency_reason)
+
         normalization_reason = _normalize_low_confidence_response(response)
         if normalization_reason is not None:
+            postprocess_reasons.append(normalization_reason)
+
+        if postprocess_reasons:
+            combined_reason = "; ".join(postprocess_reasons)
             fallback_reason = (
-                normalization_reason
+                combined_reason
                 if fallback_reason is None
-                else f"{fallback_reason}; {normalization_reason}"
+                else f"{fallback_reason}; {combined_reason}"
             )
         grounding_reason = (
             _ensure_job_search_grounding(response)
@@ -459,6 +474,61 @@ def _normalize_low_confidence_response(response: dict[str, Any]) -> str | None:
     if safety_assumption not in assumptions:
         assumptions.append(safety_assumption)
     return "Low-confidence response was normalized to an explicit abstention."
+
+
+def _normalize_unanswerable_consistency(response: dict[str, Any]) -> str | None:
+    answer = str(response.get("answer", "")).strip()
+    confidence_level = str(response.get("confidence_level", "")).strip().lower()
+    reasons: list[str] = []
+
+    if _looks_like_internal_identifier_answer(answer=answer, response=response):
+        response["answer"] = UNANSWERABLE_ANSWER
+        response["confidence_level"] = "low"
+        reasons.append("Identifier-like answer was normalized to explicit abstention.")
+
+    if _has_unanswerable_phrase(str(response.get("answer", ""))) and confidence_level != "low":
+        response["confidence_level"] = "low"
+        reasons.append("Unanswerable phrasing forced confidence_level=low.")
+
+    return "; ".join(reasons) if reasons else None
+
+
+def _looks_like_internal_identifier_answer(*, answer: str, response: dict[str, Any]) -> bool:
+    token = answer.strip()
+    if not token:
+        return False
+
+    if " " in token:
+        return False
+
+    source_ids = set()
+    citations = response.get("citations")
+    if isinstance(citations, list):
+        for citation in citations:
+            if isinstance(citation, dict):
+                doc_id = str(citation.get("doc_id", "")).strip()
+                chunk_id = str(citation.get("chunk_id", "")).strip()
+                if doc_id:
+                    source_ids.add(doc_id)
+                if chunk_id:
+                    source_ids.add(chunk_id)
+
+    sources = response.get("sources")
+    if isinstance(sources, list):
+        for source in sources:
+            if isinstance(source, dict):
+                doc_id = str(source.get("doc_id", "")).strip()
+                chunk_id = str(source.get("chunk_id", "")).strip()
+                if doc_id:
+                    source_ids.add(doc_id)
+                if chunk_id:
+                    source_ids.add(chunk_id)
+
+    if token in source_ids:
+        return True
+    if UUID_PATTERN.fullmatch(token):
+        return True
+    return bool(HEX_IDENTIFIER_PATTERN.fullmatch(token))
 
 
 def _ensure_job_search_grounding(response: dict[str, Any]) -> str | None:

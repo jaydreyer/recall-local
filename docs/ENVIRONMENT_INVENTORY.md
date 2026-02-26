@@ -1,6 +1,6 @@
 # Recall.local Environment Inventory
 
-Last updated: 2026-02-25
+Last updated: 2026-02-26
 
 ## Decision Snapshot
 
@@ -29,7 +29,7 @@ Last updated: 2026-02-25
 - `caddy` container: `0.0.0.0:80,443`
 - `portainer` container: `0.0.0.0:9000`
 - `recall-mkdocs` container: `0.0.0.0:8100->8000`
-- `recall-ui` container: `0.0.0.0:8170->80` (defined in `docker/docker-compose.yml`; deployment verification pending on ai-lab)
+- `recall-ui` container: `0.0.0.0:8170->80` (verified running on ai-lab via `scripts/phase5/run_operator_stack_now.sh up` on 2026-02-26)
 
 ## Data and Storage
 
@@ -173,7 +173,7 @@ Last updated: 2026-02-25
 - Phase 1: complete (`1A`-`1D` done; Workflow 02 webhook live and eval suite passing)
 - Phase 2: complete (`2A`-`2C` done; meeting pipeline + domain retrieval/evals operational)
 - Phase 3: complete (`3A` operator wrappers/forms, `3B` retrieval-quality track, `3C` ops hardening + portfolio bundle validated on ai-lab on 2026-02-24)
-- Phase 5: in progress (`5A`-`5E.1` complete; `5F` hardening checkpoints complete for canonical-only API cutover, coverage gate, compose operator entrypoint, and demo run script; completion gate verification still open)
+- Phase 5: complete (`5A`-`5E.1` implementation complete and `5F` hardening/closeout validated, including canonical-only API cutover, coverage gate, operator entrypoint, demo runner evidence, auth/rate-limit verification, and completion checklist closure on 2026-02-26)
 
 ## Skills Baseline (local Codex)
 

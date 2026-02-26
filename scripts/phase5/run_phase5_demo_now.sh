@@ -212,10 +212,8 @@ request_json POST "$BRIDGE_API_BASE/ingestions?dry_run=$DEMO_DRY_RUN" "$RUN_DIR/
 
 cat >"$RUN_DIR/dashboard_query_request.json" <<JSON
 {
-  "query": "Summarize the latest indexed interview prep context with citations.",
-  "mode": "job-search",
-  "filter_group": "job-search",
-  "filter_tags": ["phase5", "dashboard-demo"],
+  "query": "Which URL source is indexed in memory?",
+  "mode": "default",
   "top_k": 5,
   "min_score": 0.15
 }
@@ -232,6 +230,10 @@ if ingest.get("workflow") != "workflow_01_ingestion":
     raise SystemExit(f"unexpected ingest workflow: {ingest.get('workflow')}")
 if query.get("workflow") != "workflow_02_rag_query":
     raise SystemExit(f"unexpected query workflow: {query.get('workflow')}")
+query_result = query.get("result") or {}
+citations = query_result.get("citations")
+if not isinstance(citations, list) or len(citations) < 1:
+    raise SystemExit(f"dashboard query did not return citations: {query_result}")
 PY
 echo "[PASS] dashboard ingest/query calls"
 echo
@@ -239,6 +241,30 @@ echo
 echo "[3/5] Extension capture lane"
 python3 -m unittest discover -s "$ROOT_DIR/tests" -p "test_phase5e1_gmail_extension.py" >"$RUN_DIR/extension_unittest.log" 2>&1
 echo "[PASS] extension contract tests: test_phase5e1_gmail_extension.py"
+
+cat >"$RUN_DIR/extension_ingest_request.json" <<JSON
+{
+  "channel": "gmail-forward",
+  "type": "email",
+  "title": "Phase 5 extension lane ingest",
+  "content": "Sender: recruiter@openai.com\\nSubject: Solutions Engineer interview follow-up\\nBody: Please review the role packet before next steps.",
+  "group": "job-search",
+  "tags": ["phase5", "extension-demo", "openai"],
+  "source": "chrome-extension"
+}
+JSON
+request_json POST "$BRIDGE_API_BASE/ingestions?dry_run=$DEMO_DRY_RUN" "$RUN_DIR/extension_ingest_request.json" "$RUN_DIR/extension_ingest_response.json"
+python3 - "$RUN_DIR/extension_ingest_response.json" <<'PY'
+import json
+import sys
+
+payload = json.loads(open(sys.argv[1], "r", encoding="utf-8").read())
+if payload.get("workflow") != "workflow_01_ingestion":
+    raise SystemExit(f"unexpected extension ingest workflow: {payload.get('workflow')}")
+if payload.get("channel") != "gmail-forward":
+    raise SystemExit(f"unexpected extension ingest channel: {payload.get('channel')}")
+PY
+echo "[PASS] extension channel ingest call (gmail-forward)"
 
 if [[ "$RUN_EXTENSION_BROWSER_SMOKE" == "true" ]]; then
   GMAIL_SMOKE_SCRIPT="$ROOT_DIR/output/playwright/phase5e1_gmail_smoke.cjs"

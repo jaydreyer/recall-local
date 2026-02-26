@@ -87,10 +87,10 @@ Source plan: `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Gu
 
 ## Completion Checklist
 
-- [ ] Frictionless ingest demonstrated from:
-  - [ ] dashboard
-  - [ ] chrome extension
-  - [ ] obsidian vault
-- [ ] Query UX is self-serve and citation-rich without curl.
-- [ ] Auth/rate-limit controls verified in enabled mode.
-- [ ] Phase 5 implementation log and environment inventory updated.
+- [x] Frictionless ingest demonstrated from:
+  - [x] dashboard
+  - [x] chrome extension
+  - [x] obsidian vault
+- [x] Query UX is self-serve and citation-rich without curl.
+- [x] Auth/rate-limit controls verified in enabled mode.
+- [x] Phase 5 implementation log and environment inventory updated.

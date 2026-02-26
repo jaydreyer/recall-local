@@ -1,5 +1,71 @@
 # Recall.local Implementation Log
 
+## 2026-02-26 - Phase 5 closeout sync to ai-lab + spot-check
+
+### What was executed
+
+- Synced closeout code/script updates from Mac to ai-lab:
+  - `rsync -avz -e "ssh -i ~/.ssh/codex_ai_lab" --files-from=/tmp/recall_phase5_closeout_sync1.txt /Users/jaydreyer/projects/recall-local/ jaydreyer@100.116.103.78:/home/jaydreyer/recall-local/`
+  - `rsync -avz -e "ssh -i ~/.ssh/codex_ai_lab" --files-from=/tmp/recall_phase5_closeout_sync2.txt /Users/jaydreyer/projects/recall-local/ jaydreyer@100.116.103.78:/home/jaydreyer/recall-local/`
+  - `rsync -avz -e "ssh -i ~/.ssh/codex_ai_lab" /Users/jaydreyer/projects/recall-local/scripts/phase5/run_phase5_demo_now.sh jaydreyer@100.116.103.78:/home/jaydreyer/recall-local/scripts/phase5/run_phase5_demo_now.sh`
+- Ran required remote content spot-checks:
+  - `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "cd /home/jaydreyer/recall-local && rg -n '_normalize_unanswerable_consistency|_looks_like_internal_identifier_answer|HEX_IDENTIFIER_PATTERN|Phase5FUnanswerableNormalizationTests' scripts/phase1/rag_query.py tests/test_phase5f_unanswerable_normalization.py"`
+  - `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "cd /home/jaydreyer/recall-local && rg -n 'Which URL source is indexed in memory|dashboard query did not return citations|extension channel ingest call \\(gmail-forward\\)' scripts/phase5/run_phase5_demo_now.sh"`
+
+### Results
+
+- Sync gate passed with `rsync` exit code `0`.
+- Spot-check confirmed ai-lab has the unanswerable normalization fix, new regression tests, and updated demo-runner lane assertions.
+
+## 2026-02-26 - Phase 5 closeout: unanswerable eval guard + completion-gate validation
+
+### What was executed
+
+- Fixed unanswerable regression in:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/rag_query.py`
+  - added deterministic post-generation normalization to prevent identifier-like answers (for example internal `doc_id`-style tokens) from surfacing as high-confidence answers.
+  - added unanswerable consistency guard that forces `confidence_level=low` when abstention phrasing is present.
+- Added regression coverage:
+  - `/Users/jaydreyer/projects/recall-local/tests/test_phase5f_unanswerable_normalization.py`
+- Updated demo runner lane assertions and extension-ingest evidence in:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase5/run_phase5_demo_now.sh`
+  - dashboard query lane now asserts citation presence (`citation_count >= 1`).
+  - extension lane now includes explicit `channel=gmail-forward` ingestion request/response verification.
+- Verified runtime and closeout evidence on ai-lab:
+  - restarted bridge:
+    - `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "docker restart recall-ingest-bridge"`
+  - unanswerable probe:
+    - `POST /v1/rag-queries?dry_run=true` for `What is the AWS account ID for Recall.local production?`
+    - response now returns explicit abstention with `confidence_level=low`.
+  - core eval gate:
+    - `POST /v1/evaluation-runs` with `{"suite":"core","backend":"direct","dry_run":true,"wait":true}`
+    - result now `pass` with `15/15`.
+  - strict demo run:
+    - `/Users/jaydreyer/projects/recall-local/scripts/phase5/run_phase5_demo_now.sh --bridge-url http://100.116.103.78:8090 --mode dry-run --eval-suite core --require-eval-pass`
+    - generated artifacts:
+      - `/Users/jaydreyer/projects/recall-local/data/artifacts/demos/phase5/20260226T155927Z/phase5_demo_summary.json`
+      - `/Users/jaydreyer/projects/recall-local/data/artifacts/demos/phase5/20260226T155927Z/dashboard_query_response.json`
+      - `/Users/jaydreyer/projects/recall-local/data/artifacts/demos/phase5/20260226T155927Z/extension_ingest_response.json`
+      - `/Users/jaydreyer/projects/recall-local/data/artifacts/demos/phase5/20260226T155927Z/vault_sync_response.json`
+      - `/Users/jaydreyer/projects/recall-local/data/artifacts/demos/phase5/20260226T155927Z/eval_run_response.json`
+  - operator stack bring-up for UI verification:
+    - `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "cd /home/jaydreyer/recall-local && scripts/phase5/run_operator_stack_now.sh up"`
+    - `recall-ui` verified running (`http://100.116.103.78:8170`, HTTP `200`).
+
+### Validation
+
+- `python3 -m unittest discover -s tests -p 'test_phase5f_unanswerable_normalization.py'`
+- `python3 -m unittest discover -s tests -p 'test_bridge_api_contract.py'`
+- `python3 -m unittest discover -s tests`
+- `bash -n /Users/jaydreyer/projects/recall-local/scripts/phase5/run_phase5_demo_now.sh`
+- `/Users/jaydreyer/projects/recall-local/scripts/phase5/run_phase5_demo_now.sh --help`
+
+### Results
+
+- Unanswerable eval regression resolved (`core` eval now `15/15` pass).
+- Demo runner now records evidence for dashboard ingest/query (with citations), extension ingest channel, vault sync/query, and eval gate in one command.
+- Phase 5 completion checklist items are now backed by fresh runtime evidence and can be closed.
+
 ## 2026-02-25 - Phase 5F demo runner sync to ai-lab + spot-check
 
 ### What was executed
