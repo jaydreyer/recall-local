@@ -10,16 +10,19 @@
     <main class="panel">
       <header class="panel-header">
         <div class="brand-block">
-          <span class="brand-mark">RL</span>
+          <span class="brand-mark">⊡</span>
           <div>
-            <h1 class="brand-title">Recall.local</h1>
-            <p class="brand-subtitle">Quick Capture</p>
+            <h1 class="brand-title">Recall<span class="brand-dot">.local</span></h1>
+            <p class="brand-subtitle">Capture Popup</p>
           </div>
         </div>
-        <button id="open-options" class="ghost-button" type="button">Settings</button>
+        <div class="header-right">
+          <button id="open-options" class="ghost-button compact-button" type="button">Settings</button>
+          <span class="status-dot" aria-hidden="true"></span>
+        </div>
       </header>
 
-      <p id="status-message" class="status muted">Loading tab context...</p>
+      <p id="status-message" class="status status-inline muted">Loading tab context...</p>
 
       <section class="context-card">
         <p id="page-title" class="context-title">Untitled page</p>
@@ -57,7 +60,8 @@
       </section>
 
       <footer class="panel-footer">
-        <button id="capture-btn" class="primary-button" type="button">Send to Recall.local</button>
+        <button id="cancel-btn" class="ghost-button cancel-button" type="button">Cancel</button>
+        <button id="capture-btn" class="primary-button" type="button">Ingest</button>
       </footer>
     </main>
     <script type="module" src="popup.js"></script>

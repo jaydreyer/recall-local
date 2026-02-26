@@ -35,6 +35,7 @@ const refs = {
   saveToVault: document.getElementById("save-to-vault"),
   selectionPreview: document.getElementById("selection-preview"),
   captureButton: document.getElementById("capture-btn"),
+  cancelButton: document.getElementById("cancel-btn"),
   optionsButton: document.getElementById("open-options")
 };
 
@@ -323,6 +324,9 @@ function bindEvents() {
     }
   });
   refs.captureButton.addEventListener("click", submitCapture);
+  refs.cancelButton?.addEventListener("click", () => {
+    window.close();
+  });
   refs.optionsButton.addEventListener("click", async () => {
     await chrome.runtime.openOptionsPage();
   });
