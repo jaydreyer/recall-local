@@ -30,6 +30,8 @@ body {
 
 .popup-body {
   min-width: 372px;
+  overflow-x: hidden;
+  overflow-y: auto;
   background:
     radial-gradient(circle at 10% -30%, rgba(245, 158, 11, 0.14), transparent 48%),
     radial-gradient(circle at 90% -30%, rgba(99, 102, 241, 0.11), transparent 45%),
@@ -360,11 +362,40 @@ input[type="password"]:focus {
 }
 
 .panel-footer {
-  display: flex;
-  gap: 8px;
+  display: grid;
+  gap: 10px;
   padding: 12px 16px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.footer-actions {
+  display: flex;
+  gap: 8px;
   justify-content: flex-end;
+}
+
+.capture-feedback {
+  margin: 0;
+  min-height: 18px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.capture-feedback.muted {
+  color: #767676;
+}
+
+.capture-feedback.ok {
+  color: #7de6a5;
+}
+
+.capture-feedback.warn {
+  color: #f8c46c;
+}
+
+.capture-feedback.error {
+  color: #ffb0b0;
 }
 
 .primary-button,

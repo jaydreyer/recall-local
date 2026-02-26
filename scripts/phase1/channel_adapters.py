@@ -199,6 +199,9 @@ def _normalize_gmail_forward(raw_payload: dict[str, Any]) -> dict[str, Any]:
 
     if subject and "title" not in metadata:
         metadata["title"] = subject
+    tags = raw_payload.get("tags")
+    if tags is not None and "tags" not in metadata:
+        metadata["tags"] = tags
     if sender:
         metadata["email_from"] = sender
     if message_id:

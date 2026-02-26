@@ -70,6 +70,43 @@ class Phase5FUnanswerableNormalizationTests(unittest.TestCase):
         self.assertIsNone(reason)
         self.assertEqual(response["confidence_level"], "high")
 
+    def test_low_confidence_substantive_answer_with_citations_is_retained(self) -> None:
+        response = {
+            "answer": (
+                "The top items called out are Perplexity's new Cowork scheduled tasks feature, "
+                "a guide on building long-running agents with shell tools and skills, and a post "
+                "on prompt caching to avoid recomputing repeated prefixes."
+            ),
+            "confidence_level": "low",
+            "citations": [{"doc_id": "doc-3", "chunk_id": "chunk-3"}],
+            "sources": [{"doc_id": "doc-3", "chunk_id": "chunk-3"}],
+            "assumptions": [],
+        }
+
+        reason = rag_query._normalize_low_confidence_response(response)  # noqa: SLF001
+
+        self.assertIsNone(reason)
+        self.assertNotEqual(response["answer"], rag_query.UNANSWERABLE_ANSWER)
+        self.assertIn(
+            "Answer retained despite low confidence because cited context contains partial supporting evidence.",
+            response["assumptions"],
+        )
+
+    def test_low_confidence_non_substantive_answer_normalizes_to_abstention(self) -> None:
+        response = {
+            "answer": "Not sure.",
+            "confidence_level": "low",
+            "citations": [],
+            "sources": [],
+            "assumptions": [],
+        }
+
+        reason = rag_query._normalize_low_confidence_response(response)  # noqa: SLF001
+
+        self.assertIsNotNone(reason)
+        self.assertEqual(response["answer"], rag_query.UNANSWERABLE_ANSWER)
+        self.assertEqual(response["confidence_level"], "low")
+
 
 if __name__ == "__main__":
     unittest.main()

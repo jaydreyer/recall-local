@@ -1,4 +1,9 @@
 (function () {
+  if (window.__recallGmailCaptureLoaded) {
+    return;
+  }
+  window.__recallGmailCaptureLoaded = true;
+
   const STORAGE_API_BASE_KEY = "api_base_url";
   const STORAGE_API_KEY = "api_key";
   const STORAGE_PREFILL_KEY = "recall_gmail_prefill";
@@ -318,6 +323,23 @@
   async function requestPopupOpen() {
     return await chrome.runtime.sendMessage({ type: "recall_open_popup_from_gmail" });
   }
+
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type !== "recall_build_gmail_prefill") {
+      return undefined;
+    }
+
+    void (async () => {
+      try {
+        const payload = await buildPrefillPayload();
+        sendResponse({ ok: true, payload });
+      } catch (error) {
+        sendResponse({ ok: false, error: String(error?.message || error || "Unknown error") });
+      }
+    })();
+
+    return true;
+  });
 
   async function handleCaptureClick(button) {
     const previous = button.textContent;

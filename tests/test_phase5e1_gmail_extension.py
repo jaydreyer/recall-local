@@ -30,17 +30,23 @@ class Phase5E1GmailExtensionTests(unittest.TestCase):
 
     def test_gmail_script_has_dom_resilience_and_sender_prefill_logic(self) -> None:
         source = GMAIL_SCRIPT_PATH.read_text(encoding="utf-8")
+        self.assertIn("window.__recallGmailCaptureLoaded", source)
         self.assertIn("MutationObserver", source)
         self.assertIn("setInterval(() =>", source)
         self.assertIn('div[role="toolbar"]', source)
         self.assertIn("deriveGroupFromSender", source)
         self.assertIn("email_senders", source)
         self.assertIn("recall_open_popup_from_gmail", source)
+        self.assertIn("recall_build_gmail_prefill", source)
         self.assertIn("recall_gmail_prefill", source)
 
     def test_popup_consumes_gmail_prefill_and_routes_channel(self) -> None:
         source = POPUP_SCRIPT_PATH.read_text(encoding="utf-8")
         self.assertIn("loadAndConsumeGmailPrefill", source)
+        self.assertIn("requestGmailPrefillFromTab", source)
+        self.assertIn("injectGmailContentScript", source)
+        self.assertIn('files: ["gmail.js"]', source)
+        self.assertIn("chrome.tabs.sendMessage", source)
         self.assertIn("GMAIL_PREFILL_STORAGE_KEY", source)
         self.assertIn('channel: state.gmailPrefill ? "gmail-forward" : "bookmarklet"', source)
         self.assertIn("Gmail prefill loaded for", source)

@@ -60,8 +60,11 @@
       </section>
 
       <footer class="panel-footer">
-        <button id="cancel-btn" class="ghost-button cancel-button" type="button">Cancel</button>
-        <button id="capture-btn" class="primary-button" type="button">Ingest</button>
+        <p id="capture-feedback" class="capture-feedback muted" aria-live="polite"></p>
+        <div class="footer-actions">
+          <button id="cancel-btn" class="ghost-button cancel-button" type="button">Cancel</button>
+          <button id="capture-btn" class="primary-button" type="button">Ingest</button>
+        </div>
       </footer>
     </main>
     <script type="module" src="popup.js"></script>

@@ -462,10 +462,24 @@ def _normalize_low_confidence_response(response: dict[str, Any]) -> str | None:
     if confidence_level != "low":
         return None
 
-    _ensure_citation_from_sources(response)
-
     answer = str(response.get("answer", "")).strip()
     if _has_unanswerable_phrase(answer):
+        return None
+
+    _ensure_citation_from_sources(response)
+    citations = response.get("citations")
+    has_citations = isinstance(citations, list) and len(citations) > 0
+
+    if has_citations and _is_substantive_answer(answer):
+        assumptions = response.get("assumptions")
+        if not isinstance(assumptions, list):
+            assumptions = []
+            response["assumptions"] = assumptions
+        retained_assumption = (
+            "Answer retained despite low confidence because cited context contains partial supporting evidence."
+        )
+        if retained_assumption not in assumptions:
+            assumptions.append(retained_assumption)
         return None
 
     response["answer"] = UNANSWERABLE_ANSWER
@@ -572,6 +586,14 @@ def _ensure_citation_from_sources(response: dict[str, Any]) -> None:
 def _has_unanswerable_phrase(answer: str) -> bool:
     normalized = " ".join(answer.lower().split())
     return any(pattern in normalized for pattern in UNANSWERABLE_PATTERNS)
+
+
+def _is_substantive_answer(answer: str) -> bool:
+    normalized = " ".join(str(answer or "").split())
+    if len(normalized) < 80:
+        return False
+    alpha_count = sum(1 for char in normalized if char.isalpha())
+    return alpha_count >= 40
 
 
 def _source_rows(retrieved: list[RetrievedChunk]) -> list[dict[str, Any]]:
