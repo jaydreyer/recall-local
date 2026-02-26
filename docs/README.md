@@ -14,6 +14,7 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `Recall_local_Phase4_Guide.md`: Phase 4 execution plan for reliability telemetry, CI/release guardrails, and maintenance hygiene.
 - `Recall_local_Phase5_Guide.md`: Phase 5 execution plan for dashboard UI, Chrome extension, Obsidian integration, and final hardening.
 - `Recall_local_Phase5_Checklists.md`: Actionable implementation checklist for Phase 5 workstreams and completion gate.
+- `phase5-punch-list.md`: Post-audit punch list for Phase 5 completion gaps and polish items.
 - `Recall_local_Phase5_Operator_Entrypoint_Runbook.md`: Single compose/runtime entrypoint runbook for Phase 5 hardening operations.
 - `Recall_local_Phase5_Demo_Runbook.md`: One-command Phase 5 demo runbook covering dashboard, extension, vault, and eval lanes.
 - `phase5-implementation-brief.md`: Architecture review brief and recommendation source for Phase 5 planning decisions.

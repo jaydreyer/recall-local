@@ -105,9 +105,13 @@ Last updated: 2026-02-26
 - Ingestion payload support:
   - `POST /v1/ingestions` accepts optional `group` and `tags`.
   - ingested chunk payloads persist `group`, `tags`, and `ingestion_channel` in Qdrant metadata.
+  - `POST /v1/ingestions/files` accepts multipart file uploads (`.pdf`, `.docx`, `.txt`, `.md`, `.html`, `.eml`) plus optional `group`, `tags`, and `save_to_vault`.
+  - upload size limit is controlled by `RECALL_MAX_UPLOAD_MB` (default `50`, returns `413` when exceeded).
 - Query payload support:
-  - `POST /v1/rag-queries` accepts optional `filter_group` and `filter_tags`.
+  - `POST /v1/rag-queries` accepts optional `filter_group`, `filter_tags`, and `filter_tag_mode` (`any|all`).
+  - `filter_tag_mode` aliases (`or|and`) normalize to canonical values (`any|all`).
   - invalid `filter_group` values normalize to `reference`.
+  - invalid `filter_tag_mode` values return `HTTP 400`.
 - Activity API support:
   - canonical: `GET /v1/activities`
   - query params:

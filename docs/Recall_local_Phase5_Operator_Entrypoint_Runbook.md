@@ -5,9 +5,12 @@ Purpose: provide a single compose/runtime entrypoint for operator usage during P
 Entrypoint script:
 - `/Users/jaydreyer/projects/recall-local/scripts/phase5/run_operator_stack_now.sh`
 
-Consolidated compose files used by this entrypoint:
-- `/Users/jaydreyer/projects/recall-local/docker/phase1b-ingest-bridge.compose.yml`
+Default compose mode (`full`):
 - `/Users/jaydreyer/projects/recall-local/docker/docker-compose.yml`
+
+Lite compose mode (`--lite`, Approach B for pre-existing services):
+- `/Users/jaydreyer/projects/recall-local/docker/phase1b-ingest-bridge.compose.yml`
+- `/Users/jaydreyer/projects/recall-local/docker/docker-compose.lite.yml`
 
 ## Commands
 
@@ -21,6 +24,12 @@ Start stack:
 
 ```bash
 /Users/jaydreyer/projects/recall-local/scripts/phase5/run_operator_stack_now.sh up
+```
+
+Start stack in lite mode:
+
+```bash
+/Users/jaydreyer/projects/recall-local/scripts/phase5/run_operator_stack_now.sh up --lite
 ```
 
 Start stack with forced recreate and preflight:
@@ -65,6 +74,12 @@ Print effective compose services:
 /Users/jaydreyer/projects/recall-local/scripts/phase5/run_operator_stack_now.sh config
 ```
 
+Print effective compose services in lite mode:
+
+```bash
+/Users/jaydreyer/projects/recall-local/scripts/phase5/run_operator_stack_now.sh config --lite
+```
+
 Stop stack:
 
 ```bash
@@ -78,4 +93,6 @@ Stop stack:
 - Preflight URL overrides are supported:
   - `--bridge-url`
   - `--n8n-host`
+- Compose mode override:
+  - `--lite` for Approach B services while keeping externally managed core runtimes.
 - This runbook does not replace deterministic restart and backup/restore runbooks from Phase `3C`; it provides a single operator entrypoint for compose/runtime actions in Phase `5F`.

@@ -1,5 +1,127 @@
 # Recall.local Implementation Log
 
+## 2026-02-26 - Query relevance and citation UX hardening (local + ai-lab)
+
+### What was executed
+
+- Added strict tag-filter matching controls end-to-end:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/retrieval.py`
+    - added `filter_tag_mode` normalization and `any|all` query-filter behavior.
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/rag_query.py`
+    - wired `filter_tag_mode` through retrieval passes and audit payload.
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/rag_from_payload.py`
+    - forwarded `filter_tag_mode` from payload runner.
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py`
+    - accepted/validated `filter_tag_mode` in `POST /v1/rag-queries`.
+- Added Query tab controls for tag semantics:
+  - `/Users/jaydreyer/projects/recall-local/ui/dashboard/src/App.jsx`
+    - new `Tag Match` selector (`any (OR)` / `all (AND)`).
+    - preserved redundant tag-elision when tag equals selected group.
+- Upgraded citation cards for demo readability:
+  - `/Users/jaydreyer/projects/recall-local/ui/dashboard/src/App.jsx`
+  - `/Users/jaydreyer/projects/recall-local/ui/dashboard/src/App.css`
+  - citation cards now show human-friendly source labels/snippets by default and collapse raw IDs under `Technical details`.
+  - grouped duplicate source citations into one card with chunk-count badge (for example `2 chunks`) and aggregated chunk/id references.
+- Added ingestion-tokenization hardening for special-token-like text:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingestion_pipeline.py`
+    - `_token_windows` now uses `encode_ordinary()` when available, otherwise `encode(..., disallowed_special=())`.
+  - `/Users/jaydreyer/projects/recall-local/tests/test_phase5f_ingest_special_tokens.py`
+    - regression coverage for `<|endofprompt|>`-style text.
+
+### Validation
+
+- `python3 -m unittest tests/test_phase5b_metadata_model.py`
+- `python3 -m unittest tests.test_bridge_api_contract.BridgeApiContractTests.test_rag_query_normalizes_filter_group_and_tag_mode tests.test_bridge_api_contract.BridgeApiContractTests.test_rag_query_rejects_invalid_filter_tag_mode`
+- `python3 -m unittest tests/test_phase5f_unanswerable_normalization.py`
+- `npm --prefix /Users/jaydreyer/projects/recall-local/ui/dashboard run build`
+- Synced local updates to ai-lab and spot-checked content:
+  - `rsync -avz -e "ssh -i ~/.ssh/codex_ai_lab" --relative ... /Users/jaydreyer/projects/recall-local/... jaydreyer@100.116.103.78:/home/jaydreyer/recall-local/`
+  - `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "cd /home/jaydreyer/recall-local && rg -n 'dedupeCitationCards|filter_tag_mode|citation-count|Technical details' ..."`
+- Rebuilt UI service in lite stack:
+  - `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "cd /home/jaydreyer/recall-local && docker compose -f docker/phase1b-ingest-bridge.compose.yml -f docker/docker-compose.lite.yml up -d --build recall-ui"`
+
+### Results
+
+- `filter_tag_mode=all` now prevents mixed-tag retrieval bleed-through and supports stricter demo queries.
+- Query citations are now human-readable by default while retaining chunk-level traceability in expandable details.
+- Duplicate citation cards from the same source are reduced to a single grouped card.
+- ai-lab runtime is synced with local for these changes and `recall-ui` is running on port `8170`.
+
+## 2026-02-26 - Phase 5 post-audit punch list implementation (local)
+
+### What was executed
+
+- Added audit punch-list source doc into project docs:
+  - `/Users/jaydreyer/projects/recall-local/docs/phase5-punch-list.md`
+- Implemented canonical multipart upload endpoint:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py`
+  - new route: `POST /v1/ingestions/files`
+  - controls:
+    - API key + rate-limit enforcement using existing bridge gate
+    - extension allow-list: `.pdf,.docx,.txt,.md,.html,.eml`
+    - size limit via `RECALL_MAX_UPLOAD_MB` (default `50`)
+    - `415` for unsupported file type, `413` for oversized upload
+  - request fields:
+    - multipart `file`
+    - `group` (optional)
+    - `tags` (comma-separated)
+    - `save_to_vault` (optional boolean)
+- Added bridge contract coverage for multipart route and OpenAPI path:
+  - `/Users/jaydreyer/projects/recall-local/tests/test_bridge_api_contract.py`
+- Added dashboard drag-drop + file-picker upload flow on Ingest tab:
+  - `/Users/jaydreyer/projects/recall-local/ui/dashboard/src/App.jsx`
+  - `/Users/jaydreyer/projects/recall-local/ui/dashboard/src/App.css`
+  - `/Users/jaydreyer/projects/recall-local/ui/dashboard/src/api.js`
+  - uploads now carry currently selected `group` and `tags` into `POST /v1/ingestions/files`.
+- Added CI test execution gate:
+  - `/Users/jaydreyer/projects/recall-local/.github/workflows/quality_checks.yml`
+  - new step: `pytest tests/ -v --tb=short`
+- Added Chrome extension popup save-to-vault toggle:
+  - `/Users/jaydreyer/projects/recall-local/chrome-extension/popup.html`
+  - `/Users/jaydreyer/projects/recall-local/chrome-extension/popup.js`
+  - payload now sends `save_to_vault`.
+- Completed compose consolidation + lite preservation:
+  - `/Users/jaydreyer/projects/recall-local/docker/docker-compose.yml` (full-stack default)
+  - `/Users/jaydreyer/projects/recall-local/docker/docker-compose.lite.yml` (Approach B)
+  - `/Users/jaydreyer/projects/recall-local/docker/bridge/Dockerfile` (new)
+  - `/Users/jaydreyer/projects/recall-local/docker/mkdocs/Dockerfile` (new)
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase5/run_operator_stack_now.sh` now supports `--lite`.
+- Completed dashboard font swap:
+  - `/Users/jaydreyer/projects/recall-local/ui/dashboard/src/index.css`
+  - mono font now `IBM Plex Mono`.
+- Verified canonical route references (runtime callers) via grep sweep:
+  - `rg -n "/config/auto-tags" --glob "*.json" --glob "*.js" --glob "*.py" --glob "*.yml" .`
+  - `rg -n "/ingest/" --glob "*.json" --glob "*.js" --glob "*.py" --glob "*.yml" .`
+  - `rg -n "(/query/rag|/rag/query|/activity|/eval/latest|/eval/run|/v1/vault/tree|/v1/vault/sync|/vault/tree|/vault/sync)" --glob "*.json" --glob "*.js" --glob "*.py" --glob "*.yml" .`
+  - remaining matches were expected alias-regression tests only.
+- Updated docs and environment references:
+  - `/Users/jaydreyer/projects/recall-local/docs/README.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Guide.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Checklists.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Operator_Entrypoint_Runbook.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/ENVIRONMENT_INVENTORY.md`
+  - `/Users/jaydreyer/projects/recall-local/docker/.env.example` (`RECALL_MAX_UPLOAD_MB`)
+  - `/Users/jaydreyer/projects/recall-local/requirements.txt` (`python-multipart`)
+
+### Validation
+
+- `python3 -m unittest discover -s tests -p 'test_bridge_api_contract.py'`
+- `python3 -m unittest discover -s tests`
+- `cd /Users/jaydreyer/projects/recall-local/ui/dashboard && npm run build`
+- `bash -n /Users/jaydreyer/projects/recall-local/scripts/phase5/run_operator_stack_now.sh`
+- `/Users/jaydreyer/projects/recall-local/scripts/phase5/run_operator_stack_now.sh help`
+- `python3 /Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py --help`
+- Full eval attempt:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase3/run_all_evals_now.sh`
+  - result: failed with webhook connection refusal to `http://localhost:5678/webhook/recall-query` (service not reachable in this local session).
+
+### Results
+
+- Punch-list implementation tasks are complete in local codebase.
+- Unit/contract test suite now passes (`33/33`).
+- Dashboard build passes with drag-drop upload UI and font update.
+- Full eval gate was attempted and failed for environment-connectivity reasons (not code-level test regressions).
+
 ## 2026-02-26 - Phase 5 closeout sync to ai-lab + spot-check
 
 ### What was executed

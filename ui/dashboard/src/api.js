@@ -23,14 +23,20 @@ export async function apiRequest({ baseUrl, apiKey, path, method = "GET", body }
   if (apiKey) {
     headers["X-API-Key"] = apiKey;
   }
-  if (body !== undefined) {
+  const isMultipartBody = typeof FormData !== "undefined" && body instanceof FormData;
+  if (body !== undefined && !isMultipartBody) {
     headers["Content-Type"] = "application/json";
   }
 
   const response = await fetch(url, {
     method,
     headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body:
+      body === undefined
+        ? undefined
+        : isMultipartBody
+          ? body
+          : JSON.stringify(body),
   });
 
   const payload = await parseJsonSafe(response);

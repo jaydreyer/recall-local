@@ -126,7 +126,7 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(request_obj.group, "reference")
         self.assertEqual(request_obj.tags, ["alpha", "beta"])
 
-    def test_rag_query_normalizes_filter_group(self) -> None:
+    def test_rag_query_normalizes_filter_group_and_tag_mode(self) -> None:
         env = {
             "RECALL_API_KEY": "",
             "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
@@ -140,11 +140,115 @@ class BridgeApiContractTests(unittest.TestCase):
                         "query": "test query",
                         "filter_group": "INVALID_GROUP",
                         "filter_tags": ["job-search"],
+                        "filter_tag_mode": "ALL",
                     },
                 )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(mock_rag.call_args.kwargs["filter_group"], "reference")
+        self.assertEqual(mock_rag.call_args.kwargs["filter_tag_mode"], "all")
+
+    def test_rag_query_rejects_invalid_filter_tag_mode(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        with build_client(env) as client:
+            response = client.post(
+                "/v1/rag-queries?dry_run=true",
+                json={
+                    "query": "test query",
+                    "filter_group": "reference",
+                    "filter_tags": ["rag"],
+                    "filter_tag_mode": "strictly-all",
+                },
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"]["code"], "validation_failed")
+        self.assertIn("filter_tag_mode", response.json()["error"]["message"])
+
+    def test_file_ingestion_endpoint_accepts_supported_upload_and_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            incoming_dir = os.path.join(temp_dir, "incoming")
+            env = {
+                "RECALL_API_KEY": "",
+                "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+                "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+                "DATA_INCOMING": incoming_dir,
+            }
+            fake_result = IngestResult(
+                run_id="run-file-1",
+                ingest_id="ingest-file-1",
+                doc_id="doc-file-1",
+                source_type="file",
+                source_ref="incoming/test.md",
+                title="test.md",
+                source_identity="incoming/test.md",
+                chunks_created=1,
+                moved_to=None,
+                replace_existing=False,
+                replaced_points=0,
+                replacement_status="skipped",
+                latency_ms=5,
+                status="dry_run",
+            )
+            with patch("scripts.phase1.ingest_bridge_api.ingest_request", return_value=fake_result) as mock_ingest:
+                with build_client(env) as client:
+                    response = client.post(
+                        "/v1/ingestions/files?dry_run=true",
+                        files={"file": ("test.md", b"# hello", "text/markdown")},
+                        data={"group": "invalid-group", "tags": "alpha, beta, alpha", "save_to_vault": "true"},
+                    )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["workflow"], "workflow_01_ingestion_file")
+        self.assertEqual(payload["status"], "accepted")
+        self.assertEqual(payload["group"], "reference")
+        self.assertEqual(payload["tags"], ["alpha", "beta"])
+        self.assertTrue(payload["save_to_vault"])
+        request_obj = mock_ingest.call_args.args[0]
+        self.assertEqual(request_obj.group, "reference")
+        self.assertEqual(request_obj.tags, ["alpha", "beta"])
+        self.assertTrue(request_obj.metadata["save_to_vault"])
+
+    def test_file_ingestion_endpoint_rejects_unsupported_extension(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        with build_client(env) as client:
+            response = client.post(
+                "/v1/ingestions/files",
+                files={"file": ("archive.zip", b"PK\x03\x04", "application/zip")},
+                data={"group": "reference", "tags": ""},
+            )
+
+        self.assertEqual(response.status_code, 415)
+        self.assertEqual(response.json()["error"]["code"], "unsupported_media_type")
+
+    def test_file_ingestion_endpoint_rejects_oversized_upload(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            incoming_dir = os.path.join(temp_dir, "incoming")
+            env = {
+                "RECALL_API_KEY": "",
+                "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+                "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+                "RECALL_MAX_UPLOAD_MB": "1",
+                "DATA_INCOMING": incoming_dir,
+            }
+            with build_client(env) as client:
+                response = client.post(
+                    "/v1/ingestions/files",
+                    files={"file": ("big.md", b"a" * (1024 * 1024 + 1), "text/markdown")},
+                    data={"group": "reference", "tags": ""},
+                )
+
+        self.assertEqual(response.status_code, 413)
+        self.assertEqual(response.json()["error"]["code"], "payload_too_large")
 
     def test_vault_tree_endpoint_returns_payload_and_alias_is_removed(self) -> None:
         env = {
@@ -401,6 +505,7 @@ class BridgeApiContractTests(unittest.TestCase):
             "/v1/healthz",
             "/v1/auto-tag-rules",
             "/v1/ingestions",
+            "/v1/ingestions/files",
             "/v1/rag-queries",
             "/v1/meeting-action-items",
             "/v1/activities",
@@ -414,6 +519,7 @@ class BridgeApiContractTests(unittest.TestCase):
             "/healthz",
             "/health",
             "/ingest/{channel}",
+            "/ingest/file",
             "/ingestions",
             "/query/rag",
             "/rag/query",

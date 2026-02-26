@@ -21,7 +21,7 @@ from typing import Any, Literal, Optional
 
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, Query, Request
+from fastapi import FastAPI, File, Form, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -32,7 +32,7 @@ if str(ROOT) not in sys.path:
 from scripts.phase1.channel_adapters import normalize_payload  # noqa: E402
 from scripts.phase1.group_model import CANONICAL_GROUPS, normalize_group  # noqa: E402
 from scripts.phase1.ingest_from_payload import payload_to_requests  # noqa: E402
-from scripts.phase1.ingestion_pipeline import ingest_request  # noqa: E402
+from scripts.phase1.ingestion_pipeline import IngestRequest, ingest_request  # noqa: E402
 from scripts.phase1.rag_query import run_rag_query  # noqa: E402
 from scripts.phase5.vault_sync import list_vault_tree, run_vault_sync_once  # noqa: E402
 from scripts.phase2.meeting_action_items import run_meeting_action_items  # noqa: E402
@@ -48,6 +48,10 @@ DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 60
 DEFAULT_RATE_LIMIT_MAX_REQUESTS = 120
 RATE_LIMIT_WINDOW_ENV = "RECALL_API_RATE_LIMIT_WINDOW_SECONDS"
 RATE_LIMIT_MAX_REQUESTS_ENV = "RECALL_API_RATE_LIMIT_MAX_REQUESTS"
+MAX_UPLOAD_MB_ENV = "RECALL_MAX_UPLOAD_MB"
+DEFAULT_MAX_UPLOAD_MB = 50
+UPLOAD_CHUNK_BYTES = 1024 * 1024
+ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".docx", ".txt", ".md", ".html", ".eml"}
 DEFAULT_ACTIVITY_LIMIT = 25
 DEFAULT_RECENT_EVAL_RUNS = 5
 DEFAULT_EVAL_RUN_TIMEOUT_SECONDS = 900
@@ -107,6 +111,19 @@ class IngestWorkflowResponse(BaseModel):
     ingested: list[dict[str, Any]]
     errors: list[dict[str, Any]]
     dry_run: bool
+
+
+class FileIngestionResponse(BaseModel):
+    workflow: Literal["workflow_01_ingestion_file"]
+    status: Literal["accepted"]
+    filename: str
+    stored_path: str
+    group: str
+    tags: list[str] = Field(default_factory=list)
+    save_to_vault: bool
+    dry_run: bool
+    ingested: list[dict[str, Any]]
+    errors: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class RagWorkflowResponse(BaseModel):
@@ -324,6 +341,29 @@ INGEST_SUCCESS_EXAMPLE = {
     ],
     "errors": [],
     "dry_run": False,
+}
+
+FILE_INGEST_SUCCESS_EXAMPLE = {
+    "workflow": "workflow_01_ingestion_file",
+    "status": "accepted",
+    "filename": "meeting-notes.md",
+    "stored_path": "/home/jaydreyer/recall-local/data/incoming/meeting-notes.md",
+    "group": "meeting",
+    "tags": ["standup", "action-items"],
+    "save_to_vault": True,
+    "dry_run": False,
+    "ingested": [
+        {
+            "run_id": "run_file1",
+            "doc_id": "doc_file1",
+            "source_type": "file",
+            "source_ref": "/home/jaydreyer/recall-local/data/incoming/meeting-notes.md",
+            "status": "completed",
+            "chunks_created": 2,
+            "latency_ms": 420,
+        }
+    ],
+    "errors": [],
 }
 
 RAG_SUCCESS_EXAMPLE = {
@@ -582,6 +622,41 @@ INGEST_REQUEST_BODY = {
     },
 }
 
+FILE_INGEST_REQUEST_BODY = {
+    "required": True,
+    "content": {
+        "multipart/form-data": {
+            "schema": {
+                "type": "object",
+                "required": ["file"],
+                "properties": {
+                    "file": {
+                        "type": "string",
+                        "format": "binary",
+                        "description": "Source file to ingest.",
+                    },
+                    "group": {
+                        "type": "string",
+                        "description": "Canonical ingestion group.",
+                        "enum": CANONICAL_GROUP_ENUM,
+                        "default": "reference",
+                    },
+                    "tags": {
+                        "type": "string",
+                        "description": "Comma-separated tags.",
+                        "example": "anthropic, interview-prep",
+                    },
+                    "save_to_vault": {
+                        "type": "boolean",
+                        "description": "If true, annotate ingestion metadata for vault write flows.",
+                        "default": False,
+                    },
+                },
+            }
+        }
+    },
+}
+
 RAG_REQUEST_BODY = {
     "required": True,
     "content": {
@@ -601,6 +676,12 @@ RAG_REQUEST_BODY = {
                             {"type": "string"},
                         ],
                         "description": "Tag filter list or comma-separated string.",
+                    },
+                    "filter_tag_mode": {
+                        "type": "string",
+                        "enum": ["any", "all"],
+                        "default": "any",
+                        "description": "Tag matching mode (`any` matches one-or-more tags, `all` requires every tag).",
                     },
                     "filter_group": {
                         "type": "string",
@@ -632,7 +713,8 @@ RAG_REQUEST_BODY = {
                         "query": "What should I emphasize for an Anthropic Solutions Engineer interview?",
                         "mode": "job-search",
                         "filter_group": "job-search",
-                        "filter_tags": ["job-search", "anthropic"],
+                        "filter_tags": ["anthropic", "job-posting"],
+                        "filter_tag_mode": "all",
                         "retrieval_mode": "hybrid",
                         "enable_reranker": True,
                         "top_k": 6,
@@ -887,6 +969,48 @@ def create_app() -> FastAPI:
         payload_without_channel = dict(payload)
         payload_without_channel.pop("channel", None)
         return _process_ingestion(channel=channel, payload=payload_without_channel, dry_run=dry_run, request_id=request_id)
+
+    @app.post(
+        f"{API_PREFIX}/ingestions/files",
+        tags=["Ingestions"],
+        summary="Create file ingestion operation",
+        description=(
+            "Accepts a multipart file upload, stores it under incoming data, and ingests it "
+            "as a canonical file source."
+        ),
+        response_model=FileIngestionResponse,
+        responses={
+            200: {"description": "File ingestion accepted.", "content": {"application/json": {"example": FILE_INGEST_SUCCESS_EXAMPLE}}},
+            400: {"model": ErrorResponse, "description": "Invalid form values.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            413: {"model": ErrorResponse, "description": "Uploaded file exceeds max allowed size.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
+            415: {"model": ErrorResponse, "description": "Unsupported media/file type.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
+            500: {"model": ErrorResponse, "description": "Ingestion workflow failed.", "content": {"application/json": {"example": ERROR_EXAMPLE_WORKFLOW}}},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+        openapi_extra={"requestBody": FILE_INGEST_REQUEST_BODY},
+    )
+    async def create_file_ingestion(
+        request: Request,
+        file: UploadFile = File(..., description="File to ingest."),
+        group: str = Form("reference"),
+        tags: str = Form(""),
+        save_to_vault: bool = Form(False),
+        dry_run: bool = Query(False, description="If true, process upload without durable DB/vector writes."),
+    ) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        return await _process_file_upload(
+            uploaded_file=file,
+            group=group,
+            tags=tags,
+            save_to_vault=save_to_vault,
+            dry_run=dry_run,
+            request_id=request_id,
+        )
 
     @app.post(
         f"{API_PREFIX}/rag-queries",
@@ -1615,6 +1739,100 @@ def _parse_eval_summary_output(raw_stdout: str) -> dict[str, Any]:
     return {"raw_output": text}
 
 
+async def _process_file_upload(
+    *,
+    uploaded_file: UploadFile,
+    group: str,
+    tags: str,
+    save_to_vault: bool,
+    dry_run: bool,
+    request_id: str,
+) -> JSONResponse:
+    original_name = Path(str(uploaded_file.filename or "")).name
+    suffix = Path(original_name).suffix.lower()
+    if suffix not in ALLOWED_UPLOAD_EXTENSIONS:
+        return _error_response(
+            status_code=415,
+            code="unsupported_media_type",
+            message=f"Unsupported file type: {suffix or 'unknown'}",
+            request_id=request_id,
+            details=[
+                {
+                    "field": "file",
+                    "issue": f"allowed extensions: {', '.join(sorted(ALLOWED_UPLOAD_EXTENSIONS))}",
+                }
+            ],
+        )
+
+    incoming_dir = _incoming_dir_from_env()
+    incoming_dir.mkdir(parents=True, exist_ok=True)
+    target_path = _next_available_upload_path(incoming_dir=incoming_dir, original_name=original_name)
+    max_upload_bytes = _max_upload_bytes()
+
+    bytes_written = 0
+    try:
+        with target_path.open("wb") as destination:
+            while True:
+                chunk = await uploaded_file.read(UPLOAD_CHUNK_BYTES)
+                if not chunk:
+                    break
+                bytes_written += len(chunk)
+                if bytes_written > max_upload_bytes:
+                    destination.close()
+                    target_path.unlink(missing_ok=True)
+                    return _error_response(
+                        status_code=413,
+                        code="payload_too_large",
+                        message=f"Uploaded file exceeds max size of {_max_upload_mb()} MB.",
+                        request_id=request_id,
+                        details=[{"field": "file", "issue": f"size limit is {_max_upload_mb()} MB"}],
+                    )
+                destination.write(chunk)
+    finally:
+        await uploaded_file.close()
+
+    normalized_group = normalize_group(group)
+    normalized_tags = _parse_comma_tags(tags)
+    metadata = {
+        "save_to_vault": save_to_vault,
+        "uploaded_filename": original_name,
+    }
+    ingest_payload = IngestRequest(
+        source_type="file",
+        content=str(target_path),
+        source_channel="webhook",
+        title=original_name,
+        group=normalized_group,
+        tags=normalized_tags,
+        metadata=metadata,
+    )
+    try:
+        ingest_result = ingest_request(ingest_payload, dry_run=dry_run)
+    except Exception as exc:  # noqa: BLE001
+        return _error_response(
+            status_code=500,
+            code="workflow_failed",
+            message=f"File ingestion failed: {exc}",
+            request_id=request_id,
+        )
+
+    return _json_response(
+        200,
+        {
+            "workflow": "workflow_01_ingestion_file",
+            "status": "accepted",
+            "filename": target_path.name,
+            "stored_path": str(target_path),
+            "group": normalized_group,
+            "tags": normalized_tags,
+            "save_to_vault": save_to_vault,
+            "dry_run": dry_run,
+            "ingested": [asdict(ingest_result)],
+            "errors": [],
+        },
+    )
+
+
 def _process_ingestion(*, channel: str, payload: dict[str, Any], dry_run: bool, request_id: str) -> JSONResponse:
     normalized_channel = channel.strip().lower()
     if normalized_channel not in ALLOWED_INGEST_CHANNELS:
@@ -1684,6 +1902,7 @@ def _process_rag_query(*, payload: dict[str, Any], dry_run: bool, request_id: st
     max_retries = payload.get("max_retries")
     mode = payload.get("mode")
     filter_tags = payload.get("filter_tags")
+    filter_tag_mode = payload.get("filter_tag_mode")
     filter_group = payload.get("filter_group")
     retrieval_mode = payload.get("retrieval_mode")
     hybrid_alpha = payload.get("hybrid_alpha")
@@ -1695,6 +1914,7 @@ def _process_rag_query(*, payload: dict[str, Any], dry_run: bool, request_id: st
         max_retries_value = int(max_retries) if max_retries is not None else None
         mode_value = str(mode) if mode is not None else None
         filter_tags_value = _normalize_tag_filter(filter_tags)
+        filter_tag_mode_value = _normalize_filter_tag_mode(filter_tag_mode)
         filter_group_value = _normalize_group_filter(filter_group)
         retrieval_mode_value = str(retrieval_mode) if retrieval_mode is not None else None
         hybrid_alpha_value = float(hybrid_alpha) if hybrid_alpha is not None else None
@@ -1719,6 +1939,7 @@ def _process_rag_query(*, payload: dict[str, Any], dry_run: bool, request_id: st
             min_score=min_score_value,
             max_retries=max_retries_value,
             filter_tags=filter_tags_value,
+            filter_tag_mode=filter_tag_mode_value,
             filter_group=filter_group_value,
             mode=mode_value,
             retrieval_mode=retrieval_mode_value,
@@ -1800,6 +2021,17 @@ def _normalize_group_filter(value: Any) -> str | None:
     return normalize_group(raw)
 
 
+def _normalize_filter_tag_mode(value: Any) -> str:
+    if value is None:
+        return "any"
+    normalized = str(value).strip().lower()
+    if normalized in {"", "any", "or"}:
+        return "any"
+    if normalized in {"all", "and", "must"}:
+        return "all"
+    raise ValueError("filter_tag_mode must be one of: any, all.")
+
+
 def _normalize_bool(value: Any, *, field_name: str = "value") -> bool:
     if isinstance(value, bool):
         return value
@@ -1828,6 +2060,46 @@ def _normalize_optional_string(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _parse_comma_tags(raw_tags: str) -> list[str]:
+    tags: list[str] = []
+    seen: set[str] = set()
+    for part in str(raw_tags or "").split(","):
+        normalized = part.strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        tags.append(normalized)
+    return tags
+
+
+def _max_upload_mb() -> int:
+    return _read_positive_int_env(MAX_UPLOAD_MB_ENV, DEFAULT_MAX_UPLOAD_MB)
+
+
+def _max_upload_bytes() -> int:
+    return _max_upload_mb() * 1024 * 1024
+
+
+def _incoming_dir_from_env() -> Path:
+    incoming_raw = os.getenv("DATA_INCOMING", str(ROOT / "data" / "incoming")).strip()
+    incoming = Path(incoming_raw).expanduser()
+    if incoming.is_absolute():
+        return incoming
+    return (ROOT / incoming).resolve()
+
+
+def _next_available_upload_path(*, incoming_dir: Path, original_name: str) -> Path:
+    safe_name = Path(original_name).name or f"upload-{uuid.uuid4().hex[:8]}.txt"
+    stem = Path(safe_name).stem or f"upload-{uuid.uuid4().hex[:8]}"
+    suffix = Path(safe_name).suffix
+    candidate = incoming_dir / safe_name
+    counter = 1
+    while candidate.exists():
+        candidate = incoming_dir / f"{stem}-{counter}{suffix}"
+        counter += 1
+    return candidate
 
 
 async def _read_json_body(request: Request) -> dict[str, Any]:

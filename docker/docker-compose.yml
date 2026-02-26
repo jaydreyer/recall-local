@@ -1,7 +1,83 @@
-# Recall.local - Additional Services (Approach B)
-# Existing Ollama/Qdrant/n8n/Open WebUI services stay as-is.
+# Recall.local - Full Stack Compose (default)
 
 services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-storage:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    restart: unless-stopped
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    ports:
+      - "5678:5678"
+    volumes:
+      - ../n8n:/home/node/.n8n
+    environment:
+      - N8N_SECURE_COOKIE=false
+    restart: unless-stopped
+
+  recall-ingest-bridge:
+    build:
+      context: ..
+      dockerfile: docker/bridge/Dockerfile
+    container_name: recall-ingest-bridge
+    ports:
+      - "8090:8090"
+    working_dir: /app
+    command: ["python3", "scripts/phase1/ingest_bridge_api.py", "--host", "0.0.0.0", "--port", "8090"]
+    volumes:
+      - ../data:/app/data
+      - ../scripts:/app/scripts
+      - ../prompts:/app/prompts
+      - ../config:/app/config
+    env_file:
+      - ./.env
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - QDRANT_HOST=http://qdrant:6333
+      - QDRANT_COLLECTION=recall_docs
+      - DATA_INCOMING=/app/data/incoming
+      - DATA_PROCESSED=/app/data/processed
+      - DATA_ARTIFACTS=/app/data/artifacts
+      - RECALL_DB_PATH=/app/data/recall.db
+      - N8N_HOST=http://n8n:5678
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8090/v1/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
   recall-ui:
     build:
       context: ../ui/dashboard
@@ -9,10 +85,15 @@ services:
     container_name: recall-ui
     ports:
       - "8170:80"
+    depends_on:
+      recall-ingest-bridge:
+        condition: service_healthy
     restart: unless-stopped
 
   mkdocs:
-    image: squidfunk/mkdocs-material:latest
+    build:
+      context: ..
+      dockerfile: docker/mkdocs/Dockerfile
     container_name: recall-mkdocs
     ports:
       - "8100:8000"
@@ -21,6 +102,6 @@ services:
       - ../data/artifacts:/docs/docs/artifacts:ro
     restart: unless-stopped
 
-networks:
-  default:
-    name: recall-net
+volumes:
+  qdrant-storage:
+  ollama-models:

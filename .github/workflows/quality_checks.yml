@@ -57,6 +57,12 @@ jobs:
           done < <(find scripts -type f -name "*.sh" -print0)
           echo "Shell syntax check passed."
 
+      - name: Run tests
+        run: |
+          python -m pip install -r requirements.txt --break-system-packages
+          python -m pip install pytest --break-system-packages
+          pytest tests/ -v --tb=short
+
       - name: Wrapper smoke checks
         run: |
           set -euo pipefail

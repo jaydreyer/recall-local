@@ -11,3 +11,4 @@ rich
 lxml_html_clean
 langfuse
 watchdog
+python-multipart

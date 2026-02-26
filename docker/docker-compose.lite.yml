@@ -1,0 +1,26 @@
+# Recall.local - Lite Compose (Approach B)
+# Use this when Ollama/Qdrant/n8n/Open WebUI already run outside this compose stack.
+
+services:
+  recall-ui:
+    build:
+      context: ../ui/dashboard
+      dockerfile: Dockerfile
+    container_name: recall-ui
+    ports:
+      - "8170:80"
+    restart: unless-stopped
+
+  mkdocs:
+    image: squidfunk/mkdocs-material:latest
+    container_name: recall-mkdocs
+    ports:
+      - "8100:8000"
+    volumes:
+      - ../docs:/docs
+      - ../data/artifacts:/docs/docs/artifacts:ro
+    restart: unless-stopped
+
+networks:
+  default:
+    name: recall-net

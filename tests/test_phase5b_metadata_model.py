@@ -115,6 +115,7 @@ class Phase5BMetadataModelTests(unittest.TestCase):
             query_filter = retrieval._build_query_filter(  # noqa: SLF001
                 filter_group="job-search",
                 filter_tags=["anthropic", "interview-prep"],
+                filter_tag_mode="any",
             )
 
         self.assertIsNotNone(query_filter)
@@ -125,6 +126,21 @@ class Phase5BMetadataModelTests(unittest.TestCase):
         self.assertEqual(first.match.value, "job-search")
         self.assertEqual(second.key, "tags")
         self.assertEqual(second.match.any, ["anthropic", "interview-prep"])
+
+    def test_retrieval_filter_all_mode_requires_each_tag(self) -> None:
+        with patch("scripts.phase1.retrieval._import_qdrant_models", return_value=_FakeModels):
+            query_filter = retrieval._build_query_filter(  # noqa: SLF001
+                filter_group=None,
+                filter_tags=["mistral", "job-posting"],
+                filter_tag_mode="all",
+            )
+
+        self.assertIsNotNone(query_filter)
+        self.assertEqual(len(query_filter.must), 2)
+        self.assertEqual(query_filter.must[0].key, "tags")
+        self.assertEqual(query_filter.must[0].match.any, ["mistral"])
+        self.assertEqual(query_filter.must[1].key, "tags")
+        self.assertEqual(query_filter.must[1].match.any, ["job-posting"])
 
 
 if __name__ == "__main__":

@@ -95,6 +95,7 @@ def retrieve_chunks(
     top_k: int | None = None,
     min_score: float | None = None,
     filter_tags: list[str] | None = None,
+    filter_tag_mode: str | None = None,
     filter_group: str | None = None,
     retrieval_mode: str | None = None,
     hybrid_alpha: float | None = None,
@@ -109,6 +110,7 @@ def retrieve_chunks(
     limit = settings.top_k if top_k is None else top_k
     threshold = settings.min_score if min_score is None else min_score
     normalized_tags = _normalize_filter_tags(filter_tags)
+    normalized_tag_mode = _normalize_filter_tag_mode(filter_tag_mode)
     normalized_group = _normalize_filter_group(filter_group)
     active_retrieval_mode = _normalize_retrieval_mode(retrieval_mode or settings.retrieval_mode)
     active_hybrid_alpha = (
@@ -141,6 +143,7 @@ def retrieve_chunks(
                 "workflow": "workflow_02_rag_query",
                 "operation": "query_embedding",
                 "filter_tags": normalized_tags,
+                "filter_tag_mode": normalized_tag_mode,
                 "filter_group": normalized_group,
                 "retrieval_mode": active_retrieval_mode,
                 "reranker_enabled": active_reranker,
@@ -156,6 +159,7 @@ def retrieve_chunks(
         top_k=candidate_limit,
         min_score=search_threshold,
         filter_tags=normalized_tags,
+        filter_tag_mode=normalized_tag_mode,
         filter_group=normalized_group,
     )
 
@@ -209,9 +213,14 @@ def _search_points(
     top_k: int,
     min_score: float,
     filter_tags: list[str],
+    filter_tag_mode: str,
     filter_group: str | None,
 ) -> list[Any]:
-    query_filter = _build_query_filter(filter_tags=filter_tags, filter_group=filter_group)
+    query_filter = _build_query_filter(
+        filter_tags=filter_tags,
+        filter_tag_mode=filter_tag_mode,
+        filter_group=filter_group,
+    )
 
     if hasattr(qdrant, "search"):
         kwargs = {
@@ -383,9 +392,10 @@ def _normalize_payload_tags(value: Any) -> list[str]:
     return []
 
 
-def _build_query_filter(*, filter_tags: list[str], filter_group: str | None):
+def _build_query_filter(*, filter_tags: list[str], filter_tag_mode: str = "any", filter_group: str | None):
     if not filter_tags and not filter_group:
         return None
+    normalized_tag_mode = _normalize_filter_tag_mode(filter_tag_mode)
     models = _import_qdrant_models()
     must_conditions = []
     if filter_group:
@@ -396,12 +406,21 @@ def _build_query_filter(*, filter_tags: list[str], filter_group: str | None):
             )
         )
     if filter_tags:
-        must_conditions.append(
-            models.FieldCondition(
-                key="tags",
-                match=models.MatchAny(any=filter_tags),
+        if normalized_tag_mode == "all":
+            must_conditions.extend(
+                models.FieldCondition(
+                    key="tags",
+                    match=models.MatchAny(any=[tag]),
+                )
+                for tag in filter_tags
             )
-        )
+        else:
+            must_conditions.append(
+                models.FieldCondition(
+                    key="tags",
+                    match=models.MatchAny(any=filter_tags),
+                )
+            )
     return models.Filter(
         must=must_conditions
     )
@@ -414,6 +433,15 @@ def _normalize_filter_group(filter_group: str | None) -> str | None:
     if not raw:
         return None
     return normalize_group(raw)
+
+
+def _normalize_filter_tag_mode(filter_tag_mode: str | None) -> str:
+    raw = str(filter_tag_mode or "").strip().lower()
+    if raw in {"", "any", "or"}:
+        return "any"
+    if raw in {"all", "and", "must"}:
+        return "all"
+    raise ValueError(f"Unsupported filter_tag_mode: {filter_tag_mode}")
 
 
 def _import_qdrant_models():
@@ -459,6 +487,11 @@ def parse_args() -> argparse.Namespace:
         help="Optional group filter (`job-search|learning|project|reference|meeting`).",
     )
     parser.add_argument(
+        "--filter-tag-mode",
+        default="any",
+        help="Tag filter mode: any|all.",
+    )
+    parser.add_argument(
         "--retrieval-mode",
         default=None,
         help="Retrieval mode override: vector|hybrid.",
@@ -491,6 +524,7 @@ def main() -> int:
             top_k=args.top_k,
             min_score=args.min_score,
             filter_tags=[part.strip() for part in args.filter_tags.split(",") if part.strip()],
+            filter_tag_mode=args.filter_tag_mode,
             filter_group=args.filter_group or None,
             retrieval_mode=args.retrieval_mode,
             hybrid_alpha=args.hybrid_alpha,

@@ -9,6 +9,26 @@ from scripts.phase1 import rag_query
 
 
 class Phase5FUnanswerableNormalizationTests(unittest.TestCase):
+    def test_filter_tag_mode_normalizes_aliases(self) -> None:
+        self.assertEqual(rag_query._normalize_filter_tag_mode("any"), "any")  # noqa: SLF001
+        self.assertEqual(rag_query._normalize_filter_tag_mode("AND"), "all")  # noqa: SLF001
+
+    def test_explicit_default_mode_is_not_overridden_by_filters(self) -> None:
+        resolved = rag_query._resolve_mode(  # noqa: SLF001
+            mode="default",
+            filter_tags=["job-search"],
+            filter_group="job-search",
+        )
+        self.assertEqual(resolved, "default")
+
+    def test_implicit_mode_can_still_infer_from_filters(self) -> None:
+        resolved = rag_query._resolve_mode(  # noqa: SLF001
+            mode=None,
+            filter_tags=["job-search"],
+            filter_group=None,
+        )
+        self.assertEqual(resolved, "job-search")
+
     def test_identifier_like_answer_normalizes_to_abstention(self) -> None:
         response = {
             "answer": "1b7b0fe106ca4c1f9d8a20f227246749",

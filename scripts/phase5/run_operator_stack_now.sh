@@ -6,9 +6,13 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BRIDGE_URL="${RECALL_BRIDGE_URL:-http://localhost:8090}"
 N8N_HOST="${N8N_HOST:-http://localhost:5678}"
 
-COMPOSE_FILES=(
-  "$ROOT_DIR/docker/phase1b-ingest-bridge.compose.yml"
+FULL_COMPOSE_FILES=(
   "$ROOT_DIR/docker/docker-compose.yml"
+)
+
+LITE_COMPOSE_FILES=(
+  "$ROOT_DIR/docker/phase1b-ingest-bridge.compose.yml"
+  "$ROOT_DIR/docker/docker-compose.lite.yml"
 )
 
 usage() {
@@ -17,21 +21,23 @@ Usage:
   run_operator_stack_now.sh <command> [options]
 
 Commands:
-  up [--recreate] [--preflight]   Bring up operator stack from consolidated compose files.
+  up [--recreate] [--preflight] [--lite]   Bring up operator stack from compose files.
   down                            Stop and remove operator stack containers.
-  restart [--preflight]           Recreate operator stack containers.
+  restart [--preflight] [--lite]  Recreate operator stack containers.
   status                          Show operator stack service status.
-  logs [service]                  Tail logs for all services or one service.
+  logs [service] [--lite]         Tail logs for all services or one service.
   preflight                       Run bridge/n8n preflight checks.
-  config                          Print effective compose services and config checks.
+  config [--lite]                 Print effective compose services and config checks.
   help                            Show this help.
 
 Options:
   --bridge-url <url>              Override bridge URL used by preflight.
   --n8n-host <url>                Override n8n host used by preflight.
+  --lite                          Use Approach-B compose files for existing external services.
 
 Examples:
   run_operator_stack_now.sh up
+  run_operator_stack_now.sh up --lite
   run_operator_stack_now.sh up --recreate --preflight
   run_operator_stack_now.sh status
   run_operator_stack_now.sh logs recall-ingest-bridge
@@ -47,8 +53,15 @@ require_docker() {
 }
 
 compose_cmd() {
+  local selected_files=()
+  if [[ "$COMPOSE_MODE" == "lite" ]]; then
+    selected_files=("${LITE_COMPOSE_FILES[@]}")
+  else
+    selected_files=("${FULL_COMPOSE_FILES[@]}")
+  fi
+
   local args=()
-  for compose_file in "${COMPOSE_FILES[@]}"; do
+  for compose_file in "${selected_files[@]}"; do
     args+=(-f "$compose_file")
   done
   docker compose "${args[@]}" "$@"
@@ -68,6 +81,7 @@ fi
 RUN_PREFLIGHT="false"
 FORCE_RECREATE="false"
 LOG_SERVICE=""
+COMPOSE_MODE="full"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -89,6 +103,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --help|-h)
       COMMAND="help"
+      shift
+      ;;
+    --lite)
+      COMPOSE_MODE="lite"
       shift
       ;;
     *)
@@ -153,8 +171,13 @@ case "$COMMAND" in
   config)
     require_docker
     cd "$ROOT_DIR"
+    local_files=("${FULL_COMPOSE_FILES[@]}")
+    if [[ "$COMPOSE_MODE" == "lite" ]]; then
+      local_files=("${LITE_COMPOSE_FILES[@]}")
+    fi
+    echo "Compose mode: $COMPOSE_MODE"
     echo "Compose files:"
-    for compose_file in "${COMPOSE_FILES[@]}"; do
+    for compose_file in "${local_files[@]}"; do
       echo "  - $compose_file"
     done
     echo

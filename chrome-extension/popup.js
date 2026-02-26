@@ -32,6 +32,7 @@ const refs = {
   addTag: document.getElementById("add-tag"),
   suggestedTags: document.getElementById("suggested-tags"),
   includeSelection: document.getElementById("include-selection"),
+  saveToVault: document.getElementById("save-to-vault"),
   selectionPreview: document.getElementById("selection-preview"),
   captureButton: document.getElementById("capture-btn"),
   optionsButton: document.getElementById("open-options")
@@ -269,7 +270,8 @@ async function submitCapture() {
     url: state.activeTab.url,
     title: state.activeTab.title || "Untitled page",
     group: state.group,
-    tags: uniqueStrings(state.tags.map(sanitizeTag).filter(Boolean))
+    tags: uniqueStrings(state.tags.map(sanitizeTag).filter(Boolean)),
+    save_to_vault: Boolean(refs.saveToVault?.checked)
   };
 
   if (state.gmailPrefill) {

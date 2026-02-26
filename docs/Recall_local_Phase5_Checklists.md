@@ -94,3 +94,13 @@ Source plan: `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Gu
 - [x] Query UX is self-serve and citation-rich without curl.
 - [x] Auth/rate-limit controls verified in enabled mode.
 - [x] Phase 5 implementation log and environment inventory updated.
+
+## Post-Audit Punch List (2026-02-26)
+
+- [x] Add canonical multipart file upload endpoint (`POST /v1/ingestions/files`) with auth/rate limits + size/type validation.
+- [x] Add dashboard ingest drag-drop/file-picker flow wired to `POST /v1/ingestions/files` with selected group/tags.
+- [x] Add CI pytest execution step to `quality_checks.yml`.
+- [x] Add extension popup `save_to_vault` toggle wired into ingest payload.
+- [x] Promote full-stack compose to `docker/docker-compose.yml`; preserve Approach B as `docker/docker-compose.lite.yml`.
+- [x] Switch dashboard mono font to IBM Plex Mono.
+- [x] Verify canonical `/v1/*` route references in runtime JSON/JS/PY/YML callers.

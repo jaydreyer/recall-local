@@ -87,16 +87,12 @@ Compatibility policy:
 ### New endpoints (Phase 5)
 
 1. `GET /v1/auto-tag-rules`
-2. `POST /ingest/url`
-3. `POST /ingest/text`
-4. `POST /ingest/gdoc`
-5. `POST /ingest/email`
-6. `POST /ingest/file` (multipart upload)
-7. `GET /v1/activities` (`?group=` optional filter)
-8. `GET /v1/evaluations` (`?latest=true` for newest summary)
-9. `POST /v1/evaluation-runs`
-10. `GET /v1/vault-files`
-11. `POST /v1/vault-syncs`
+2. `POST /v1/ingestions/files` (multipart upload)
+3. `GET /v1/activities` (`?group=` optional filter)
+4. `GET /v1/evaluations` (`?latest=true` for newest summary)
+5. `POST /v1/evaluation-runs`
+6. `GET /v1/vault-files`
+7. `POST /v1/vault-syncs`
 
 ## Data contract updates (ingestion + retrieval)
 
@@ -114,7 +110,8 @@ Retrieval/query behavior:
 
 1. Preserve existing `filter_tags`.
 2. Add optional `filter_group` for dashboard/extension scoped queries.
-3. Keep `mode` routing intact (`default|job-search|learning`).
+3. Add optional `filter_tag_mode` (`any|all`) to control OR/AND behavior for tag filters.
+4. Keep `mode` routing intact (`default|job-search|learning`).
 
 ## Obsidian implementation plan
 
@@ -182,6 +179,7 @@ Retrieval/query behavior:
    - `GET /v1/activities`
    - `GET /v1/evaluations` (`?latest=true` for newest summary)
    - `POST /v1/evaluation-runs`
+6. Query tab exposes Tag Match controls (`any (OR)`/`all (AND)`) and presents deduplicated human-readable citation cards with optional technical details.
 
 ## Chrome extension plan
 
@@ -226,7 +224,7 @@ Retrieval/query behavior:
 4. Auto-tag rules config (`config/auto_tag_rules.json`) + `GET /v1/auto-tag-rules`.
 5. Pytest scaffolding + target test coverage.
 6. Docker compose consolidation (including separate `recall-ui` container).
-7. New bridge endpoints (`ingest/file`, `activity`, `eval`, `vault`, `config`).
+7. New bridge endpoints (`v1/ingestions/files`, `v1/activities`, `v1/evaluations`, `v1/vault-files`, `v1/auto-tag-rules`).
 8. Group/tag support in ingestion and query contracts.
 9. Obsidian sync (`--once` + `--watch`) with Syncthing event handling.
 10. Obsidian metadata extraction (`wiki-links`, hashtags, frontmatter).

@@ -495,7 +495,7 @@ def _token_windows(text: str, *, max_tokens: int, overlap_tokens: int) -> list[s
     if encoder is None:
         return _character_windows(text, max_chars=max_tokens * 4, overlap_chars=overlap_tokens * 4)
 
-    token_ids = encoder.encode(text)
+    token_ids = _encode_tokens(encoder, text)
     if not token_ids:
         return []
 
@@ -512,6 +512,16 @@ def _token_windows(text: str, *, max_tokens: int, overlap_tokens: int) -> list[s
         if start + max_tokens >= len(token_ids):
             break
     return windows
+
+
+def _encode_tokens(encoder: Any, text: str) -> list[int]:
+    encode_ordinary = getattr(encoder, "encode_ordinary", None)
+    if callable(encode_ordinary):
+        return encode_ordinary(text)
+    try:
+        return encoder.encode(text, disallowed_special=())
+    except TypeError:
+        return encoder.encode(text)
 
 
 def _character_windows(text: str, *, max_chars: int, overlap_chars: int) -> list[str]:

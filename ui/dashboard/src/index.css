@@ -1,14 +1,14 @@
-@import url("https://fonts.googleapis.com/css2?family=Chivo:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap");
 
 :root {
-  --font-body: "Chivo", "Avenir Next", sans-serif;
-  --font-mono: "Space Mono", "SF Mono", monospace;
-  --text-main: #eef3ff;
-  --text-muted: #a8b0c8;
-  --accent: #ef9f2f;
-  --accent-soft: #f2cc7d;
-  --line: rgba(188, 206, 255, 0.18);
-  --panel-bg: rgba(10, 13, 20, 0.88);
+  --font-body: "Instrument Sans", "Avenir Next", sans-serif;
+  --font-mono: "IBM Plex Mono", "SF Mono", monospace;
+  --text-main: #e8e8e8;
+  --text-muted: #989898;
+  --accent: #f59e0b;
+  --accent-soft: #f8c46c;
+  --line: rgba(255, 255, 255, 0.14);
+  --panel-bg: rgba(255, 255, 255, 0.02);
 }
 
 * {
@@ -25,6 +25,6 @@ body,
 
 body {
   font-family: var(--font-body);
-  background: #0e1118;
+  background: #0a0a0a;
   color: var(--text-main);
 }
