@@ -1,5 +1,129 @@
 # Recall.local Implementation Log
 
+## 2026-03-04 - Phase 6B closeout hardening (API visibility + n8n URL/payload fixes)
+
+### What was executed
+
+- Updated jobs API query validation to allow unscored queue visibility:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py`
+  - `GET /v1/jobs` now allows `min_score=-1` (while keeping default `0`).
+- Added contract coverage for the new query bound:
+  - `/Users/jaydreyer/projects/recall-local/tests/test_bridge_api_contract.py`
+  - added test asserting `min_score=-1` is accepted and `min_score=-2` is rejected.
+- Updated API docs to reflect unscored queue query support:
+  - `/Users/jaydreyer/projects/recall-local/docs/Phase6A_Foundation_Brief.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase6_Job_Hunt_PRD.md`
+- Updated n8n workflow/runbook docs and templates to remove DNS-fragile bridge host defaults and align payload shapes:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase1b_gmail_forward_ingest_http.workflow.json`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase1b_recall_ingest_webhook_http.workflow.json`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase3a_bookmarklet_form_http.workflow.json`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6a_recall_ingest_canonical_http.workflow.json`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/PHASE1B_CHANNEL_WIRING.md`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/PHASE3A_OPERATOR_FORMS_WIRING.md`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6/README.md`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6/workflow1_aggregator.md`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6/workflow2_career_pages.md`
+- Synced updated files to ai-lab and performed remote content spot-checks before restart/verification.
+
+### Validation
+
+- Local contract tests:
+  - `python3 -m pytest -q tests/test_bridge_api_contract.py -q`
+- ai-lab runtime verification after bridge restart:
+  - `GET /v1/jobs?status=new&min_score=-1&limit=5` returned persisted unscored jobs (`fit_score=-1`).
+  - `GET /v1/jobs?status=new&min_score=-2` returned `422` (bounds enforced).
+  - `POST /webhook/recall-ingest` returned canonical webhook response with populated `bridge_result.ingested[]`.
+
+### Results
+
+- Phase 6B now has stable n8n->bridge connectivity in active HTTP workflows (no required dependence on `recall-ingest-bridge` DNS name).
+- Jobs discovered but not yet evaluated are visible via API using `status=new&min_score=-1`.
+- API and runbook documentation now matches observed production behavior on ai-lab.
+
+## 2026-03-04 - Phase 6B ai-lab Workflow 1 enablement (jobspy source)
+
+### What was executed
+
+- Installed `python-jobspy` into running ai-lab bridge container:
+  - `docker exec recall-ingest-bridge python3 -m pip install --no-cache-dir python-jobspy`
+- Fixed JobSpy source runner compatibility in:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/job_discovery_runner.py`
+  - changed JobSpy invocation to query one site at a time and temporarily excluded LinkedIn from runner site list due runtime country parsing failures in this environment.
+- Synced updated runner file to ai-lab and performed required remote spot-check before restart:
+  - `rsync ... scripts/phase6/job_discovery_runner.py ... /home/jaydreyer/recall-local/`
+  - `ssh ... rg -n 'sites = [\"indeed\", \"glassdoor\", \"zip_recruiter\"]' scripts/phase6/job_discovery_runner.py`
+- Restarted bridge:
+  - `docker restart recall-ingest-bridge`
+
+### Validation
+
+- JobSpy-only dry-run discovery probe:
+  - `POST /v1/job-discovery-runs` with `sources=["jobspy"]`, `titles=["Solutions Engineer"]`, `locations=["Remote"]`, `max_queries=1`, `dry_run=true`
+  - result: `discovered_raw=60`, `new_jobs=60`, `new_job_ids` returned.
+- Full Workflow 1 source-set dry-run probe:
+  - `POST /v1/job-discovery-runs` with `sources=["jobspy","adzuna","serpapi"]`, same query controls.
+  - result:
+    - `jobspy` returned jobs (`source_metrics.jobspy.returned=60`)
+    - `adzuna`/`serpapi` skipped with explicit missing-key messages
+    - `new_job_ids` returned from jobspy lane.
+
+### Results
+
+- Workflow 1 is now unblocked on primary source (`jobspy`) and returns non-empty `new_job_ids`.
+- Adzuna and SerpAPI remain pending until real credentials are added on ai-lab:
+  - `RECALL_ADZUNA_APP_ID`
+  - `RECALL_ADZUNA_APP_KEY`
+  - `RECALL_SERPAPI_API_KEY`
+
+## 2026-03-04 - Phase 6B discovery implementation (local)
+
+### What was executed
+
+- Implemented Phase 6B bridge-side discovery runner and source adapters in:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/job_discovery_runner.py`
+  - added real source execution paths for `jobspy`, `adzuna`, `serpapi`, and `career_page`.
+  - added query rotation persistence (`settings.setting_key=job_discovery_cursor`) so title/location combos are rotated instead of fully replayed each run.
+  - added normalization, company tier tagging, dedup checks, Qdrant upsert into `recall_jobs`, activity-log writeback, and `new_job_ids` in run output.
+  - added manual normalized-job ingestion support (`jobs[]` payload) for workflow-driven career-page monitoring.
+- Reworked dedup logic in:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/job_dedup.py`
+  - checks now run in this order:
+    - exact URL in `recall_jobs`,
+    - same company+title within 7 days,
+    - semantic similarity via vector search threshold.
+  - added compatibility response fields: `duplicate` + `is_duplicate`, `matched_job_id` + `similar_job_id`.
+- Updated bridge API request contract and handler behavior in:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py`
+  - expanded `POST /v1/job-discovery-runs` schema with source controls and optional `jobs[]`.
+  - expanded `POST /v1/job-deduplications` schema/validation to allow `url` or `description` or `title+company`.
+  - added explicit `workflow_failed` handling for discovery execution exceptions.
+- Added Phase 6B guided n8n workflow documentation:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6/README.md`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6/workflow1_aggregator.md`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6/workflow2_career_pages.md`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6/workflow3_evaluate_notify.md`
+- Added import-ready Workflow 2 n8n export for lower-touch setup:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6b_career_page_monitor_import.workflow.json`
+  - includes manual trigger + single code node that executes Greenhouse/Lever polling, title filtering, `POST /v1/job-discovery-runs`, and optional `POST /v1/job-evaluation-runs`.
+- Added import-ready Workflow 2 traditional multi-node n8n export for step-level observability:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6b_career_page_monitor_traditional_import.workflow.json`
+  - includes manual trigger + staged nodes (`Load Companies` -> `Fetch ATS Jobs` -> `Normalize + Filter Titles` -> `If Has Jobs` -> `Trigger Discovery Run` -> `If New Jobs` -> `Trigger Evaluation Run`) with summary branches for no-match/no-new-job lanes.
+- Updated docs index to include new Phase 6 workflow guidance:
+  - `/Users/jaydreyer/projects/recall-local/docs/README.md`
+- Extended bridge API contract tests for Phase 6B request/response behavior:
+  - `/Users/jaydreyer/projects/recall-local/tests/test_bridge_api_contract.py`
+
+### Validation
+
+- `python3 -m py_compile scripts/phase6/job_discovery_runner.py scripts/phase6/job_dedup.py scripts/phase1/ingest_bridge_api.py tests/test_bridge_api_contract.py`
+- `python3 -m unittest tests/test_bridge_api_contract.py`
+
+### Results
+
+- Phase 6B backend discovery path is now implemented beyond scaffold state.
+- Job discovery runs now return actionable `new_job_ids` for downstream evaluation workflows.
+- Guided workflow build notes exist for the three Phase 6B n8n workflows.
+
 ## 2026-03-04 - Phase 6A execution closeout (local + ai-lab)
 
 ### What was executed

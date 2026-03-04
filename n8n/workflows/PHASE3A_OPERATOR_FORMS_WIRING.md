@@ -22,7 +22,7 @@ curl -sS http://localhost:8090/healthz
 ## Workflow A: Bookmarklet Form Ingest
 
 - Webhook path: `POST /webhook/recall-bookmarklet-form`
-- Bridge target: `POST http://recall-ingest-bridge:8090/v1/ingestions` with `channel=bookmarklet` in JSON body
+- Bridge target: `POST http://100.116.103.78:8090/v1/ingestions` with `channel=bookmarklet` in JSON body
 - Payload contract: same as bookmarklet payload example:
   - `/home/jaydreyer/recall-local/n8n/workflows/payload_examples/bookmarklet_ingest_payload_example.json`
 

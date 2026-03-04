@@ -34,10 +34,10 @@ Node sequence:
 `HTTP Request` settings:
 
 - Method: `POST`
-- URL: `http://recall-ingest-bridge:8090/v1/ingestions`
+- URL: `={{ ($env.RECALL_BRIDGE_BASE_URL || 'http://100.116.103.78:8090') + '/v1/ingestions' }}`
 - Send Body: `true`
 - Body Content Type: `JSON`
-- JSON Body: `={{ Object.assign({}, $json, { channel: 'webhook' }) }}`
+- JSON Body: `={{ Object.assign({}, ($json.body || $json), { channel: 'webhook' }) }}`
 
 This unified webhook now supports additional payload controls:
 
@@ -65,10 +65,22 @@ Node sequence:
 `HTTP Request` settings:
 
 - Method: `POST`
-- URL: `http://recall-ingest-bridge:8090/v1/ingestions`
+- URL: `={{ ($env.RECALL_BRIDGE_BASE_URL || 'http://100.116.103.78:8090') + '/v1/ingestions' }}`
 - Send Body: `true`
 - Body Content Type: `JSON`
-- JSON Body: `={{ Object.assign({}, $json, { channel: 'gmail-forward' }) }}`
+- JSON Body:
+
+```text
+={{ ({
+  channel: 'gmail-forward',
+  subject: $json.subject || '',
+  from: (typeof $json.from === 'string' ? $json.from : (($json.from && $json.from.text) ? $json.from.text : '')),
+  messageId: $json.messageId || $json.message_id || '',
+  text: $json.textPlain || $json.text || ($json.subject ? ('Subject: ' + $json.subject) : ''),
+  html: $json.textHtml || $json.html || '',
+  attachment_paths: Array.isArray($json.attachment_paths) ? $json.attachment_paths : []
+}) }}
+```
 
 Expected input shape (minimum):
 

@@ -62,6 +62,12 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `../scripts/phase5/run_vault_watch_now.sh`: Phase 5C one-command wrapper for continuous vault watch mode.
 - `../scripts/phase5/run_operator_stack_now.sh`: Phase 5F one-command compose/runtime entrypoint (up/down/restart/status/logs/preflight/config).
 - `../scripts/phase5/run_phase5_demo_now.sh`: Phase 5F one-command demo runner (dashboard ingest/query, extension gate, vault sync/query, eval gate).
+- `../n8n/workflows/phase6/README.md`: Phase 6B guided build index for job discovery workflows.
+- `../n8n/workflows/phase6/workflow1_aggregator.md`: Step-by-step Workflow 1 n8n build notes (aggregator discovery).
+- `../n8n/workflows/phase6/workflow2_career_pages.md`: Step-by-step Workflow 2 n8n build notes (career page monitoring).
+- `../n8n/workflows/phase6/workflow3_evaluate_notify.md`: Step-by-step Workflow 3 n8n skeleton notes (evaluation webhook scaffold).
+- `../n8n/workflows/phase6b_career_page_monitor_import.workflow.json`: Import-ready Workflow 2 n8n automation for career-page monitoring via bridge APIs.
+- `../n8n/workflows/phase6b_career_page_monitor_traditional_import.workflow.json`: Import-ready traditional multi-node Workflow 2 n8n automation (step-level debugging visibility).
 - `../ui/dashboard/`: Phase 5D React/Vite dashboard app (Ingest, Query, Activity, Eval, Vault) with bridge API settings.
 - `../ui/dashboard/Dockerfile`: Phase 5D dashboard container build for `recall-ui`.
 - `../chrome-extension/`: Phase 5E/5E.1 Chrome extension implementation (Manifest V3 popup, context menu capture, shortcut command, settings page, Gmail content script prefill).

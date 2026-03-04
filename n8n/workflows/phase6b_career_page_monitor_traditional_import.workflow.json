@@ -1,0 +1,284 @@
+{
+  "name": "Recall Phase6B - Career Page Monitor (Traditional Import)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "node-manual-trigger-phase6b-career-traditional",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        220,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const bridgeBaseUrl = 'http://100.116.103.78:8090';\nconst bridgeApiKey = '';\n\nconst companies = [\n  { name: 'Anthropic', tier: 2, ats: 'greenhouse', board_id: 'anthropic', title_filter: ['solutions', 'engineer', 'architect', 'technical', 'account', 'sales'] },\n  { name: 'OpenAI', tier: 2, ats: 'greenhouse', board_id: 'openai', title_filter: ['solutions', 'engineer', 'architect', 'sales'] },\n  { name: 'Postman', tier: 1, ats: 'greenhouse', board_id: 'postman', title_filter: ['solutions', 'engineer', 'architect', 'technical'] },\n  { name: 'Aisera', tier: 1, ats: 'greenhouse', board_id: 'aisera', title_filter: ['solutions', 'engineer', 'sales', 'architect'] },\n  { name: 'Miro', tier: 1, ats: 'greenhouse', board_id: 'miro', title_filter: ['solutions', 'engineer', 'architect', 'customer'] },\n  { name: 'Airtable', tier: 1, ats: 'greenhouse', board_id: 'airtable', title_filter: ['solutions', 'engineer', 'architect', 'technical account'] },\n  { name: 'Smartsheet', tier: 1, ats: 'greenhouse', board_id: 'smartsheet', title_filter: ['solutions', 'engineer', 'architect', 'customer'] },\n  { name: 'Cohere', tier: 2, ats: 'greenhouse', board_id: 'cohere', title_filter: ['solutions', 'engineer', 'architect', 'technical account'] },\n  { name: 'Glean', tier: 2, ats: 'greenhouse', board_id: 'gleanwork', title_filter: ['solutions', 'engineer', 'architect', 'customer'] },\n  { name: 'Writer', tier: 2, ats: 'greenhouse', board_id: 'writer', title_filter: ['solutions', 'engineer', 'architect', 'sales'] },\n  { name: 'Atlassian', tier: 2, ats: 'greenhouse', board_id: 'atlassian', title_filter: ['solutions', 'developer', 'architect', 'technical account'] },\n  { name: 'Workato', tier: 2, ats: 'greenhouse', board_id: 'workato', title_filter: ['solutions', 'engineer', 'architect', 'automation'] },\n  { name: 'Datadog', tier: 2, ats: 'greenhouse', board_id: 'datadog', title_filter: ['solutions', 'engineer', 'architect', 'technical account'] }\n];\n\nreturn companies.map((company) => ({\n  json: {\n    company,\n    bridge_base_url: bridgeBaseUrl,\n    bridge_api_key: bridgeApiKey,\n    delay_seconds: 2,\n    similarity_threshold: 0.92,\n  },\n}));"
+      },
+      "id": "node-load-companies",
+      "name": "Load Companies",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = [];\n\nfunction sleep(ms) {\n  return new Promise((resolve) => setTimeout(resolve, ms));\n}\n\nfor (const item of $input.all()) {\n  const company = item.json.company || {};\n  const result = {\n    ...item.json,\n    fetch_url: null,\n    fetched_jobs: 0,\n    raw_jobs: [],\n    fetch_error: null,\n  };\n\n  try {\n    const ats = String(company.ats || '').toLowerCase();\n\n    if (ats === 'greenhouse') {\n      const boardId = String(company.board_id || '').trim();\n      if (!boardId) {\n        throw new Error('Missing board_id for greenhouse company ' + company.name);\n      }\n      const url = 'https://boards-api.greenhouse.io/v1/boards/' + encodeURIComponent(boardId) + '/jobs';\n      result.fetch_url = url;\n      const response = await fetch(url, { headers: { accept: 'application/json' } });\n      if (!response.ok) {\n        throw new Error('HTTP ' + response.status + ' from ' + url);\n      }\n      const payload = await response.json();\n      const jobs = Array.isArray(payload.jobs) ? payload.jobs : [];\n      result.raw_jobs = jobs;\n      result.fetched_jobs = jobs.length;\n    } else if (ats === 'lever') {\n      const boardId = String(company.board_id || '').trim();\n      if (!boardId) {\n        throw new Error('Missing board_id for lever company ' + company.name);\n      }\n      const url = 'https://api.lever.co/v0/postings/' + encodeURIComponent(boardId) + '?mode=json';\n      result.fetch_url = url;\n      const response = await fetch(url, { headers: { accept: 'application/json' } });\n      if (!response.ok) {\n        throw new Error('HTTP ' + response.status + ' from ' + url);\n      }\n      const payload = await response.json();\n      const jobs = Array.isArray(payload) ? payload : [];\n      result.raw_jobs = jobs;\n      result.fetched_jobs = jobs.length;\n    } else {\n      result.fetch_error = 'Unsupported ATS: ' + ats;\n    }\n  } catch (error) {\n    result.fetch_error = error && error.message ? error.message : String(error);\n  }\n\n  output.push({ json: result });\n\n  const delaySeconds = Number(item.json.delay_seconds || 2);\n  await sleep(Math.max(0, delaySeconds) * 1000);\n}\n\nreturn output;"
+      },
+      "id": "node-fetch-ats-jobs",
+      "name": "Fetch ATS Jobs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function normalizeText(value) {\n  return String(value || '').trim();\n}\n\nfunction titleMatches(title, filters) {\n  const text = normalizeText(title).toLowerCase();\n  if (!text) return false;\n  const terms = Array.isArray(filters) ? filters : [];\n  if (terms.length === 0) return true;\n  return terms.some((term) => text.includes(String(term || '').toLowerCase()));\n}\n\nconst output = [];\n\nfor (const item of $input.all()) {\n  const company = item.json.company || {};\n  const ats = String(company.ats || '').toLowerCase();\n  const filters = Array.isArray(company.title_filter) ? company.title_filter : [];\n  const rawJobs = Array.isArray(item.json.raw_jobs) ? item.json.raw_jobs : [];\n\n  const normalized = [];\n  if (!item.json.fetch_error) {\n    for (const job of rawJobs) {\n      if (!job || typeof job !== 'object') continue;\n\n      if (ats === 'greenhouse') {\n        const title = normalizeText(job.title);\n        if (!titleMatches(title, filters)) continue;\n        normalized.push({\n          title,\n          company: company.name,\n          location: normalizeText(job.location && job.location.name),\n          url: normalizeText(job.absolute_url),\n          description: '',\n          source: 'career_page',\n          search_query: String(company.name || '') + ' careers',\n          company_tier: Number(company.tier || 0),\n          date_posted: job.updated_at || null,\n        });\n      } else if (ats === 'lever') {\n        const title = normalizeText(job.text);\n        if (!titleMatches(title, filters)) continue;\n        normalized.push({\n          title,\n          company: company.name,\n          location: normalizeText(job.categories && job.categories.location),\n          url: normalizeText(job.hostedUrl),\n          description: normalizeText(job.descriptionPlain || job.description),\n          source: 'career_page',\n          search_query: String(company.name || '') + ' careers',\n          company_tier: Number(company.tier || 0),\n          date_posted: job.createdAt || null,\n        });\n      }\n    }\n  }\n\n  output.push({\n    json: {\n      ...item.json,\n      normalized_jobs: normalized,\n      matched_jobs: normalized.length,\n    },\n  });\n}\n\nreturn output;"
+      },
+      "id": "node-normalize-jobs",
+      "name": "Normalize + Filter Titles",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        940,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ ($json.normalized_jobs || []).length }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "node-if-has-jobs",
+      "name": "If Has Jobs",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1180,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.bridge_base_url + '/v1/job-discovery-runs' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ sources: ['career_page'], jobs: $json.normalized_jobs, dry_run: false, similarity_threshold: $json.similarity_threshold || 0.92 }) }}",
+        "options": {}
+      },
+      "id": "node-http-discovery-run",
+      "name": "Trigger Discovery Run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1420,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ ($json.new_job_ids || []).length }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "node-if-new-jobs",
+      "name": "If New Jobs",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1660,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://100.116.103.78:8090/v1/job-evaluation-runs",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ job_ids: $json.new_job_ids, wait: false }) }}",
+        "options": {}
+      },
+      "id": "node-http-eval-run",
+      "name": "Trigger Evaluation Run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1900,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map((item) => ({\n  json: {\n    workflow: 'workflow_06b_career_page_monitor',\n    status: 'completed',\n    eval_run_id: item.json.run_id || null,\n    queued: Number(item.json.queued || 0),\n    job_ids: item.json.job_ids || [],\n    message: item.json.message || 'Evaluation run queued.',\n  },\n}));"
+      },
+      "id": "node-summary-eval",
+      "name": "Summary (Eval Queued)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2140,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map((item) => ({\n  json: {\n    workflow: 'workflow_06b_career_page_monitor',\n    status: 'completed',\n    new_jobs: 0,\n    duplicates_skipped: Number(item.json.duplicates_skipped || 0),\n    source_metrics: item.json.source_metrics || {},\n    errors: item.json.errors || [],\n    message: item.json.message || 'Discovery run completed with no new jobs.',\n  },\n}));"
+      },
+      "id": "node-summary-no-new",
+      "name": "Summary (No New Jobs)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map((item) => ({\n  json: {\n    workflow: 'workflow_06b_career_page_monitor',\n    company: item.json.company?.name || 'unknown',\n    status: 'no-matches',\n    fetched_jobs: Number(item.json.fetched_jobs || 0),\n    matched_jobs: Number(item.json.matched_jobs || 0),\n    fetch_error: item.json.fetch_error || null,\n    message: 'No matching jobs for configured title filters.',\n  },\n}));"
+      },
+      "id": "node-summary-no-matches",
+      "name": "Summary (No Matches)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1420,
+        420
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Companies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Companies": {
+      "main": [
+        [
+          {
+            "node": "Fetch ATS Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch ATS Jobs": {
+      "main": [
+        [
+          {
+            "node": "Normalize + Filter Titles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize + Filter Titles": {
+      "main": [
+        [
+          {
+            "node": "If Has Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Has Jobs": {
+      "main": [
+        [
+          {
+            "node": "Trigger Discovery Run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Summary (No Matches)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Discovery Run": {
+      "main": [
+        [
+          {
+            "node": "If New Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If New Jobs": {
+      "main": [
+        [
+          {
+            "node": "Trigger Evaluation Run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Summary (No New Jobs)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Evaluation Run": {
+      "main": [
+        [
+          {
+            "node": "Summary (Eval Queued)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

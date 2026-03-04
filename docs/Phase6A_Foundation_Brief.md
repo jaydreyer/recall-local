@@ -114,7 +114,7 @@ Implement Phase 6 bridge routes in `scripts/phase1/ingest_bridge_api.py` (existi
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
 | `status` | string | `evaluated` | Filter: new, evaluated, applied, dismissed, expired |
-| `min_score` | int | 0 | Minimum fit score |
+| `min_score` | int | 0 | Minimum fit score (`-1` includes unevaluated/unscored jobs) |
 | `max_score` | int | 100 | Maximum fit score |
 | `company_tier` | int | null | Filter by company tier (1, 2, 3) |
 | `source` | string | null | Filter by source (jobspy, adzuna, serpapi, career_page, chrome_extension) |

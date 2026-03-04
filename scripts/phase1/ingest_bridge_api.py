@@ -989,15 +989,22 @@ JOB_DEDUP_REQUEST_BODY = {
         "application/json": {
             "schema": {
                 "type": "object",
-                "required": ["title", "company"],
                 "properties": {
                     "title": {"type": "string"},
                     "company": {"type": "string"},
+                    "company_normalized": {"type": "string"},
                     "url": {"type": "string"},
                     "description": {"type": "string"},
+                    "date_posted": {"type": "string", "format": "date-time"},
+                    "discovered_at": {"type": "string", "format": "date-time"},
                     "similarity_threshold": {"type": "number", "minimum": 0, "maximum": 1, "default": 0.92},
                 },
                 "additionalProperties": False,
+                "anyOf": [
+                    {"required": ["url"]},
+                    {"required": ["description"]},
+                    {"required": ["title", "company"]},
+                ],
             }
         }
     },
@@ -1012,7 +1019,42 @@ JOB_DISCOVERY_RUN_REQUEST_BODY = {
                 "properties": {
                     "titles": {"type": "array", "items": {"type": "string"}},
                     "locations": {"type": "array", "items": {"type": "string"}},
-                    "sources": {"type": "array", "items": {"type": "string"}},
+                    "keywords": {"type": "array", "items": {"type": "string"}},
+                    "sources": {
+                        "type": "array",
+                        "items": {"type": "string", "enum": sorted(PHASE6_JOB_SOURCES - {"chrome_extension"})},
+                    },
+                    "max_queries": {"type": "integer", "minimum": 1, "maximum": 40, "default": 4},
+                    "max_days_old": {"type": "integer", "minimum": 1, "maximum": 30, "default": 7},
+                    "delay_seconds": {"type": "number", "minimum": 0, "default": 2.0},
+                    "dry_run": {"type": "boolean", "default": False},
+                    "similarity_threshold": {"type": "number", "minimum": 0, "maximum": 1, "default": 0.92},
+                    "source_limits": {
+                        "type": "object",
+                        "additionalProperties": {"type": "integer", "minimum": 1},
+                    },
+                    "jobs": {
+                        "type": "array",
+                        "description": "Optional normalized/partially-normalized jobs supplied by n8n (used by career-page workflow).",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "title": {"type": "string"},
+                                "company": {"type": "string"},
+                                "location": {"type": "string"},
+                                "url": {"type": "string"},
+                                "description": {"type": "string"},
+                                "source": {"type": "string"},
+                                "search_query": {"type": "string"},
+                                "company_tier": {"type": "integer"},
+                                "salary_min": {"type": "integer"},
+                                "salary_max": {"type": "integer"},
+                                "date_posted": {"type": "string", "format": "date-time"},
+                            },
+                            "required": ["title", "company"],
+                            "additionalProperties": False,
+                        },
+                    },
                 },
                 "additionalProperties": False,
             }
@@ -1642,7 +1684,12 @@ def create_app() -> FastAPI:
     async def get_jobs(
         request: Request,
         status: str = Query("evaluated", description="Filter by status."),
-        min_score: int = Query(0, ge=0, le=100, description="Minimum fit score."),
+        min_score: int = Query(
+            0,
+            ge=-1,
+            le=100,
+            description="Minimum fit score. Use -1 to include unscored jobs in `status=new` views.",
+        ),
         max_score: int = Query(100, ge=0, le=100, description="Maximum fit score."),
         company_tier: Optional[int] = Query(None, ge=1, le=3, description="Optional company tier filter."),
         source: Optional[str] = Query(None, description="Optional source filter."),
@@ -1949,15 +1996,16 @@ def create_app() -> FastAPI:
 
         title = str(payload.get("title", "")).strip()
         company = str(payload.get("company", "")).strip()
-        if not title or not company:
+        url = str(payload.get("url", "")).strip()
+        description = str(payload.get("description", "")).strip()
+        if not url and not description and (not title or not company):
             return _error_response(
                 status_code=400,
                 code="validation_failed",
-                message="Missing required fields: title, company.",
+                message="Provide one of: url, description, or title+company.",
                 request_id=request_id,
                 details=[
-                    {"field": "title", "issue": "value is required"},
-                    {"field": "company", "issue": "value is required"},
+                    {"field": "url", "issue": "provide url, or provide description, or provide title+company"},
                 ],
             )
 
@@ -1985,8 +2033,11 @@ def create_app() -> FastAPI:
             {
                 "title": title,
                 "company": company,
-                "url": payload.get("url"),
-                "description": payload.get("description"),
+                "company_normalized": payload.get("company_normalized"),
+                "url": url,
+                "description": description,
+                "date_posted": payload.get("date_posted"),
+                "discovered_at": payload.get("discovered_at"),
             },
             similarity_threshold=threshold_value,
         )
@@ -2026,7 +2077,15 @@ def create_app() -> FastAPI:
                 request_id=request_id,
             )
 
-        summary = phase6_run_discovery(payload)
+        try:
+            summary = phase6_run_discovery(payload)
+        except Exception as exc:  # noqa: BLE001
+            return _error_response(
+                status_code=500,
+                code="workflow_failed",
+                message=f"Discovery run failed: {exc}",
+                request_id=request_id,
+            )
         summary["workflow"] = "workflow_06a_job_discovery"
         summary["collections"] = [
             {"name": item.name, "created": item.created} for item in collections

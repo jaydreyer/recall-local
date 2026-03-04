@@ -9,6 +9,7 @@ import sqlite3
 import tempfile
 import unittest
 from contextlib import contextmanager
+from types import SimpleNamespace
 from typing import Iterator
 from unittest.mock import patch
 
@@ -588,6 +589,23 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(alias_response.status_code, 404)
         self.assertEqual(alias_response.json()["error"]["code"], "not_found")
 
+    def test_phase6_jobs_endpoint_accepts_min_score_negative_one_for_unscored(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        with patch("scripts.phase1.ingest_bridge_api.phase6_list_jobs", return_value={"total": 0, "limit": 50, "offset": 0, "items": []}) as mocked:
+            with build_client(env) as client:
+                response = client.get("/v1/jobs?status=new&min_score=-1&limit=5")
+                invalid = client.get("/v1/jobs?status=new&min_score=-2&limit=5")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["workflow"], "workflow_06a_jobs")
+        self.assertEqual(invalid.status_code, 422)
+        self.assertEqual(mocked.call_args.kwargs["status"], "new")
+        self.assertEqual(mocked.call_args.kwargs["min_score"], -1)
+
     def test_phase6_llm_settings_patch_persists(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             db_path = os.path.join(temp_dir, "recall.db")
@@ -637,6 +655,78 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(response.json()["version"], 1)
         self.assertEqual(invalid.status_code, 400)
         self.assertEqual(invalid.json()["error"]["code"], "validation_failed")
+
+    def test_phase6_job_dedup_endpoint_accepts_url_or_description_payload(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+
+        class _FakeDedup:
+            def to_dict(self) -> dict[str, object]:
+                return {
+                    "duplicate": True,
+                    "is_duplicate": True,
+                    "reason": "exact_url",
+                    "matched_job_id": "job_123",
+                    "similar_job_id": "job_123",
+                    "similarity_score": 1.0,
+                }
+
+        with patch("scripts.phase1.ingest_bridge_api.phase6_check_job_duplicate", return_value=_FakeDedup()) as mock_dedup:
+            with build_client(env) as client:
+                response = client.post(
+                    "/v1/job-deduplications",
+                    json={
+                        "url": "https://jobs.example.com/123",
+                        "description": "Senior solutions engineer role focused on enterprise APIs.",
+                        "similarity_threshold": 0.9,
+                    },
+                )
+                invalid = client.post("/v1/job-deduplications", json={"similarity_threshold": 0.4})
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["workflow"], "workflow_06a_job_dedup")
+        self.assertTrue(body["is_duplicate"])
+        self.assertEqual(body["reason"], "exact_url")
+        self.assertEqual(invalid.status_code, 400)
+        self.assertEqual(invalid.json()["error"]["code"], "validation_failed")
+        called_candidate = mock_dedup.call_args.args[0]
+        self.assertEqual(called_candidate["url"], "https://jobs.example.com/123")
+        self.assertEqual(mock_dedup.call_args.kwargs["similarity_threshold"], 0.9)
+
+    def test_phase6_job_discovery_endpoint_returns_new_job_ids(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        fake_summary = {
+            "run_id": "job_discovery_abc123",
+            "status": "completed",
+            "triggered_at": "2026-03-04T18:00:00+00:00",
+            "sources": ["jobspy"],
+            "new_jobs": 2,
+            "new_job_ids": ["job_1", "job_2"],
+            "duplicates_skipped": 1,
+            "message": "Discovered 2 new jobs.",
+        }
+        fake_collections = [SimpleNamespace(name="recall_jobs", created=False), SimpleNamespace(name="recall_resume", created=False)]
+        with patch("scripts.phase1.ingest_bridge_api.phase6_ensure_collections", return_value=fake_collections):
+            with patch("scripts.phase1.ingest_bridge_api.phase6_run_discovery", return_value=fake_summary):
+                with build_client(env) as client:
+                    response = client.post(
+                        "/v1/job-discovery-runs",
+                        json={"sources": ["jobspy"], "max_queries": 2, "dry_run": True},
+                    )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["workflow"], "workflow_06a_job_discovery")
+        self.assertEqual(body["new_job_ids"], ["job_1", "job_2"])
+        self.assertEqual(body["collections"][0]["name"], "recall_jobs")
 
     def test_phase6_company_and_job_aliases_return_not_found(self) -> None:
         env = {
