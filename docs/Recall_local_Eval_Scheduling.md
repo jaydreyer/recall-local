@@ -18,6 +18,9 @@ Purpose: run automated Workflow 02 eval checks on a schedule and alert on regres
   - default: `/home/jaydreyer/recall-local/scripts/eval/job_search_eval_cases.json`
 - `RECALL_EVAL_LEARNING_CASES_FILE` (optional)
   - default: `/home/jaydreyer/recall-local/scripts/eval/learning_eval_cases.json`
+- `RECALL_EVAL_INCLUDE_LEARNING` (optional)
+  - default: `false`
+  - when `true`, scheduled runs include learning suite in addition to core + job-search.
 - `RECALL_EVAL_RETRY_ON_FAIL` (optional)
   - default: `true`
   - when `true`, each suite is retried once before alert/fail handling.
@@ -47,18 +50,19 @@ crontab -e
 Add daily and weekly checks:
 
 ```cron
-# Daily at 09:00 UTC
+# Daily at 09:00 UTC (core + job-search only)
 0 9 * * * N8N_HOST="http://localhost:5678" RECALL_ALERT_WEBHOOK_URL="https://hooks.slack.com/services/REPLACE_ME" /home/jaydreyer/recall-local/scripts/eval/scheduled_eval.sh >> /home/jaydreyer/recall-local/data/artifacts/evals/scheduled/cron.log 2>&1
 
-# Weekly Sunday at 09:15 UTC
-15 9 * * 0 N8N_HOST="http://localhost:5678" RECALL_ALERT_WEBHOOK_URL="https://hooks.slack.com/services/REPLACE_ME" /home/jaydreyer/recall-local/scripts/eval/scheduled_eval.sh >> /home/jaydreyer/recall-local/data/artifacts/evals/scheduled/cron.log 2>&1
+# Weekly Sunday at 09:15 UTC (include learning suite)
+15 9 * * 0 N8N_HOST="http://localhost:5678" RECALL_EVAL_INCLUDE_LEARNING="true" RECALL_ALERT_WEBHOOK_URL="https://hooks.slack.com/services/REPLACE_ME" /home/jaydreyer/recall-local/scripts/eval/scheduled_eval.sh >> /home/jaydreyer/recall-local/data/artifacts/evals/scheduled/cron.log 2>&1
 ```
 
 ## Behavior
 
 - Pass case:
   - exits `0`
-  - writes core + job-search + learning eval JSON artifacts to scheduled log dir.
+  - writes core + job-search eval JSON artifacts to scheduled log dir.
+  - if `RECALL_EVAL_INCLUDE_LEARNING=true`, also writes learning eval JSON artifact.
 - Regression/failure:
   - exits non-zero
   - prints summary with run_id + pass stats for all suites

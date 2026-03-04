@@ -19,6 +19,67 @@ def _http_status_error(status_code: int, url: str) -> httpx.HTTPStatusError:
 
 
 class Phase5FLlmRetryParityTests(unittest.TestCase):
+    def test_embed_prefers_api_embed_endpoint(self) -> None:
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "OLLAMA_HOST": "http://localhost:11434",
+                    "OLLAMA_EMBED_MODEL": "nomic-embed-text",
+                    "RECALL_EMBED_RETRIES": "1",
+                    "RECALL_EMBED_BACKOFF_SECONDS": "0",
+                },
+                clear=False,
+            ),
+            patch(
+                "scripts.llm_client.httpx.post",
+                return_value=httpx.Response(
+                    200,
+                    request=httpx.Request("POST", "http://localhost:11434/api/embed"),
+                    json={"embeddings": [[0.1, 0.2, 0.3]]},
+                ),
+            ) as post_mock,
+        ):
+            embedding = llm_client.embed("hello world")
+
+        self.assertEqual(embedding, [0.1, 0.2, 0.3])
+        self.assertEqual(post_mock.call_count, 1)
+        self.assertTrue(post_mock.call_args.kwargs["json"].get("input"))
+        self.assertEqual(post_mock.call_args.args[0], "http://localhost:11434/api/embed")
+
+    def test_embed_falls_back_to_api_embeddings_on_404(self) -> None:
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "OLLAMA_HOST": "http://localhost:11434",
+                    "OLLAMA_EMBED_MODEL": "nomic-embed-text",
+                    "RECALL_EMBED_RETRIES": "1",
+                    "RECALL_EMBED_BACKOFF_SECONDS": "0",
+                },
+                clear=False,
+            ),
+            patch("scripts.llm_client.time.sleep") as sleep_mock,
+            patch(
+                "scripts.llm_client.httpx.post",
+                side_effect=[
+                    _http_status_error(404, "http://localhost:11434/api/embed"),
+                    httpx.Response(
+                        200,
+                        request=httpx.Request("POST", "http://localhost:11434/api/embeddings"),
+                        json={"embedding": [0.9, 0.8]},
+                    ),
+                ],
+            ) as post_mock,
+        ):
+            embedding = llm_client.embed("fallback test")
+
+        self.assertEqual(embedding, [0.9, 0.8])
+        self.assertEqual(post_mock.call_count, 2)
+        self.assertEqual(post_mock.call_args_list[0].args[0], "http://localhost:11434/api/embed")
+        self.assertEqual(post_mock.call_args_list[1].args[0], "http://localhost:11434/api/embeddings")
+        sleep_mock.assert_not_called()
+
     def test_anthropic_retries_on_timeout(self) -> None:
         with (
             patch.dict(

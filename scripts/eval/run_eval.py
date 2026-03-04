@@ -50,8 +50,10 @@ class EvalCase:
     expect_unanswerable: bool
     mode: str | None
     filter_tags: list[str]
+    filter_tag_mode: str | None
     required_terms: list[str]
     required_source_tags: list[str]
+    required_source_tags_any_of: list[list[str]]
     semantic_similarity_min: float | None
     retrieval_mode: str | None
     hybrid_alpha: float | None
@@ -164,6 +166,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-score", type=float, default=0.15, help="Retrieval min score sent to Workflow 02.")
     parser.add_argument("--max-retries", type=int, default=1, help="Validation retries sent to Workflow 02.")
     parser.add_argument(
+        "--filter-tag-mode",
+        choices=["any", "all"],
+        default=None,
+        help="Global tag filter mode override: any|all (case-level value wins).",
+    )
+    parser.add_argument(
         "--retrieval-mode",
         default=None,
         help="Retrieval mode override for all cases: vector|hybrid.",
@@ -229,8 +237,10 @@ def load_cases(path: Path) -> list[EvalCase]:
         mode_raw = item.get("mode")
         mode = str(mode_raw).strip() if isinstance(mode_raw, str) and mode_raw.strip() else None
         filter_tags = _normalize_string_list(item.get("filter_tags"))
+        filter_tag_mode = _normalize_filter_tag_mode(item.get("filter_tag_mode"))
         required_terms = _normalize_string_list(item.get("required_terms"))
         required_source_tags = _normalize_string_list(item.get("required_source_tags"))
+        required_source_tags_any_of = _normalize_source_tag_groups(item.get("required_source_tags_any_of"))
         semantic_similarity_min_raw = item.get("semantic_similarity_min")
         semantic_similarity_min = (
             float(semantic_similarity_min_raw)
@@ -257,8 +267,10 @@ def load_cases(path: Path) -> list[EvalCase]:
                 expect_unanswerable=expect_unanswerable,
                 mode=mode,
                 filter_tags=filter_tags,
+                filter_tag_mode=filter_tag_mode,
                 required_terms=required_terms,
                 required_source_tags=required_source_tags,
+                required_source_tags_any_of=required_source_tags_any_of,
                 semantic_similarity_min=semantic_similarity_min,
                 retrieval_mode=retrieval_mode,
                 hybrid_alpha=hybrid_alpha,
@@ -277,6 +289,7 @@ def run_case(
     top_k: int,
     min_score: float,
     max_retries: int,
+    filter_tag_mode: str | None,
     default_max_latency_ms: int,
     retrieval_mode: str | None,
     hybrid_alpha: float | None,
@@ -289,6 +302,7 @@ def run_case(
     eval_id = uuid.uuid4().hex
 
     case_retrieval_mode = case.retrieval_mode or retrieval_mode
+    case_filter_tag_mode = case.filter_tag_mode or filter_tag_mode
     case_hybrid_alpha = case.hybrid_alpha if case.hybrid_alpha is not None else hybrid_alpha
     case_enable_reranker = case.enable_reranker if case.enable_reranker is not None else enable_reranker
     case_reranker_weight = case.reranker_weight if case.reranker_weight is not None else reranker_weight
@@ -304,6 +318,7 @@ def run_case(
             max_retries=max_retries,
             mode=case.mode,
             filter_tags=case.filter_tags,
+            filter_tag_mode=case_filter_tag_mode,
             retrieval_mode=case_retrieval_mode,
             hybrid_alpha=case_hybrid_alpha,
             enable_reranker=case_enable_reranker,
@@ -369,6 +384,7 @@ def _execute_query(
     max_retries: int,
     mode: str | None,
     filter_tags: list[str],
+    filter_tag_mode: str | None,
     retrieval_mode: str | None,
     hybrid_alpha: float | None,
     enable_reranker: bool | None,
@@ -383,6 +399,7 @@ def _execute_query(
             min_score=min_score,
             max_retries=max_retries,
             filter_tags=filter_tags,
+            filter_tag_mode=filter_tag_mode,
             mode=mode,
             retrieval_mode=retrieval_mode,
             hybrid_alpha=hybrid_alpha,
@@ -401,6 +418,8 @@ def _execute_query(
         request_body["mode"] = mode
     if filter_tags:
         request_body["filter_tags"] = filter_tags
+    if filter_tag_mode:
+        request_body["filter_tag_mode"] = filter_tag_mode
     if retrieval_mode:
         request_body["retrieval_mode"] = retrieval_mode
     if hybrid_alpha is not None:
@@ -518,9 +537,25 @@ def _evaluate_payload(
             notes.append(f"Answer missing required grounding terms: {case.required_terms}")
 
     if case.required_source_tags:
-        source_tags_ok = _sources_match_required_tags(sources=sources, required_tags=case.required_source_tags)
-        if not source_tags_ok:
+        tag_sources = _sources_for_tag_validation(sources=sources, citation_pairs=citation_pairs)
+        required_source_tags_ok = _sources_match_required_tags(
+            sources=tag_sources,
+            required_tags=case.required_source_tags,
+        )
+        source_tags_ok = required_source_tags_ok
+        if not required_source_tags_ok:
             notes.append(f"Sources did not satisfy required tags: {case.required_source_tags}")
+    if case.required_source_tags_any_of:
+        tag_sources = _sources_for_tag_validation(sources=sources, citation_pairs=citation_pairs)
+        required_any_of_ok = _sources_match_required_tags_any_of(
+            sources=tag_sources,
+            required_tag_groups=case.required_source_tags_any_of,
+        )
+        source_tags_ok = required_any_of_ok if source_tags_ok is None else (source_tags_ok and required_any_of_ok)
+        if not required_any_of_ok:
+            notes.append(
+                f"Sources did not satisfy any required tag group: {case.required_source_tags_any_of}"
+            )
 
     if semantic_score_enabled and case.expected_answer:
         threshold = (
@@ -590,6 +625,51 @@ def _sources_match_required_tags(*, sources: list[Any], required_tags: list[str]
         if not required.issubset(source_tags):
             return False
     return True
+
+
+def _sources_match_required_tags_any_of(*, sources: list[Any], required_tag_groups: list[list[str]]) -> bool:
+    groups = [
+        {tag.strip().lower() for tag in group if tag.strip()}
+        for group in required_tag_groups
+        if group
+    ]
+    groups = [group for group in groups if group]
+    if not groups:
+        return True
+    if not sources:
+        return False
+
+    for source in sources:
+        if not isinstance(source, dict):
+            return False
+        source_tags_raw = source.get("tags")
+        source_tags = {
+            str(tag).strip().lower()
+            for tag in (
+                source_tags_raw if isinstance(source_tags_raw, list) else [source_tags_raw]
+            )
+            if str(tag).strip()
+        }
+        if not any(group.issubset(source_tags) for group in groups):
+            return False
+    return True
+
+
+def _sources_for_tag_validation(*, sources: list[Any], citation_pairs: list[tuple[str, str]]) -> list[Any]:
+    normalized_sources = [source for source in sources if isinstance(source, dict)]
+    if not normalized_sources:
+        return []
+    if not citation_pairs:
+        return normalized_sources
+
+    citation_set = set(citation_pairs)
+    cited_sources = []
+    for source in normalized_sources:
+        doc_id = str(source.get("doc_id", "")).strip()
+        chunk_id = str(source.get("chunk_id", "")).strip()
+        if doc_id and chunk_id and (doc_id, chunk_id) in citation_set:
+            cited_sources.append(source)
+    return cited_sources if cited_sources else normalized_sources
 
 
 def _semantic_similarity(answer: str, expected_answer: str) -> float:
@@ -664,6 +744,38 @@ def _normalize_string_list(value: Any) -> list[str]:
                 items.append(normalized)
         return items
     raise ValueError("Case fields expecting list values must be array or comma-separated string.")
+
+
+def _normalize_source_tag_groups(value: Any) -> list[list[str]]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError("required_source_tags_any_of must be an array of tag arrays.")
+
+    groups: list[list[str]] = []
+    for index, group in enumerate(value):
+        if isinstance(group, str):
+            normalized_group = _normalize_string_list(group)
+        elif isinstance(group, list):
+            normalized_group = _normalize_string_list(group)
+        else:
+            raise ValueError(
+                f"required_source_tags_any_of[{index}] must be a string or array of strings."
+            )
+        if normalized_group:
+            groups.append(normalized_group)
+    return groups
+
+
+def _normalize_filter_tag_mode(value: Any) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip().lower()
+    if normalized in {"", "any", "or"}:
+        return "any"
+    if normalized in {"all", "and", "must"}:
+        return "all"
+    raise ValueError(f"Unsupported filter_tag_mode: {value}")
 
 
 def write_results(
@@ -848,6 +960,7 @@ def main() -> int:
                 "top_k": args.top_k,
                 "min_score": args.min_score,
                 "max_retries": args.max_retries,
+                "filter_tag_mode": args.filter_tag_mode,
                 "retrieval_mode": args.retrieval_mode,
                 "hybrid_alpha": args.hybrid_alpha,
                 "enable_reranker": args.enable_reranker,
@@ -877,6 +990,7 @@ def main() -> int:
                 top_k=args.top_k,
                 min_score=args.min_score,
                 max_retries=args.max_retries,
+                filter_tag_mode=args.filter_tag_mode,
                 default_max_latency_ms=settings.default_max_latency_ms,
                 retrieval_mode=args.retrieval_mode,
                 hybrid_alpha=args.hybrid_alpha,
@@ -909,6 +1023,7 @@ def main() -> int:
             "cases_file": str(cases_file),
             "backend": args.backend,
             "webhook_url": webhook_url if args.backend == "webhook" else None,
+            "filter_tag_mode": args.filter_tag_mode,
             "retrieval_mode": args.retrieval_mode,
             "hybrid_alpha": args.hybrid_alpha,
             "enable_reranker": global_enable_reranker,

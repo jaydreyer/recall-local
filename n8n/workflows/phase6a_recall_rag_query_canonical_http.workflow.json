@@ -1,5 +1,6 @@
 {
-  "name": "Recall Phase1C - Cited RAG Query (HTTP Bridge)",
+  "id": "b1498f3d-9b50-412f-b435-4dd93f80795a",
+  "name": "Recall Canonical - Cited RAG Query (HTTP Bridge)",
   "active": false,
   "nodes": [
     {
@@ -9,15 +10,15 @@
         "responseMode": "lastNode",
         "options": {}
       },
-      "id": "node-webhook-recall-query",
-      "name": "Webhook Recall Query",
+      "id": "node-webhook-recall-query-canonical",
+      "name": "Webhook Recall Query Canonical",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
         280,
         260
       ],
-      "webhookId": "12ce73ea-e97d-4eb8-bc66-bbe95eba2b63"
+      "webhookId": "fc141fdf-218c-47f2-9e10-a8f80f1432f8"
     },
     {
       "parameters": {
@@ -25,25 +26,25 @@
         "url": "http://100.116.103.78:8090/v1/rag-queries",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ $json.body }}",
+        "jsonBody": "={{ $json.body ? $json.body : $json }}",
         "options": {}
       },
-      "id": "node-http-rag-query",
-      "name": "HTTP RAG Query",
+      "id": "node-http-rag-query-canonical",
+      "name": "HTTP RAG Query Canonical",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        540,
+        560,
         260
       ]
     }
   ],
   "connections": {
-    "Webhook Recall Query": {
+    "Webhook Recall Query Canonical": {
       "main": [
         [
           {
-            "node": "HTTP RAG Query",
+            "node": "HTTP RAG Query Canonical",
             "type": "main",
             "index": 0
           }

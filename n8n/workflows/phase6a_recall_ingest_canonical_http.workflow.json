@@ -1,5 +1,6 @@
 {
-  "name": "Recall Phase1B - Unified Webhook Ingest (HTTP Bridge)",
+  "id": "8d031916-f45f-42ef-8323-fe0ecbc46350",
+  "name": "Recall Canonical - Unified Webhook Ingest (HTTP Bridge)",
   "active": false,
   "nodes": [
     {
@@ -9,15 +10,15 @@
         "responseMode": "responseNode",
         "options": {}
       },
-      "id": "node-webhook-recall-ingest",
-      "name": "Webhook Recall Ingest",
+      "id": "node-webhook-recall-ingest-canonical",
+      "name": "Webhook Recall Ingest Canonical",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
         280,
         260
       ],
-      "webhookId": "f64fba17-2d65-4f89-97ee-75058eb4d460"
+      "webhookId": "6046ca8d-0ea6-4895-a58e-fcd7ae699365"
     },
     {
       "parameters": {
@@ -28,12 +29,12 @@
         "jsonBody": "={{ Object.assign({}, $json, { channel: 'webhook' }) }}",
         "options": {}
       },
-      "id": "node-http-ingest-webhook",
-      "name": "HTTP Ingest Webhook",
+      "id": "node-http-ingest-canonical",
+      "name": "HTTP Ingest Canonical",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        540,
+        560,
         260
       ]
     },
@@ -43,33 +44,33 @@
         "responseBody": "={{ { received: true, channel: 'webhook', bridge_result: $json } }}",
         "options": {}
       },
-      "id": "node-respond-webhook",
-      "name": "Respond to Webhook",
+      "id": "node-respond-webhook-canonical",
+      "name": "Respond to Webhook Canonical",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        820,
+        840,
         260
       ]
     }
   ],
   "connections": {
-    "Webhook Recall Ingest": {
+    "Webhook Recall Ingest Canonical": {
       "main": [
         [
           {
-            "node": "HTTP Ingest Webhook",
+            "node": "HTTP Ingest Canonical",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "HTTP Ingest Webhook": {
+    "HTTP Ingest Canonical": {
       "main": [
         [
           {
-            "node": "Respond to Webhook",
+            "node": "Respond to Webhook Canonical",
             "type": "main",
             "index": 0
           }

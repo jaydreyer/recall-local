@@ -11,9 +11,11 @@ LOG_DIR="${RECALL_EVAL_LOG_DIR:-$ROOT_DIR/data/artifacts/evals/scheduled}"
 CORE_CASES_FILE="${RECALL_EVAL_CORE_CASES_FILE:-$ROOT_DIR/scripts/eval/eval_cases.json}"
 JOB_SEARCH_CASES_FILE="${RECALL_EVAL_JOB_SEARCH_CASES_FILE:-$ROOT_DIR/scripts/eval/job_search_eval_cases.json}"
 LEARNING_CASES_FILE="${RECALL_EVAL_LEARNING_CASES_FILE:-$ROOT_DIR/scripts/eval/learning_eval_cases.json}"
+INCLUDE_LEARNING="${RECALL_EVAL_INCLUDE_LEARNING:-false}"
 RETRY_ON_FAIL="${RECALL_EVAL_RETRY_ON_FAIL:-true}"
 RETRY_DELAY_SECONDS="${RECALL_EVAL_RETRY_DELAY_SECONDS:-5}"
 RETRY_ON_FAIL_NORMALIZED="$(printf '%s' "$RETRY_ON_FAIL" | tr '[:upper:]' '[:lower:]')"
+INCLUDE_LEARNING_NORMALIZED="$(printf '%s' "$INCLUDE_LEARNING" | tr '[:upper:]' '[:lower:]')"
 
 mkdir -p "$LOG_DIR"
 
@@ -60,7 +62,9 @@ LEARNING_EXIT=0
 
 run_suite "$CORE_CASES_FILE" "$CORE_RESULT_JSON" "$CORE_STDERR_LOG" || CORE_EXIT=$?
 run_suite "$JOB_SEARCH_CASES_FILE" "$JOB_RESULT_JSON" "$JOB_STDERR_LOG" || JOB_EXIT=$?
-run_suite "$LEARNING_CASES_FILE" "$LEARNING_RESULT_JSON" "$LEARNING_STDERR_LOG" || LEARNING_EXIT=$?
+if [[ "$INCLUDE_LEARNING_NORMALIZED" == "true" ]]; then
+  run_suite "$LEARNING_CASES_FILE" "$LEARNING_RESULT_JSON" "$LEARNING_STDERR_LOG" || LEARNING_EXIT=$?
+fi
 
 "$PYTHON_BIN" "$ROOT_DIR/scripts/eval/notify_regression.py" \
   --result-json "$CORE_RESULT_JSON" \
@@ -74,23 +78,38 @@ run_suite "$LEARNING_CASES_FILE" "$LEARNING_RESULT_JSON" "$LEARNING_STDERR_LOG" 
   --webhook-url "$ALERT_WEBHOOK_URL" \
   --stderr-log "$JOB_STDERR_LOG"
 
-"$PYTHON_BIN" "$ROOT_DIR/scripts/eval/notify_regression.py" \
-  --result-json "$LEARNING_RESULT_JSON" \
-  --command-exit "$LEARNING_EXIT" \
-  --webhook-url "$ALERT_WEBHOOK_URL" \
-  --stderr-log "$LEARNING_STDERR_LOG"
+if [[ "$INCLUDE_LEARNING_NORMALIZED" == "true" ]]; then
+  "$PYTHON_BIN" "$ROOT_DIR/scripts/eval/notify_regression.py" \
+    --result-json "$LEARNING_RESULT_JSON" \
+    --command-exit "$LEARNING_EXIT" \
+    --webhook-url "$ALERT_WEBHOOK_URL" \
+    --stderr-log "$LEARNING_STDERR_LOG"
+fi
 
-if [[ "$CORE_EXIT" -ne 0 || "$JOB_EXIT" -ne 0 || "$LEARNING_EXIT" -ne 0 ]]; then
+if [[ "$INCLUDE_LEARNING_NORMALIZED" == "true" ]]; then
+  OVERALL_EXIT=$(( CORE_EXIT || JOB_EXIT || LEARNING_EXIT ))
+else
+  OVERALL_EXIT=$(( CORE_EXIT || JOB_EXIT ))
+fi
+
+if [[ "$OVERALL_EXIT" -ne 0 ]]; then
   if [[ "$CORE_EXIT" -ne 0 ]]; then
     exit "$CORE_EXIT"
   fi
   if [[ "$JOB_EXIT" -ne 0 ]]; then
     exit "$JOB_EXIT"
   fi
-  exit "$LEARNING_EXIT"
+  if [[ "$INCLUDE_LEARNING_NORMALIZED" == "true" ]]; then
+    exit "$LEARNING_EXIT"
+  fi
+  exit 1
 fi
 
 echo "Scheduled eval completed successfully:"
 echo "  core: $CORE_RESULT_JSON"
 echo "  job-search: $JOB_RESULT_JSON"
-echo "  learning: $LEARNING_RESULT_JSON"
+if [[ "$INCLUDE_LEARNING_NORMALIZED" == "true" ]]; then
+  echo "  learning: $LEARNING_RESULT_JSON"
+else
+  echo "  learning: skipped (set RECALL_EVAL_INCLUDE_LEARNING=true to enable)"
+fi

@@ -95,13 +95,7 @@ def embed(text: str, trace_metadata: dict[str, Any] | None = None) -> List[float
         last_error: Exception | None = None
         for attempt in range(1, retries + 1):
             try:
-                response = httpx.post(
-                    f"{host}/api/embeddings",
-                    json={"model": model, "prompt": prompt},
-                    timeout=60,
-                )
-                response.raise_for_status()
-                response_vector = response.json()["embedding"]
+                response_vector = _ollama_embed(host=host, model=model, prompt=prompt)
                 return response_vector
             except Exception as exc:  # noqa: BLE001
                 last_error = exc
@@ -167,6 +161,51 @@ def _ollama_generate(prompt: str, system: str, temperature: float) -> str:
     if last_error is not None:
         raise last_error
     raise RuntimeError("Generation call failed without an error response")
+
+
+def _ollama_embed(*, host: str, model: str, prompt: str) -> List[float]:
+    """Call Ollama embedding endpoint with forward/backward compatibility."""
+    candidates = (
+        ("/api/embed", {"model": model, "input": prompt}),
+        ("/api/embeddings", {"model": model, "prompt": prompt}),
+    )
+
+    last_error: Exception | None = None
+    for index, (path, payload) in enumerate(candidates):
+        try:
+            response = httpx.post(
+                f"{host}{path}",
+                json=payload,
+                timeout=60,
+            )
+            response.raise_for_status()
+            return _extract_ollama_embedding(response.json())
+        except Exception as exc:  # noqa: BLE001
+            last_error = exc
+            is_not_found = _is_http_status_error(exc, status_code=404)
+            has_fallback = index < len(candidates) - 1
+            if is_not_found and has_fallback:
+                continue
+            break
+
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("Embedding call failed without an error response")
+
+
+def _extract_ollama_embedding(payload: Any) -> List[float]:
+    if isinstance(payload, dict):
+        embedding = payload.get("embedding")
+        if isinstance(embedding, list) and embedding:
+            return [float(value) for value in embedding]
+
+        embeddings = payload.get("embeddings")
+        if isinstance(embeddings, list) and embeddings:
+            first = embeddings[0]
+            if isinstance(first, list) and first:
+                return [float(value) for value in first]
+
+    raise RuntimeError("Ollama embedding response missing embedding vector.")
 
 
 def _generation_retry_config() -> tuple[int, float]:

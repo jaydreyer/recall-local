@@ -1,49 +1,50 @@
 {
-  "name": "Recall Phase1C - Cited RAG Query (HTTP Bridge)",
+  "id": "d2d7e420-8ab2-454f-ab58-e0555c0ba225",
+  "name": "Recall Canonical - Meeting Action Items (HTTP Bridge)",
   "active": false,
   "nodes": [
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "recall-query",
+        "path": "recall-meeting-actions",
         "responseMode": "lastNode",
         "options": {}
       },
-      "id": "node-webhook-recall-query",
-      "name": "Webhook Recall Query",
+      "id": "node-webhook-recall-meeting-actions-canonical",
+      "name": "Webhook Recall Meeting Actions Canonical",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
         280,
         260
       ],
-      "webhookId": "12ce73ea-e97d-4eb8-bc66-bbe95eba2b63"
+      "webhookId": "f5ce0de9-c90d-4899-a6fe-dcc9098e8a2a"
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "http://100.116.103.78:8090/v1/rag-queries",
+        "url": "http://100.116.103.78:8090/v1/meeting-action-items",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ $json.body }}",
+        "jsonBody": "={{ $json.body ? $json.body : $json }}",
         "options": {}
       },
-      "id": "node-http-rag-query",
-      "name": "HTTP RAG Query",
+      "id": "node-http-meeting-actions-canonical",
+      "name": "HTTP Meeting Action Items Canonical",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        540,
+        560,
         260
       ]
     }
   ],
   "connections": {
-    "Webhook Recall Query": {
+    "Webhook Recall Meeting Actions Canonical": {
       "main": [
         [
           {
-            "node": "HTTP RAG Query",
+            "node": "HTTP Meeting Action Items Canonical",
             "type": "main",
             "index": 0
           }
