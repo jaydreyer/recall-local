@@ -1,5 +1,45 @@
 # Recall.local Implementation Log
 
+## 2026-03-04 - Phase 6A execution closeout (local + ai-lab)
+
+### What was executed
+
+- Synced Phase 6A implementation files from Mac to ai-lab and ran required remote content spot-checks:
+  - `rsync -avz -e "ssh -i ~/.ssh/codex_ai_lab" --relative scripts/phase1/ingest_bridge_api.py scripts/phase6 config/career_pages.json config/job_search.json ui/daily-dashboard docker/docker-compose.yml docker/.env.example tests/test_bridge_api_contract.py jaydreyer@100.116.103.78:/home/jaydreyer/recall-local/`
+  - `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "cd /home/jaydreyer/recall-local && rg -n '/v1/jobs|/v1/resumes|/v1/companies|/v1/llm-settings|workflow_06a' scripts/phase1/ingest_bridge_api.py"`
+- Executed Qdrant Phase 6 collection bootstrap on ai-lab:
+  - `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "cd /home/jaydreyer/recall-local && python3 scripts/phase6/setup_collections.py"`
+  - result: `recall_jobs` created, `recall_resume` already present.
+- Ingested Jay's current resume into `recall_resume`:
+  - `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "cd /home/jaydreyer/recall-local && python3 -m scripts.phase6.ingest_resume --file /home/jaydreyer/obsidian-vault/career/Jay-Dreyer-Resume.md"`
+  - result: `version=2`, `chunks=10`.
+- Restarted bridge and verified live Phase 6A endpoint responses on ai-lab:
+  - `GET /v1/jobs`, `GET /v1/resumes/current`, `GET /v1/llm-settings`, `GET /v1/job-stats`, `GET /v1/job-gaps` all returned `HTTP 200`.
+  - OpenAPI spot-check confirmed all Phase 6A paths were present and `servers` included local + ai-lab URLs.
+- Brought up Daily Dashboard service and verified delivery on port `3001`.
+- Fixed a compose healthcheck defect discovered during dashboard bring-up:
+  - `/Users/jaydreyer/projects/recall-local/docker/docker-compose.yml`
+  - changed `qdrant` healthcheck from `curl` (not present in `qdrant/qdrant` image) to a bash TCP probe (`/dev/tcp/127.0.0.1/6333`) so `depends_on: condition: service_healthy` no longer false-fails.
+
+### Validation
+
+- `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "cd /home/jaydreyer/recall-local && python3 scripts/phase6/setup_collections.py"`
+- `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "cd /home/jaydreyer/recall-local && python3 -m scripts.phase6.ingest_resume --file /home/jaydreyer/obsidian-vault/career/Jay-Dreyer-Resume.md"`
+- `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "curl -sS http://localhost:8090/v1/jobs"`
+- `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "curl -sS http://localhost:8090/v1/resumes/current"`
+- `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "curl -sS http://localhost:3001/"`
+- `ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 "python3 - <<'PY'\nimport json,urllib.request\nurl='http://localhost:8090/openapi.json'\nwith urllib.request.urlopen(url, timeout=10) as r:\n    spec=json.load(r)\npaths=spec.get('paths',{})\ncheck=['/v1/jobs','/v1/jobs/{jobId}','/v1/job-evaluation-runs','/v1/job-stats','/v1/job-gaps','/v1/job-deduplications','/v1/job-discovery-runs','/v1/resumes','/v1/resumes/current','/v1/companies','/v1/companies/{companyId}','/v1/company-profile-refresh-runs','/v1/llm-settings']\nmissing=[p for p in check if p not in paths]\nprint('missing:', missing)\nprint('servers:', spec.get('servers'))\nPY"`
+
+### Results
+
+- Phase 6A Definition of Done items are now satisfied on ai-lab runtime:
+  - collections present,
+  - canonical `/v1/*` endpoints live,
+  - resume ingested,
+  - LLM settings persisted and readable,
+  - Daily Dashboard serving on `:3001`.
+- Compose startup reliability for the full stack is improved by the `qdrant` healthcheck fix.
+
 ## 2026-03-04 - Phase 6A foundation implementation (local)
 
 ### What was executed

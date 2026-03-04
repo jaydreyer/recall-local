@@ -1,6 +1,6 @@
 # Recall.local Environment Inventory
 
-Last updated: 2026-02-26
+Last updated: 2026-03-04
 
 ## Decision Snapshot
 
@@ -30,6 +30,7 @@ Last updated: 2026-02-26
 - `portainer` container: `0.0.0.0:9000`
 - `recall-mkdocs` container: `0.0.0.0:8100->8000`
 - `recall-ui` container: `0.0.0.0:8170->80` (verified running on ai-lab via `scripts/phase5/run_operator_stack_now.sh up` on 2026-02-26)
+- `recall-daily-dashboard` container: `0.0.0.0:3001->80` (verified running on ai-lab via `docker compose -f docker/docker-compose.yml up -d --build daily-dashboard` on 2026-03-04)
 
 ## Data and Storage
 
@@ -43,6 +44,7 @@ Last updated: 2026-02-26
 
 - Health endpoint: `http://localhost:6333/healthz`
 - Primary Recall collection: `recall_docs`
+- Phase 6 collections: `recall_jobs`, `recall_resume`
 - Vector size: `768`
 - Distance metric: cosine
 
@@ -178,6 +180,7 @@ Last updated: 2026-02-26
 - Phase 2: complete (`2A`-`2C` done; meeting pipeline + domain retrieval/evals operational)
 - Phase 3: complete (`3A` operator wrappers/forms, `3B` retrieval-quality track, `3C` ops hardening + portfolio bundle validated on ai-lab on 2026-02-24)
 - Phase 5: complete (`5A`-`5E.1` implementation complete and `5F` hardening/closeout validated, including canonical-only API cutover, coverage gate, operator entrypoint, demo runner evidence, auth/rate-limit verification, and completion checklist closure on 2026-02-26)
+- Phase 6A: complete (foundation routes live on ai-lab, `recall_jobs`/`recall_resume` created, resume version `2` ingested from `/home/jaydreyer/obsidian-vault/career/Jay-Dreyer-Resume.md`, and Daily Dashboard serving on port `3001` as of 2026-03-04)
 
 ## Skills Baseline (local Codex)
 
