@@ -1,5 +1,66 @@
 # Recall.local Implementation Log
 
+## 2026-03-04 - Phase 6A foundation implementation (local)
+
+### What was executed
+
+- Added Phase 6 collection bootstrap and runtime helpers:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/setup_collections.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/storage.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/job_repository.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/job_dedup.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/job_discovery_runner.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/job_evaluator.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/gap_aggregator.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/company_profiler.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/telegram_notifier.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/job_metadata_extractor.py`
+- Added resume ingestion CLI and bridge integration:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/ingest_resume.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py`
+  - supports JSON markdown payloads and multipart file upload payloads for `POST /v1/resumes`.
+- Added Phase 6 canonical API surface to existing bridge (`operations-v1`):
+  - `GET /v1/jobs`
+  - `GET /v1/jobs/{jobId}`
+  - `PATCH /v1/jobs/{jobId}`
+  - `POST /v1/job-evaluation-runs`
+  - `GET /v1/job-stats`
+  - `GET /v1/job-gaps`
+  - `POST /v1/job-deduplications`
+  - `POST /v1/job-discovery-runs`
+  - `POST /v1/resumes`
+  - `GET /v1/resumes/current`
+  - `GET /v1/companies`
+  - `GET /v1/companies/{companyId}`
+  - `POST /v1/company-profile-refresh-runs`
+  - `GET /v1/llm-settings`
+  - `PATCH /v1/llm-settings`
+- Added Phase 6 configuration files:
+  - `/Users/jaydreyer/projects/recall-local/config/career_pages.json`
+  - `/Users/jaydreyer/projects/recall-local/config/job_search.json`
+- Added Daily Dashboard scaffold and Docker wiring:
+  - `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/` (React/Vite app with Atelier Ops theme, tab shell, bridge API client, and Recharts placeholder)
+  - `/Users/jaydreyer/projects/recall-local/docker/docker-compose.yml` (new `daily-dashboard` service)
+  - `/Users/jaydreyer/projects/recall-local/docker/.env.example` (Phase 6 job + dashboard env vars)
+- Extended bridge contract coverage:
+  - `/Users/jaydreyer/projects/recall-local/tests/test_bridge_api_contract.py`
+  - includes schema path checks and Phase 6 endpoint behavior checks.
+
+### Validation
+
+- `python3 -m py_compile scripts/phase1/ingest_bridge_api.py scripts/phase6/*.py`
+- `python3 -m unittest tests/test_bridge_api_contract.py`
+- `python3 -m unittest discover -s tests`
+- `npm --prefix /Users/jaydreyer/projects/recall-local/ui/daily-dashboard install`
+- `npm --prefix /Users/jaydreyer/projects/recall-local/ui/daily-dashboard run build`
+
+### Results
+
+- Phase 6A foundation backend endpoints are now present on canonical `/v1/*` paths and included in OpenAPI output.
+- LLM settings now persist via SQLite (`settings` table) and are retrievable/updateable via API.
+- Resume ingestion flow and CLI scaffold are implemented; live ingestion of Jay's actual resume depends on providing a source file path.
+- Daily Dashboard scaffold is buildable and dockerized with the requested Atelier Ops visual direction on port `3001`.
+
 ## 2026-02-26 - Query relevance and citation UX hardening (local + ai-lab)
 
 ### What was executed

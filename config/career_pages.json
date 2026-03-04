@@ -1,0 +1,177 @@
+{
+  "companies": [
+    {
+      "name": "Anthropic",
+      "tier": 2,
+      "ats": "greenhouse",
+      "board_id": "anthropic",
+      "url": "https://boards-api.greenhouse.io/v1/boards/anthropic/jobs",
+      "title_filter": ["solutions", "engineer", "architect", "technical", "account", "sales"],
+      "your_connection": "Daily Claude user. Built production apps with Claude Code. Recall.local uses Anthropic API."
+    },
+    {
+      "name": "OpenAI",
+      "tier": 2,
+      "ats": "greenhouse",
+      "board_id": "openai",
+      "url": "https://boards-api.greenhouse.io/v1/boards/openai/jobs",
+      "title_filter": ["solutions", "engineer", "architect", "sales"],
+      "your_connection": "ChatGPT champion at Gap. Built custom GPTs replacing enterprise spend."
+    },
+    {
+      "name": "Postman",
+      "tier": 1,
+      "ats": "greenhouse",
+      "board_id": "postman",
+      "url": "https://boards-api.greenhouse.io/v1/boards/postman/jobs",
+      "title_filter": ["solutions", "engineer", "architect", "technical"],
+      "your_connection": "API governance expert from Target (225+ API catalog). Postman power user."
+    },
+    {
+      "name": "Aisera",
+      "tier": 1,
+      "ats": "greenhouse",
+      "board_id": "aisera",
+      "url": "https://boards-api.greenhouse.io/v1/boards/aisera/jobs",
+      "title_filter": ["solutions", "engineer", "sales", "architect"],
+      "your_connection": "Managed Aisera chatbot at Gap and drove strong resolution outcomes as a customer."
+    },
+    {
+      "name": "Miro",
+      "tier": 1,
+      "ats": "greenhouse",
+      "board_id": "miro",
+      "url": "https://boards-api.greenhouse.io/v1/boards/miro/jobs",
+      "title_filter": ["solutions", "engineer", "architect", "customer"],
+      "your_connection": "Hands-on product user with collaboration workflow experience."
+    },
+    {
+      "name": "Airtable",
+      "tier": 1,
+      "ats": "greenhouse",
+      "board_id": "airtable",
+      "url": "https://boards-api.greenhouse.io/v1/boards/airtable/jobs",
+      "title_filter": ["solutions", "engineer", "architect", "technical account"],
+      "your_connection": "Built workflow automations with Airtable-style systems and governance patterns."
+    },
+    {
+      "name": "Smartsheet",
+      "tier": 1,
+      "ats": "greenhouse",
+      "board_id": "smartsheet",
+      "url": "https://boards-api.greenhouse.io/v1/boards/smartsheet/jobs",
+      "title_filter": ["solutions", "engineer", "architect", "customer"],
+      "your_connection": "Strong fit with enterprise workflow and enablement delivery background."
+    },
+    {
+      "name": "Cohere",
+      "tier": 2,
+      "ats": "greenhouse",
+      "board_id": "cohere",
+      "url": "https://boards-api.greenhouse.io/v1/boards/cohere/jobs",
+      "title_filter": ["solutions", "engineer", "architect", "technical account"],
+      "your_connection": "Enterprise AI focus aligns with customer-facing AI solutioning background."
+    },
+    {
+      "name": "Glean",
+      "tier": 2,
+      "ats": "greenhouse",
+      "board_id": "gleanwork",
+      "url": "https://boards-api.greenhouse.io/v1/boards/gleanwork/jobs",
+      "title_filter": ["solutions", "engineer", "architect", "customer"],
+      "your_connection": "Strong overlap with enterprise knowledge systems and retrieval operations."
+    },
+    {
+      "name": "Writer",
+      "tier": 2,
+      "ats": "greenhouse",
+      "board_id": "writer",
+      "url": "https://boards-api.greenhouse.io/v1/boards/writer/jobs",
+      "title_filter": ["solutions", "engineer", "architect", "sales"],
+      "your_connection": "Enterprise AI writing platform with strong API and adoption motion alignment."
+    },
+    {
+      "name": "ServiceNow",
+      "tier": 2,
+      "ats": "workday",
+      "url": "https://servicenow.wd5.myworkdayjobs.com/ServiceNowCareers",
+      "title_filter": ["solutions", "architect", "technical", "customer"],
+      "your_connection": "AI support and enterprise automation background maps to platform outcomes."
+    },
+    {
+      "name": "Atlassian",
+      "tier": 2,
+      "ats": "greenhouse",
+      "board_id": "atlassian",
+      "url": "https://boards.greenhouse.io/atlassian",
+      "title_filter": ["solutions", "developer", "architect", "technical account"],
+      "your_connection": "Developer tools and API ecosystem experience fit Atlassian platform roles."
+    },
+    {
+      "name": "Workato",
+      "tier": 2,
+      "ats": "greenhouse",
+      "board_id": "workato",
+      "url": "https://boards-api.greenhouse.io/v1/boards/workato/jobs",
+      "title_filter": ["solutions", "engineer", "architect", "automation"],
+      "your_connection": "Automation and integration leadership background is directly aligned."
+    },
+    {
+      "name": "Datadog",
+      "tier": 2,
+      "ats": "greenhouse",
+      "board_id": "datadog",
+      "url": "https://boards-api.greenhouse.io/v1/boards/datadog/jobs",
+      "title_filter": ["solutions", "engineer", "architect", "technical account"],
+      "your_connection": "API and observability storytelling from enterprise platform work is a fit."
+    },
+    {
+      "name": "Target",
+      "tier": 3,
+      "ats": "workday",
+      "url": "https://jobs.target.com/search-jobs",
+      "title_filter": ["solutions", "architect", "ai", "developer experience"],
+      "your_connection": "16 years at Target. Built API governance program, API catalog, and developer portal."
+    },
+    {
+      "name": "UnitedHealth",
+      "tier": 3,
+      "ats": "workday",
+      "url": "https://careers.unitedhealthgroup.com/job-search-results/",
+      "title_filter": ["solutions", "architect", "ai", "platform"],
+      "your_connection": "Enterprise healthcare scale and AI modernization focus match career goals."
+    },
+    {
+      "name": "Best Buy",
+      "tier": 3,
+      "ats": "workday",
+      "url": "https://jobs.bestbuy.com/bby",
+      "title_filter": ["solutions", "architect", "ai", "technical"],
+      "your_connection": "Twin Cities network plus enterprise retail technology background."
+    },
+    {
+      "name": "US Bank",
+      "tier": 3,
+      "ats": "workday",
+      "url": "https://careers.usbank.com/global/en/search-results",
+      "title_filter": ["solutions", "architect", "ai", "platform"],
+      "your_connection": "Enterprise governance and API strategy background translates to fintech platforms."
+    },
+    {
+      "name": "3M",
+      "tier": 3,
+      "ats": "workday",
+      "url": "https://careers.3m.com/jobs",
+      "title_filter": ["solutions", "architect", "ai", "digital"],
+      "your_connection": "Enterprise-scale transformation experience and Twin Cities proximity."
+    },
+    {
+      "name": "Medtronic",
+      "tier": 3,
+      "ats": "workday",
+      "url": "https://jobs.medtronic.com/en",
+      "title_filter": ["solutions", "architect", "ai", "technical"],
+      "your_connection": "Enterprise program leadership and platform enablement patterns map to MedTech AI roles."
+    }
+  ]
+}

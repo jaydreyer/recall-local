@@ -1,0 +1,45 @@
+{
+  "search_titles": [
+    "Solutions Engineer",
+    "Solutions Architect",
+    "Sales Engineer",
+    "Technical Account Manager",
+    "AI Solutions Consultant",
+    "AI Enablement Lead",
+    "Technical Program Manager",
+    "Developer Relations",
+    "Enterprise AI Strategist",
+    "Artificial Intelligence Consultant"
+  ],
+  "search_locations": [
+    "Remote",
+    "Minneapolis, MN",
+    "Twin Cities, MN",
+    "Minnesota"
+  ],
+  "search_keywords": [
+    "AI",
+    "SaaS",
+    "API",
+    "developer tools",
+    "enterprise software"
+  ],
+  "score_thresholds": {
+    "high_fit": 75,
+    "medium_fit": 50,
+    "low_fit": 25
+  },
+  "notification_rules": {
+    "push_min_score": 75,
+    "push_target_company_min_score": 60,
+    "target_company_tiers": [
+      1,
+      2
+    ]
+  },
+  "schedule": {
+    "aggregator_interval_hours": 8,
+    "career_page_interval_hours": 12
+  },
+  "dedup_similarity_threshold": 0.92
+}

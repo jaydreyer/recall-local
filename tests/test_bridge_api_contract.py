@@ -513,6 +513,19 @@ class BridgeApiContractTests(unittest.TestCase):
             "/v1/evaluation-runs",
             "/v1/vault-files",
             "/v1/vault-syncs",
+            "/v1/jobs",
+            "/v1/jobs/{jobId}",
+            "/v1/job-evaluation-runs",
+            "/v1/job-stats",
+            "/v1/job-gaps",
+            "/v1/job-deduplications",
+            "/v1/job-discovery-runs",
+            "/v1/resumes",
+            "/v1/resumes/current",
+            "/v1/companies",
+            "/v1/companies/{companyId}",
+            "/v1/company-profile-refresh-runs",
+            "/v1/llm-settings",
         }
         forbidden_paths = {
             "/config/auto-tags",
@@ -541,6 +554,108 @@ class BridgeApiContractTests(unittest.TestCase):
             self.assertIn(path, paths)
         for path in forbidden_paths:
             self.assertNotIn(path, paths)
+
+    def test_phase6_jobs_and_stats_endpoints_return_canonical_payloads(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        jobs_payload = {
+            "total": 1,
+            "limit": 50,
+            "offset": 0,
+            "items": [{"jobId": "job-1", "title": "Solutions Engineer", "status": "evaluated", "fit_score": 80}],
+        }
+        stats_payload = {
+            "total_jobs": 1,
+            "score_ranges": {"high": 1, "medium": 0, "low": 0, "unscored": 0},
+            "by_source": {"jobspy": 1},
+            "by_day": {"2026-03-04": 1},
+        }
+        with patch("scripts.phase1.ingest_bridge_api.phase6_list_jobs", return_value=jobs_payload):
+            with patch("scripts.phase1.ingest_bridge_api.phase6_job_stats", return_value=stats_payload):
+                with build_client(env) as client:
+                    jobs_response = client.get("/v1/jobs")
+                    stats_response = client.get("/v1/job-stats")
+                    alias_response = client.get("/jobs")
+
+        self.assertEqual(jobs_response.status_code, 200)
+        self.assertEqual(jobs_response.json()["workflow"], "workflow_06a_jobs")
+        self.assertEqual(jobs_response.json()["items"][0]["jobId"], "job-1")
+        self.assertEqual(stats_response.status_code, 200)
+        self.assertEqual(stats_response.json()["workflow"], "workflow_06a_job_stats")
+        self.assertEqual(alias_response.status_code, 404)
+        self.assertEqual(alias_response.json()["error"]["code"], "not_found")
+
+    def test_phase6_llm_settings_patch_persists(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = os.path.join(temp_dir, "recall.db")
+            env = {
+                "RECALL_API_KEY": "",
+                "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+                "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+                "RECALL_DB_PATH": db_path,
+            }
+            with build_client(env) as client:
+                initial = client.get("/v1/llm-settings")
+                patched = client.patch(
+                    "/v1/llm-settings",
+                    json={"evaluation_model": "cloud", "cloud_provider": "openai", "auto_escalate": False},
+                )
+                after = client.get("/v1/llm-settings")
+
+        self.assertEqual(initial.status_code, 200)
+        self.assertEqual(initial.json()["settings"]["evaluation_model"], "local")
+        self.assertEqual(patched.status_code, 200)
+        self.assertEqual(patched.json()["settings"]["evaluation_model"], "cloud")
+        self.assertEqual(patched.json()["settings"]["cloud_provider"], "openai")
+        self.assertFalse(patched.json()["settings"]["auto_escalate"])
+        self.assertEqual(after.status_code, 200)
+        self.assertEqual(after.json()["settings"]["evaluation_model"], "cloud")
+
+    def test_phase6_resume_endpoint_accepts_markdown_payload(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        fake_resume = {
+            "version": 1,
+            "chunks": 5,
+            "ingested_at": "2026-03-04T12:00:00+00:00",
+            "source": "inline:resume-markdown",
+            "dry_run": True,
+        }
+        with patch("scripts.phase1.ingest_bridge_api.phase6_ingest_resume", return_value=fake_resume):
+            with build_client(env) as client:
+                response = client.post("/v1/resumes?dry_run=true", json={"markdown": "# Resume\\nExperience"})
+                invalid = client.post("/v1/resumes?dry_run=true", json={})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["workflow"], "workflow_06a_resume_ingestion")
+        self.assertEqual(response.json()["version"], 1)
+        self.assertEqual(invalid.status_code, 400)
+        self.assertEqual(invalid.json()["error"]["code"], "validation_failed")
+
+    def test_phase6_company_and_job_aliases_return_not_found(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        with build_client(env) as client:
+            responses = [
+                client.get("/companies"),
+                client.post("/company-profile-refresh-runs", json={"company_id": "anthropic"}),
+                client.get("/job-stats"),
+                client.get("/job-gaps"),
+                client.post("/job-evaluation-runs", json={"job_ids": ["job-1"]}),
+            ]
+
+        for response in responses:
+            self.assertEqual(response.status_code, 404)
+            self.assertEqual(response.json()["error"]["code"], "not_found")
 
     def test_legacy_ingestion_query_and_meeting_aliases_return_not_found(self) -> None:
         env = {

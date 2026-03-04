@@ -12,6 +12,10 @@ __pycache__/
 *.pyc
 .venv/
 
+# Frontend
+node_modules/
+dist/
+
 # n8n local data (runtime state, not workflow exports)
 n8n/data/
 

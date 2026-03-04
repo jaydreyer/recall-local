@@ -10,6 +10,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -37,6 +38,23 @@ from scripts.phase1.rag_query import run_rag_query  # noqa: E402
 from scripts.phase5.vault_sync import list_vault_tree, run_vault_sync_once  # noqa: E402
 from scripts.phase2.meeting_action_items import run_meeting_action_items  # noqa: E402
 from scripts.phase2.meeting_from_payload import payload_to_meeting_kwargs  # noqa: E402
+from scripts.phase6 import storage as phase6_storage  # noqa: E402
+from scripts.phase6.company_profiler import (  # noqa: E402
+    get_company_profile as phase6_get_company_profile,
+)
+from scripts.phase6.company_profiler import list_company_profiles as phase6_list_company_profiles  # noqa: E402
+from scripts.phase6.company_profiler import refresh_company_profile as phase6_refresh_company_profile  # noqa: E402
+from scripts.phase6.gap_aggregator import aggregate_gaps as phase6_aggregate_gaps  # noqa: E402
+from scripts.phase6.ingest_resume import ingest_resume as phase6_ingest_resume  # noqa: E402
+from scripts.phase6.job_dedup import check_job_duplicate as phase6_check_job_duplicate  # noqa: E402
+from scripts.phase6.job_discovery_runner import run_discovery as phase6_run_discovery  # noqa: E402
+from scripts.phase6.job_evaluator import queue_job_evaluations as phase6_queue_job_evaluations  # noqa: E402
+from scripts.phase6.job_repository import all_jobs as phase6_all_jobs  # noqa: E402
+from scripts.phase6.job_repository import get_job as phase6_get_job  # noqa: E402
+from scripts.phase6.job_repository import job_stats as phase6_job_stats  # noqa: E402
+from scripts.phase6.job_repository import list_jobs as phase6_list_jobs  # noqa: E402
+from scripts.phase6.job_repository import update_job as phase6_update_job  # noqa: E402
+from scripts.phase6.setup_collections import ensure_phase6_collections as phase6_ensure_collections  # noqa: E402
 
 
 ALLOWED_INGEST_CHANNELS = ("webhook", "bookmarklet", "ios-share", "gmail-forward")
@@ -57,6 +75,8 @@ DEFAULT_RECENT_EVAL_RUNS = 5
 DEFAULT_EVAL_RUN_TIMEOUT_SECONDS = 900
 DEFAULT_CORS_ORIGINS = "*"
 CANONICAL_GROUP_ENUM = list(CANONICAL_GROUPS)
+PHASE6_JOB_STATUSES = {"new", "evaluated", "applied", "dismissed", "expired"}
+PHASE6_JOB_SOURCES = {"jobspy", "adzuna", "serpapi", "career_page", "chrome_extension"}
 
 
 class InMemoryRateLimiter:
@@ -216,6 +236,31 @@ class EvaluationRunAcceptedResponse(BaseModel):
     workflow: Literal["workflow_05d_eval_run"]
     accepted: bool
     run: EvaluationRunStatus
+
+
+class JobsCollectionResponse(BaseModel):
+    workflow: Literal["workflow_06a_jobs"]
+    total: int
+    limit: int
+    offset: int
+    items: list[dict[str, Any]]
+
+
+class JobEvaluationRunResponse(BaseModel):
+    workflow: Literal["workflow_06a_job_evaluations"]
+    queued: int
+    run_id: str
+    status: str
+    job_ids: list[str]
+
+
+class ResumeIngestionResponse(BaseModel):
+    workflow: Literal["workflow_06a_resume_ingestion"]
+    version: int
+    chunks: int
+    ingested_at: str
+    source: str
+    dry_run: bool
 
 
 class AutoTagGroup(BaseModel):
@@ -558,6 +603,69 @@ EVAL_RUN_COMPLETED_EXAMPLE = {
     },
 }
 
+JOBS_LIST_SUCCESS_EXAMPLE = {
+    "workflow": "workflow_06a_jobs",
+    "total": 2,
+    "limit": 50,
+    "offset": 0,
+    "items": [
+        {
+            "jobId": "job_001",
+            "title": "Senior Solutions Engineer",
+            "company": "Anthropic",
+            "status": "evaluated",
+            "fit_score": 84,
+            "source": "career_page",
+        },
+        {
+            "jobId": "job_002",
+            "title": "Solutions Architect",
+            "company": "Postman",
+            "status": "evaluated",
+            "fit_score": 79,
+            "source": "jobspy",
+        },
+    ],
+}
+
+JOB_STATS_SUCCESS_EXAMPLE = {
+    "workflow": "workflow_06a_job_stats",
+    "total_jobs": 12,
+    "score_ranges": {"high": 4, "medium": 5, "low": 3, "unscored": 0},
+    "by_source": {"jobspy": 7, "career_page": 3, "adzuna": 2},
+    "by_day": {"2026-03-04": 6, "2026-03-03": 6},
+}
+
+JOB_GAPS_SUCCESS_EXAMPLE = {
+    "workflow": "workflow_06a_job_gaps",
+    "total_jobs": 12,
+    "evaluated_jobs": 10,
+    "top_gaps": [{"skill": "kubernetes", "count": 5}, {"skill": "enterprise-ai", "count": 4}],
+    "top_matching_skills": [{"skill": "api-strategy", "count": 7}, {"skill": "solution-design", "count": 6}],
+    "recommended_focus": ["kubernetes", "enterprise-ai", "developer-advocacy"],
+}
+
+LLM_SETTINGS_SUCCESS_EXAMPLE = {
+    "workflow": "workflow_06a_llm_settings",
+    "settings": {
+        "evaluation_model": "local",
+        "cloud_provider": "anthropic",
+        "cloud_model": "claude-sonnet-4-5-20250929",
+        "auto_escalate": True,
+        "escalate_threshold_gaps": 2,
+        "escalate_threshold_rationale_words": 20,
+    },
+}
+
+RESUME_SUCCESS_EXAMPLE = {
+    "workflow": "workflow_06a_resume_ingestion",
+    "version": 2,
+    "chunks": 14,
+    "ingested_at": "2026-03-04T12:10:00+00:00",
+    "source": "/home/jaydreyer/resume.md",
+    "dry_run": False,
+}
+
 EVAL_RUNS_LOCK = threading.Lock()
 EVAL_RUNS: dict[str, dict[str, Any]] = {}
 
@@ -835,6 +943,146 @@ EVAL_RUN_REQUEST_BODY = {
     },
 }
 
+JOB_EVALUATION_RUN_REQUEST_BODY = {
+    "required": True,
+    "content": {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "required": ["job_ids"],
+                "properties": {
+                    "job_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "One or more job identifiers to evaluate.",
+                    },
+                    "wait": {
+                        "oneOf": [{"type": "boolean"}, {"type": "string"}, {"type": "integer"}],
+                        "description": "If true, run synchronously.",
+                        "default": False,
+                    },
+                    "settings": {
+                        "type": "object",
+                        "description": "Optional settings override for this run.",
+                        "additionalProperties": True,
+                    },
+                },
+                "additionalProperties": False,
+            },
+            "examples": {
+                "singleJob": {"value": {"job_ids": ["job_001"]}},
+                "batchSync": {
+                    "value": {
+                        "job_ids": ["job_001", "job_002"],
+                        "wait": True,
+                        "settings": {"evaluation_model": "cloud"},
+                    }
+                },
+            },
+        }
+    },
+}
+
+JOB_DEDUP_REQUEST_BODY = {
+    "required": True,
+    "content": {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "required": ["title", "company"],
+                "properties": {
+                    "title": {"type": "string"},
+                    "company": {"type": "string"},
+                    "url": {"type": "string"},
+                    "description": {"type": "string"},
+                    "similarity_threshold": {"type": "number", "minimum": 0, "maximum": 1, "default": 0.92},
+                },
+                "additionalProperties": False,
+            }
+        }
+    },
+}
+
+JOB_DISCOVERY_RUN_REQUEST_BODY = {
+    "required": False,
+    "content": {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "titles": {"type": "array", "items": {"type": "string"}},
+                    "locations": {"type": "array", "items": {"type": "string"}},
+                    "sources": {"type": "array", "items": {"type": "string"}},
+                },
+                "additionalProperties": False,
+            }
+        }
+    },
+}
+
+JOB_PATCH_REQUEST_BODY = {
+    "required": True,
+    "content": {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "status": {"type": "string", "enum": sorted(PHASE6_JOB_STATUSES)},
+                    "applied": {"type": "boolean"},
+                    "dismissed": {"type": "boolean"},
+                    "notes": {"type": "string"},
+                },
+                "additionalProperties": False,
+            }
+        }
+    },
+}
+
+RESUME_REQUEST_BODY = {
+    "required": False,
+    "content": {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "file_path": {"type": "string", "description": "Absolute path to resume file."},
+                    "markdown": {"type": "string", "description": "Inline markdown resume text."},
+                },
+                "additionalProperties": False,
+            }
+        },
+        "multipart/form-data": {
+            "schema": {
+                "type": "object",
+                "required": ["file"],
+                "properties": {
+                    "file": {"type": "string", "format": "binary"},
+                },
+            }
+        },
+    },
+}
+
+LLM_SETTINGS_PATCH_REQUEST_BODY = {
+    "required": True,
+    "content": {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "evaluation_model": {"type": "string", "enum": ["local", "cloud"]},
+                    "cloud_provider": {"type": "string", "enum": ["anthropic", "openai", "gemini"]},
+                    "cloud_model": {"type": "string"},
+                    "auto_escalate": {"type": "boolean"},
+                    "escalate_threshold_gaps": {"type": "integer", "minimum": 0},
+                    "escalate_threshold_rationale_words": {"type": "integer", "minimum": 0},
+                },
+                "additionalProperties": False,
+            }
+        }
+    },
+}
+
 RATE_LIMIT_ERROR_RESPONSE = {
     429: {
         "model": ErrorResponse,
@@ -878,6 +1126,10 @@ def create_app() -> FastAPI:
             {"name": "Vault", "description": "List vault notes and trigger Obsidian vault sync operations."},
             {"name": "Activities", "description": "Read recent ingestion activity for dashboard monitoring."},
             {"name": "Evaluations", "description": "Read latest eval metrics and trigger eval runs."},
+            {"name": "Jobs", "description": "List, inspect, update, and aggregate discovered jobs."},
+            {"name": "Resumes", "description": "Ingest and inspect resume versions used for job evaluation."},
+            {"name": "Companies", "description": "List and refresh company profile summaries for job intelligence."},
+            {"name": "LLM Settings", "description": "Read and update Phase 6 evaluation model settings."},
         ],
     )
     cors_origins = _cors_origins_from_env()
@@ -1370,6 +1622,753 @@ def create_app() -> FastAPI:
         thread.start()
         run_state = _get_eval_run(eval_run_id)
         return _json_response(202, {"workflow": "workflow_05d_eval_run", "accepted": True, "run": run_state})
+
+    @app.get(
+        f"{API_PREFIX}/jobs",
+        tags=["Jobs"],
+        summary="List jobs",
+        description=(
+            "Lists jobs from `recall_jobs` with filtering, sorting, and pagination controls "
+            "for the Daily Dashboard."
+        ),
+        response_model=JobsCollectionResponse,
+        responses={
+            200: {"description": "Jobs loaded.", "content": {"application/json": {"example": JOBS_LIST_SUCCESS_EXAMPLE}}},
+            400: {"model": ErrorResponse, "description": "Invalid list query options.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+    )
+    async def get_jobs(
+        request: Request,
+        status: str = Query("evaluated", description="Filter by status."),
+        min_score: int = Query(0, ge=0, le=100, description="Minimum fit score."),
+        max_score: int = Query(100, ge=0, le=100, description="Maximum fit score."),
+        company_tier: Optional[int] = Query(None, ge=1, le=3, description="Optional company tier filter."),
+        source: Optional[str] = Query(None, description="Optional source filter."),
+        title_query: Optional[str] = Query(None, description="Optional fuzzy title search."),
+        sort: str = Query("fit_score", description="Sort field: fit_score, discovered_at, company."),
+        order: str = Query("desc", description="Sort order: asc, desc."),
+        limit: int = Query(50, ge=1, le=200, description="Page size."),
+        offset: int = Query(0, ge=0, description="Pagination offset."),
+    ) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        normalized_status = str(status).strip().lower()
+        if normalized_status not in PHASE6_JOB_STATUSES:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message=f"Invalid status: {status}",
+                request_id=request_id,
+                details=[{"field": "status", "issue": f"allowed values: {', '.join(sorted(PHASE6_JOB_STATUSES))}"}],
+            )
+
+        normalized_source = str(source or "").strip().lower() or None
+        if normalized_source and normalized_source not in PHASE6_JOB_SOURCES:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message=f"Invalid source: {source}",
+                request_id=request_id,
+                details=[{"field": "source", "issue": f"allowed values: {', '.join(sorted(PHASE6_JOB_SOURCES))}"}],
+            )
+
+        normalized_sort = str(sort).strip().lower()
+        if normalized_sort not in {"fit_score", "discovered_at", "company"}:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message=f"Invalid sort: {sort}",
+                request_id=request_id,
+                details=[{"field": "sort", "issue": "allowed values: fit_score, discovered_at, company"}],
+            )
+
+        normalized_order = str(order).strip().lower()
+        if normalized_order not in {"asc", "desc"}:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message=f"Invalid order: {order}",
+                request_id=request_id,
+                details=[{"field": "order", "issue": "allowed values: asc, desc"}],
+            )
+
+        try:
+            payload = phase6_list_jobs(
+                status=normalized_status,
+                min_score=min_score,
+                max_score=max_score,
+                company_tier=company_tier,
+                source=normalized_source,
+                title_query=title_query,
+                sort=normalized_sort,
+                order=normalized_order,
+                limit=limit,
+                offset=offset,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return _error_response(
+                status_code=500,
+                code="workflow_failed",
+                message=f"Job query failed: {exc}",
+                request_id=request_id,
+            )
+        payload["workflow"] = "workflow_06a_jobs"
+        return _json_response(200, payload)
+
+    @app.get(
+        f"{API_PREFIX}/jobs/{{jobId}}",
+        tags=["Jobs"],
+        summary="Get job",
+        description="Returns one job with full evaluation metadata.",
+        responses={
+            200: {"description": "Job loaded."},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            404: {"model": ErrorResponse, "description": "Job not found."},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+    )
+    async def get_job_by_id(request: Request, jobId: str) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        job = phase6_get_job(jobId)
+        if job is None:
+            return _error_response(
+                status_code=404,
+                code="not_found",
+                message=f"Job not found: {jobId}",
+                request_id=request_id,
+            )
+        return _json_response(200, job)
+
+    @app.patch(
+        f"{API_PREFIX}/jobs/{{jobId}}",
+        tags=["Jobs"],
+        summary="Update job",
+        description="Updates mutable job fields (`status`, `applied`, `dismissed`, `notes`).",
+        responses={
+            200: {"description": "Job updated."},
+            400: {"model": ErrorResponse, "description": "Invalid update payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            404: {"model": ErrorResponse, "description": "Job not found."},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+        openapi_extra={"requestBody": JOB_PATCH_REQUEST_BODY},
+    )
+    async def patch_job(request: Request, jobId: str) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        try:
+            payload = await _read_json_body(request)
+        except ValueError as exc:
+            return _error_response(status_code=400, code="invalid_json", message=str(exc), request_id=request_id)
+
+        allowed_fields = {"status", "applied", "dismissed", "notes"}
+        unknown_fields = [key for key in payload.keys() if key not in allowed_fields]
+        if unknown_fields:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message="Invalid job update payload.",
+                request_id=request_id,
+                details=[{"field": key, "issue": "field is not supported"} for key in unknown_fields],
+            )
+
+        status_value = payload.get("status")
+        if status_value is not None:
+            status_value = str(status_value).strip().lower()
+            if status_value not in PHASE6_JOB_STATUSES:
+                return _error_response(
+                    status_code=400,
+                    code="validation_failed",
+                    message=f"Invalid status: {status_value}",
+                    request_id=request_id,
+                    details=[{"field": "status", "issue": f"allowed values: {', '.join(sorted(PHASE6_JOB_STATUSES))}"}],
+                )
+
+        try:
+            applied_value = (
+                _normalize_bool(payload.get("applied"), field_name="applied")
+                if "applied" in payload
+                else None
+            )
+            dismissed_value = (
+                _normalize_bool(payload.get("dismissed"), field_name="dismissed")
+                if "dismissed" in payload
+                else None
+            )
+        except ValueError as exc:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message=str(exc),
+                request_id=request_id,
+            )
+
+        notes_value = payload.get("notes") if "notes" in payload else None
+        if notes_value is not None:
+            notes_value = str(notes_value)
+
+        updated = phase6_update_job(
+            job_id=jobId,
+            status=status_value,
+            applied=applied_value,
+            dismissed=dismissed_value,
+            notes=notes_value,
+        )
+        if updated is None:
+            return _error_response(
+                status_code=404,
+                code="not_found",
+                message=f"Job not found: {jobId}",
+                request_id=request_id,
+            )
+        return _json_response(200, updated)
+
+    @app.post(
+        f"{API_PREFIX}/job-evaluation-runs",
+        tags=["Jobs"],
+        summary="Create job evaluation run",
+        description="Queues evaluation run(s) for one or more job identifiers.",
+        response_model=JobEvaluationRunResponse,
+        responses={
+            200: {"description": "Evaluation run accepted."},
+            400: {"model": ErrorResponse, "description": "Invalid run payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+        openapi_extra={"requestBody": JOB_EVALUATION_RUN_REQUEST_BODY},
+    )
+    async def create_job_evaluation_run(request: Request) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        try:
+            payload = await _read_json_body(request)
+        except ValueError as exc:
+            return _error_response(status_code=400, code="invalid_json", message=str(exc), request_id=request_id)
+
+        raw_job_ids = payload.get("job_ids")
+        if not isinstance(raw_job_ids, list) or not raw_job_ids:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message="Missing required field: job_ids.",
+                request_id=request_id,
+                details=[{"field": "job_ids", "issue": "value must be a non-empty array of job ids"}],
+            )
+
+        try:
+            wait = _normalize_bool(payload.get("wait", False), field_name="wait")
+        except ValueError as exc:
+            return _error_response(status_code=400, code="validation_failed", message=str(exc), request_id=request_id)
+        settings = payload.get("settings") if isinstance(payload.get("settings"), dict) else {}
+
+        result = phase6_queue_job_evaluations(job_ids=[str(item) for item in raw_job_ids], wait=wait, settings=settings)
+        result["workflow"] = "workflow_06a_job_evaluations"
+        return _json_response(200, result)
+
+    @app.get(
+        f"{API_PREFIX}/job-stats",
+        tags=["Jobs"],
+        summary="Get job stats",
+        description="Returns dashboard-friendly aggregate job stats grouped by source, score range, and day.",
+        responses={
+            200: {"description": "Job stats loaded.", "content": {"application/json": {"example": JOB_STATS_SUCCESS_EXAMPLE}}},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+    )
+    async def get_job_stats(request: Request) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        payload = phase6_job_stats()
+        payload["workflow"] = "workflow_06a_job_stats"
+        return _json_response(200, payload)
+
+    @app.get(
+        f"{API_PREFIX}/job-gaps",
+        tags=["Jobs"],
+        summary="Get job gap analysis",
+        description="Aggregates gaps and matching skills across evaluated jobs.",
+        responses={
+            200: {"description": "Gap analysis loaded.", "content": {"application/json": {"example": JOB_GAPS_SUCCESS_EXAMPLE}}},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+    )
+    async def get_job_gaps(request: Request) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        jobs = phase6_all_jobs()
+        payload = phase6_aggregate_gaps(jobs)
+        payload["workflow"] = "workflow_06a_job_gaps"
+        return _json_response(200, payload)
+
+    @app.post(
+        f"{API_PREFIX}/job-deduplications",
+        tags=["Jobs"],
+        summary="Check job deduplication",
+        description="Checks whether a candidate job payload already exists in `recall_jobs`.",
+        responses={
+            200: {"description": "Deduplication check complete."},
+            400: {"model": ErrorResponse, "description": "Invalid candidate payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+        openapi_extra={"requestBody": JOB_DEDUP_REQUEST_BODY},
+    )
+    async def create_job_deduplication(request: Request) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        try:
+            payload = await _read_json_body(request)
+        except ValueError as exc:
+            return _error_response(status_code=400, code="invalid_json", message=str(exc), request_id=request_id)
+
+        title = str(payload.get("title", "")).strip()
+        company = str(payload.get("company", "")).strip()
+        if not title or not company:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message="Missing required fields: title, company.",
+                request_id=request_id,
+                details=[
+                    {"field": "title", "issue": "value is required"},
+                    {"field": "company", "issue": "value is required"},
+                ],
+            )
+
+        threshold = payload.get("similarity_threshold", 0.92)
+        try:
+            threshold_value = float(threshold)
+        except (TypeError, ValueError):
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message="similarity_threshold must be numeric.",
+                request_id=request_id,
+                details=[{"field": "similarity_threshold", "issue": "value must be between 0 and 1"}],
+            )
+        if threshold_value < 0 or threshold_value > 1:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message="similarity_threshold must be between 0 and 1.",
+                request_id=request_id,
+                details=[{"field": "similarity_threshold", "issue": "value must be between 0 and 1"}],
+            )
+
+        dedup = phase6_check_job_duplicate(
+            {
+                "title": title,
+                "company": company,
+                "url": payload.get("url"),
+                "description": payload.get("description"),
+            },
+            similarity_threshold=threshold_value,
+        )
+        return _json_response(200, {"workflow": "workflow_06a_job_dedup", **dedup.to_dict()})
+
+    @app.post(
+        f"{API_PREFIX}/job-discovery-runs",
+        tags=["Jobs"],
+        summary="Create job discovery run",
+        description="Triggers the discovery runner scaffold and returns queued run metadata.",
+        responses={
+            200: {"description": "Discovery run accepted."},
+            400: {"model": ErrorResponse, "description": "Invalid discovery payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+        openapi_extra={"requestBody": JOB_DISCOVERY_RUN_REQUEST_BODY},
+    )
+    async def create_job_discovery_run(request: Request) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        try:
+            payload = await _read_json_body(request)
+        except ValueError as exc:
+            return _error_response(status_code=400, code="invalid_json", message=str(exc), request_id=request_id)
+
+        try:
+            collections = phase6_ensure_collections()
+        except Exception as exc:  # noqa: BLE001
+            return _error_response(
+                status_code=500,
+                code="workflow_failed",
+                message=f"Collection setup failed: {exc}",
+                request_id=request_id,
+            )
+
+        summary = phase6_run_discovery(payload)
+        summary["workflow"] = "workflow_06a_job_discovery"
+        summary["collections"] = [
+            {"name": item.name, "created": item.created} for item in collections
+        ]
+        return _json_response(200, summary)
+
+    @app.post(
+        f"{API_PREFIX}/resumes",
+        tags=["Resumes"],
+        summary="Create resume ingestion",
+        description="Ingests markdown or file-based resume content into `recall_resume`.",
+        response_model=ResumeIngestionResponse,
+        responses={
+            200: {"description": "Resume ingested.", "content": {"application/json": {"example": RESUME_SUCCESS_EXAMPLE}}},
+            400: {"model": ErrorResponse, "description": "Invalid resume payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            415: {"model": ErrorResponse, "description": "Unsupported media/file type.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
+            500: {"model": ErrorResponse, "description": "Resume ingestion failed.", "content": {"application/json": {"example": ERROR_EXAMPLE_WORKFLOW}}},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+        openapi_extra={"requestBody": RESUME_REQUEST_BODY},
+    )
+    async def create_resume_ingestion(
+        request: Request,
+        dry_run: bool = Query(False, description="If true, validate/chunk resume without persistence side effects."),
+    ) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        content_type = request.headers.get("content-type", "")
+        try:
+            if "multipart/form-data" in content_type:
+                form = await request.form()
+                uploaded = form.get("file")
+                if uploaded is None:
+                    return _error_response(
+                        status_code=400,
+                        code="validation_failed",
+                        message="Missing required field: file.",
+                        request_id=request_id,
+                        details=[{"field": "file", "issue": "value is required"}],
+                    )
+
+                filename = Path(str(getattr(uploaded, "filename", "") or "resume.md")).name
+                suffix = Path(filename).suffix.lower()
+                if suffix not in {".md", ".txt", ".pdf", ".docx"}:
+                    return _error_response(
+                        status_code=415,
+                        code="unsupported_media_type",
+                        message=f"Unsupported resume file type: {suffix or 'unknown'}",
+                        request_id=request_id,
+                        details=[{"field": "file", "issue": "allowed extensions: .md, .txt, .pdf, .docx"}],
+                    )
+
+                with tempfile.NamedTemporaryFile(prefix="recall-resume-", suffix=suffix or ".md", delete=False) as handle:
+                    temp_path = Path(handle.name)
+                    data = await uploaded.read()
+                    handle.write(data)
+                try:
+                    result = phase6_ingest_resume(file_path=temp_path, dry_run=dry_run)
+                finally:
+                    temp_path.unlink(missing_ok=True)
+            else:
+                payload = await _read_json_body(request)
+                markdown = payload.get("markdown")
+                file_path = payload.get("file_path")
+                if markdown is not None:
+                    result = phase6_ingest_resume(markdown_text=str(markdown), dry_run=dry_run)
+                elif file_path:
+                    result = phase6_ingest_resume(file_path=Path(str(file_path)).expanduser(), dry_run=dry_run)
+                else:
+                    return _error_response(
+                        status_code=400,
+                        code="validation_failed",
+                        message="Provide either `markdown` or `file_path`.",
+                        request_id=request_id,
+                        details=[
+                            {"field": "markdown", "issue": "inline markdown resume text"},
+                            {"field": "file_path", "issue": "absolute path to resume file"},
+                        ],
+                    )
+        except (FileNotFoundError, ValueError) as exc:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message=str(exc),
+                request_id=request_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return _error_response(
+                status_code=500,
+                code="workflow_failed",
+                message=f"Resume ingestion failed: {exc}",
+                request_id=request_id,
+            )
+
+        return _json_response(200, {"workflow": "workflow_06a_resume_ingestion", **result})
+
+    @app.get(
+        f"{API_PREFIX}/resumes/current",
+        tags=["Resumes"],
+        summary="Get current resume metadata",
+        description="Returns latest ingested resume version metadata.",
+        responses={
+            200: {"description": "Resume metadata loaded."},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            404: {"model": ErrorResponse, "description": "Resume not found."},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+    )
+    async def get_current_resume(request: Request) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        conn = phase6_storage.connect_db()
+        try:
+            metadata = phase6_storage.latest_resume_metadata(conn)
+        finally:
+            conn.close()
+        if metadata is None:
+            return _error_response(
+                status_code=404,
+                code="not_found",
+                message="No resume has been ingested yet.",
+                request_id=request_id,
+            )
+        return _json_response(200, metadata)
+
+    @app.get(
+        f"{API_PREFIX}/companies",
+        tags=["Companies"],
+        summary="List company profiles",
+        description="Lists company profile rollups with attached jobs.",
+        responses={
+            200: {"description": "Company profiles loaded."},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+    )
+    async def get_companies(request: Request) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        profiles = phase6_list_company_profiles(phase6_all_jobs())
+        return _json_response(200, {"workflow": "workflow_06a_companies", "count": len(profiles), "items": profiles})
+
+    @app.get(
+        f"{API_PREFIX}/companies/{{companyId}}",
+        tags=["Companies"],
+        summary="Get company profile",
+        description="Returns one company profile with associated jobs.",
+        responses={
+            200: {"description": "Company profile loaded."},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            404: {"model": ErrorResponse, "description": "Company profile not found."},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+    )
+    async def get_company(request: Request, companyId: str) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        profile = phase6_get_company_profile(companyId, phase6_all_jobs())
+        if profile is None:
+            return _error_response(
+                status_code=404,
+                code="not_found",
+                message=f"Company not found: {companyId}",
+                request_id=request_id,
+            )
+        return _json_response(200, profile)
+
+    @app.post(
+        f"{API_PREFIX}/company-profile-refresh-runs",
+        tags=["Companies"],
+        summary="Create company profile refresh run",
+        description="Refreshes a single company profile summary.",
+        responses={
+            200: {"description": "Refresh run completed."},
+            400: {"model": ErrorResponse, "description": "Invalid refresh payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+    )
+    async def create_company_profile_refresh_run(request: Request) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        try:
+            payload = await _read_json_body(request)
+        except ValueError as exc:
+            return _error_response(status_code=400, code="invalid_json", message=str(exc), request_id=request_id)
+
+        company_id = str(payload.get("company_id") or payload.get("companyId") or "").strip()
+        if not company_id:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message="Missing required field: company_id.",
+                request_id=request_id,
+                details=[{"field": "company_id", "issue": "value is required"}],
+            )
+
+        result = phase6_refresh_company_profile(company_id, phase6_all_jobs())
+        return _json_response(200, {"workflow": "workflow_06a_company_profile_refresh", **result})
+
+    @app.get(
+        f"{API_PREFIX}/llm-settings",
+        tags=["LLM Settings"],
+        summary="Get LLM settings",
+        description="Returns current persisted LLM settings for job evaluation.",
+        responses={
+            200: {"description": "LLM settings loaded.", "content": {"application/json": {"example": LLM_SETTINGS_SUCCESS_EXAMPLE}}},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+    )
+    async def get_llm_settings(request: Request) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        conn = phase6_storage.connect_db()
+        try:
+            settings = phase6_storage.get_llm_settings(conn)
+        finally:
+            conn.close()
+        return _json_response(200, {"workflow": "workflow_06a_llm_settings", "settings": settings})
+
+    @app.patch(
+        f"{API_PREFIX}/llm-settings",
+        tags=["LLM Settings"],
+        summary="Update LLM settings",
+        description="Updates and persists evaluation LLM settings in SQLite.",
+        responses={
+            200: {"description": "LLM settings updated.", "content": {"application/json": {"example": LLM_SETTINGS_SUCCESS_EXAMPLE}}},
+            400: {"model": ErrorResponse, "description": "Invalid settings payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+        openapi_extra={"requestBody": LLM_SETTINGS_PATCH_REQUEST_BODY},
+    )
+    async def patch_llm_settings(request: Request) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        try:
+            payload = await _read_json_body(request)
+        except ValueError as exc:
+            return _error_response(status_code=400, code="invalid_json", message=str(exc), request_id=request_id)
+
+        allowed_fields = set(phase6_storage.DEFAULT_LLM_SETTINGS.keys())
+        unknown = [field for field in payload.keys() if field not in allowed_fields]
+        if unknown:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message="Invalid llm settings payload.",
+                request_id=request_id,
+                details=[{"field": field, "issue": "field is not supported"} for field in unknown],
+            )
+
+        normalized: dict[str, Any] = {}
+        if "evaluation_model" in payload:
+            value = str(payload["evaluation_model"]).strip().lower()
+            if value not in {"local", "cloud"}:
+                return _error_response(
+                    status_code=400,
+                    code="validation_failed",
+                    message="evaluation_model must be `local` or `cloud`.",
+                    request_id=request_id,
+                    details=[{"field": "evaluation_model", "issue": "allowed values: local, cloud"}],
+                )
+            normalized["evaluation_model"] = value
+        if "cloud_provider" in payload:
+            value = str(payload["cloud_provider"]).strip().lower()
+            if value not in {"anthropic", "openai", "gemini"}:
+                return _error_response(
+                    status_code=400,
+                    code="validation_failed",
+                    message="cloud_provider must be one of anthropic, openai, gemini.",
+                    request_id=request_id,
+                    details=[{"field": "cloud_provider", "issue": "allowed values: anthropic, openai, gemini"}],
+                )
+            normalized["cloud_provider"] = value
+        if "cloud_model" in payload:
+            model_value = str(payload["cloud_model"]).strip()
+            if not model_value:
+                return _error_response(
+                    status_code=400,
+                    code="validation_failed",
+                    message="cloud_model cannot be empty.",
+                    request_id=request_id,
+                    details=[{"field": "cloud_model", "issue": "value is required"}],
+                )
+            normalized["cloud_model"] = model_value
+        if "auto_escalate" in payload:
+            try:
+                normalized["auto_escalate"] = _normalize_bool(payload["auto_escalate"], field_name="auto_escalate")
+            except ValueError as exc:
+                return _error_response(status_code=400, code="validation_failed", message=str(exc), request_id=request_id)
+        for integer_field in ("escalate_threshold_gaps", "escalate_threshold_rationale_words"):
+            if integer_field in payload:
+                try:
+                    parsed = int(payload[integer_field])
+                except (TypeError, ValueError):
+                    return _error_response(
+                        status_code=400,
+                        code="validation_failed",
+                        message=f"{integer_field} must be an integer.",
+                        request_id=request_id,
+                        details=[{"field": integer_field, "issue": "value must be an integer >= 0"}],
+                    )
+                if parsed < 0:
+                    return _error_response(
+                        status_code=400,
+                        code="validation_failed",
+                        message=f"{integer_field} must be >= 0.",
+                        request_id=request_id,
+                        details=[{"field": integer_field, "issue": "value must be an integer >= 0"}],
+                    )
+                normalized[integer_field] = parsed
+
+        conn = phase6_storage.connect_db()
+        try:
+            settings = phase6_storage.update_llm_settings(conn, normalized)
+        finally:
+            conn.close()
+        return _json_response(200, {"workflow": "workflow_06a_llm_settings", "settings": settings})
 
     @app.get("/{_path:path}", include_in_schema=False)
     async def not_found_get(_path: str) -> JSONResponse:

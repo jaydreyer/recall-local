@@ -90,6 +90,18 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  daily-dashboard:
+    build:
+      context: ../ui/daily-dashboard
+      dockerfile: Dockerfile
+    container_name: recall-daily-dashboard
+    ports:
+      - "${RECALL_DASHBOARD_PORT:-3001}:80"
+    depends_on:
+      recall-ingest-bridge:
+        condition: service_healthy
+    restart: unless-stopped
+
   mkdocs:
     build:
       context: ..
