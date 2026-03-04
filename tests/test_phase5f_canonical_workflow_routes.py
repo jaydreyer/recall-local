@@ -23,11 +23,11 @@ class Phase5FCanonicalWorkflowRoutesTests(unittest.TestCase):
 
     def test_http_workflows_use_canonical_bridge_routes(self) -> None:
         expected_urls = {
-            "phase1b_recall_ingest_webhook_http.workflow.json": "http://recall-ingest-bridge:8090/v1/ingestions",
-            "phase1b_gmail_forward_ingest_http.workflow.json": "http://recall-ingest-bridge:8090/v1/ingestions",
+            "phase1b_recall_ingest_webhook_http.workflow.json": "={{ ($env.RECALL_BRIDGE_BASE_URL || 'http://100.116.103.78:8090') + '/v1/ingestions' }}",
+            "phase1b_gmail_forward_ingest_http.workflow.json": "={{ ($env.RECALL_BRIDGE_BASE_URL || 'http://100.116.103.78:8090') + '/v1/ingestions' }}",
             "phase1c_recall_rag_query_http.workflow.json": "http://100.116.103.78:8090/v1/rag-queries",
             "phase2a_meeting_action_items_http.workflow.json": "http://100.116.103.78:8090/v1/meeting-action-items",
-            "phase3a_bookmarklet_form_http.workflow.json": "http://recall-ingest-bridge:8090/v1/ingestions",
+            "phase3a_bookmarklet_form_http.workflow.json": "={{ ($env.RECALL_BRIDGE_BASE_URL || 'http://100.116.103.78:8090') + '/v1/ingestions' }}",
             "phase3a_meeting_action_form_http.workflow.json": "http://100.116.103.78:8090/v1/meeting-action-items",
         }
 
@@ -39,8 +39,8 @@ class Phase5FCanonicalWorkflowRoutesTests(unittest.TestCase):
 
     def test_ingestion_workflows_force_expected_channel(self) -> None:
         expected_json_body = {
-            "phase1b_recall_ingest_webhook_http.workflow.json": "={{ Object.assign({}, $json, { channel: 'webhook' }) }}",
-            "phase1b_gmail_forward_ingest_http.workflow.json": "={{ Object.assign({}, $json, { channel: 'gmail-forward' }) }}",
+            "phase1b_recall_ingest_webhook_http.workflow.json": "={{ Object.assign({}, ($json.body || $json), { channel: 'webhook' }) }}",
+            "phase1b_gmail_forward_ingest_http.workflow.json": "={{ ({ channel: 'gmail-forward', subject: $json.subject || '', from: (typeof $json.from === 'string' ? $json.from : (($json.from && $json.from.text) ? $json.from.text : '')), messageId: $json.messageId || $json.message_id || '', text: $json.textPlain || $json.text || ($json.subject ? ('Subject: ' + $json.subject) : ''), html: $json.textHtml || $json.html || '', attachment_paths: Array.isArray($json.attachment_paths) ? $json.attachment_paths : [] }) }}",
             "phase3a_bookmarklet_form_http.workflow.json": "={{ Object.assign({}, $json.body ? $json.body : $json, { channel: 'bookmarklet' }) }}",
         }
 
