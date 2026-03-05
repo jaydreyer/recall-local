@@ -1,0 +1,381 @@
+[
+  {
+    "updatedAt": "2026-03-04T20:39:50.122Z",
+    "createdAt": "2026-03-04T20:00:01.822Z",
+    "id": "eE5wQFqV9oiSHKaL",
+    "name": "Recall Phase6B - Career Page Monitor (Traditional Import)",
+    "description": null,
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+      {
+        "parameters": {
+          "jsCode": "const bridgeBaseUrl = 'http://100.116.103.78:8090';\nconst bridgeApiKey = '';\nconst expectedMinCompanies = 11;\n\nconst companies = [{\"name\": \"Anthropic\", \"tier\": 2, \"ats\": \"greenhouse\", \"board_id\": \"anthropic\", \"title_filter\": [\"solutions\", \"engineer\", \"architect\", \"technical\", \"account\", \"sales\"]}, {\"name\": \"OpenAI\", \"tier\": 2, \"ats\": \"greenhouse\", \"board_id\": \"openai\", \"title_filter\": [\"solutions\", \"engineer\", \"architect\", \"sales\"]}, {\"name\": \"Postman\", \"tier\": 1, \"ats\": \"greenhouse\", \"board_id\": \"postman\", \"title_filter\": [\"solutions\", \"engineer\", \"architect\", \"technical\"]}, {\"name\": \"Aisera\", \"tier\": 1, \"ats\": \"greenhouse\", \"board_id\": \"aisera\", \"title_filter\": [\"solutions\", \"engineer\", \"sales\", \"architect\"]}, {\"name\": \"Miro\", \"tier\": 1, \"ats\": \"greenhouse\", \"board_id\": \"miro\", \"title_filter\": [\"solutions\", \"engineer\", \"architect\", \"customer\"]}, {\"name\": \"Airtable\", \"tier\": 1, \"ats\": \"greenhouse\", \"board_id\": \"airtable\", \"title_filter\": [\"solutions\", \"engineer\", \"architect\", \"technical account\"]}, {\"name\": \"Smartsheet\", \"tier\": 1, \"ats\": \"greenhouse\", \"board_id\": \"smartsheet\", \"title_filter\": [\"solutions\", \"engineer\", \"architect\", \"customer\"]}, {\"name\": \"Cohere\", \"tier\": 2, \"ats\": \"greenhouse\", \"board_id\": \"cohere\", \"title_filter\": [\"solutions\", \"engineer\", \"architect\", \"technical account\"]}, {\"name\": \"Glean\", \"tier\": 2, \"ats\": \"greenhouse\", \"board_id\": \"gleanwork\", \"title_filter\": [\"solutions\", \"engineer\", \"architect\", \"customer\"]}, {\"name\": \"Writer\", \"tier\": 2, \"ats\": \"greenhouse\", \"board_id\": \"writer\", \"title_filter\": [\"solutions\", \"engineer\", \"architect\", \"sales\"]}, {\"name\": \"Atlassian\", \"tier\": 2, \"ats\": \"greenhouse\", \"board_id\": \"atlassian\", \"title_filter\": [\"solutions\", \"developer\", \"architect\", \"technical account\"]}, {\"name\": \"Workato\", \"tier\": 2, \"ats\": \"greenhouse\", \"board_id\": \"workato\", \"title_filter\": [\"solutions\", \"engineer\", \"architect\", \"automation\"]}, {\"name\": \"Datadog\", \"tier\": 2, \"ats\": \"greenhouse\", \"board_id\": \"datadog\", \"title_filter\": [\"solutions\", \"engineer\", \"architect\", \"technical account\"]}];\n\nconst companyListWarning = companies.length < expectedMinCompanies\n  ? `career_page_company_list_low:${companies.length} (expected >= ${expectedMinCompanies})`\n  : null;\n\nreturn companies.map((company) => ({\n  json: {\n    company,\n    bridge_base_url: bridgeBaseUrl,\n    bridge_api_key: bridgeApiKey,\n    delay_seconds: 2,\n    similarity_threshold: 0.92,\n    company_list_count: companies.length,\n    company_list_warning: companyListWarning,\n  },\n}));"
+        },
+        "id": "b27dacd9-34f7-44f5-bf16-9cce76b0743d",
+        "name": "Load Companies",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -656,
+          608
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const output = [];\n\nfunction sleep(ms) {\n  return new Promise((resolve) => setTimeout(resolve, ms));\n}\n\nfor (const item of $input.all()) {\n  const company = item.json.company || {};\n  const result = {\n    ...item.json,\n    fetch_url: null,\n    fetched_jobs: 0,\n    raw_jobs: [],\n    fetch_error: null,\n  };\n\n  try {\n    const ats = String(company.ats || '').toLowerCase();\n\n    if (ats === 'greenhouse') {\n      const boardId = String(company.board_id || '').trim();\n      if (!boardId) {\n        throw new Error('Missing board_id for greenhouse company ' + company.name);\n      }\n      const url = 'https://boards-api.greenhouse.io/v1/boards/' + encodeURIComponent(boardId) + '/jobs';\n      result.fetch_url = url;\n      const response = await fetch(url, { headers: { accept: 'application/json' } });\n      if (!response.ok) {\n        throw new Error('HTTP ' + response.status + ' from ' + url);\n      }\n      const payload = await response.json();\n      const jobs = Array.isArray(payload.jobs) ? payload.jobs : [];\n      result.raw_jobs = jobs;\n      result.fetched_jobs = jobs.length;\n    } else if (ats === 'lever') {\n      const boardId = String(company.board_id || '').trim();\n      if (!boardId) {\n        throw new Error('Missing board_id for lever company ' + company.name);\n      }\n      const url = 'https://api.lever.co/v0/postings/' + encodeURIComponent(boardId) + '?mode=json';\n      result.fetch_url = url;\n      const response = await fetch(url, { headers: { accept: 'application/json' } });\n      if (!response.ok) {\n        throw new Error('HTTP ' + response.status + ' from ' + url);\n      }\n      const payload = await response.json();\n      const jobs = Array.isArray(payload) ? payload : [];\n      result.raw_jobs = jobs;\n      result.fetched_jobs = jobs.length;\n    } else {\n      result.fetch_error = 'Unsupported ATS: ' + ats;\n    }\n  } catch (error) {\n    result.fetch_error = error && error.message ? error.message : String(error);\n  }\n\n  output.push({ json: result });\n\n  const delaySeconds = Number(item.json.delay_seconds || 2);\n  await sleep(Math.max(0, delaySeconds) * 1000);\n}\n\nreturn output;"
+        },
+        "id": "143f787d-8a70-4e25-bbb5-ddefea2bf97c",
+        "name": "Fetch ATS Jobs",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -432,
+          608
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "function normalizeText(value) {\n  return String(value || '').trim();\n}\n\nfunction titleMatches(title, filters) {\n  const text = normalizeText(title).toLowerCase();\n  if (!text) return false;\n  const terms = Array.isArray(filters) ? filters : [];\n  if (terms.length === 0) return true;\n  return terms.some((term) => text.includes(String(term || '').toLowerCase()));\n}\n\nconst output = [];\n\nfor (const item of $input.all()) {\n  const company = item.json.company || {};\n  const ats = String(company.ats || '').toLowerCase();\n  const filters = Array.isArray(company.title_filter) ? company.title_filter : [];\n  const rawJobs = Array.isArray(item.json.raw_jobs) ? item.json.raw_jobs : [];\n\n  const normalized = [];\n  if (!item.json.fetch_error) {\n    for (const job of rawJobs) {\n      if (!job || typeof job !== 'object') continue;\n\n      if (ats === 'greenhouse') {\n        const title = normalizeText(job.title);\n        if (!titleMatches(title, filters)) continue;\n        normalized.push({\n          title,\n          company: company.name,\n          location: normalizeText(job.location && job.location.name),\n          url: normalizeText(job.absolute_url),\n          description: '',\n          source: 'career_page',\n          search_query: String(company.name || '') + ' careers',\n          company_tier: Number(company.tier || 0),\n          date_posted: job.updated_at || null,\n        });\n      } else if (ats === 'lever') {\n        const title = normalizeText(job.text);\n        if (!titleMatches(title, filters)) continue;\n        normalized.push({\n          title,\n          company: company.name,\n          location: normalizeText(job.categories && job.categories.location),\n          url: normalizeText(job.hostedUrl),\n          description: normalizeText(job.descriptionPlain || job.description),\n          source: 'career_page',\n          search_query: String(company.name || '') + ' careers',\n          company_tier: Number(company.tier || 0),\n          date_posted: job.createdAt || null,\n        });\n      }\n    }\n  }\n  const capped = normalized.slice(0, 20);\n  output.push({\n    json: {\n      ...item.json,\n      normalized_jobs: capped,\n      matched_jobs: capped.length,\n    },\n  });\n}\n\nreturn output;"
+        },
+        "id": "fa5349a4-403a-4c6e-96e4-e437a43cdd94",
+        "name": "Normalize + Filter Titles",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -208,
+          608
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 1
+            },
+            "conditions": [
+              {
+                "id": "b8e9b937-90ac-420a-8715-c493c1fbcda3",
+                "leftValue": "={{ Array.isArray($json.normalized_jobs) && $json.normalized_jobs.length > 0 }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "de08c444-081b-4349-8b19-1371a0748ab4",
+        "name": "If Has Jobs",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          16,
+          608
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $json.bridge_base_url + '/v1/job-discovery-runs' }}",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ ({ sources: ['career_page'], jobs: $json.normalized_jobs, dry_run: false, similarity_threshold: $json.similarity_threshold || 0.92 }) }}",
+          "options": {}
+        },
+        "id": "cd782f82-91b7-4490-bb69-2348ae690283",
+        "name": "Trigger Discovery Run",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          240,
+          512
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 1
+            },
+            "conditions": [
+              {
+                "id": "a9a7dcdc-85e4-4ad6-9e41-66a57c957c47",
+                "leftValue": "={{ Array.isArray($json.new_job_ids) && $json.new_job_ids.length > 0 }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "cc1e5136-fb03-45a6-b53b-f4666bc45a9c",
+        "name": "If New Jobs",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          464,
+          512
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://100.116.103.78:8090/v1/job-evaluation-runs",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ ({ job_ids: $json.new_job_ids, wait: false }) }}",
+          "options": {}
+        },
+        "id": "2d15d12b-7a69-4062-990e-28c51e45efd3",
+        "name": "Trigger Evaluation Run",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          688,
+          416
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "return $input.all().map((item) => {\n  const warning = item.json.company_list_warning || null;\n  const errors = Array.isArray(item.json.errors) ? item.json.errors.slice() : [];\n  if (warning) errors.push(String(warning));\n  return {\n    json: {\n      workflow: 'workflow_06b_career_page_monitor',\n      status: 'completed',\n      eval_run_id: item.json.run_id || null,\n      queued: Number(item.json.queued || 0),\n      job_ids: item.json.job_ids || [],\n      company_list_count: Number(item.json.company_list_count || 0),\n      company_list_warning: warning,\n      errors,\n      message: item.json.message || 'Evaluation run queued.',\n    },\n  };\n});"
+        },
+        "id": "3526a2b4-3066-4b1c-917f-59030ceb4be5",
+        "name": "Summary (Eval Queued)",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          912,
+          416
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "return $input.all().map((item) => {\n  const warning = item.json.company_list_warning || null;\n  const errors = Array.isArray(item.json.errors) ? item.json.errors.slice() : [];\n  if (warning) errors.push(String(warning));\n  return {\n    json: {\n      workflow: 'workflow_06b_career_page_monitor',\n      status: 'completed',\n      new_jobs: 0,\n      duplicates_skipped: Number(item.json.duplicates_skipped || 0),\n      source_metrics: item.json.source_metrics || {},\n      company_list_count: Number(item.json.company_list_count || 0),\n      company_list_warning: warning,\n      errors,\n      message: item.json.message || 'Discovery run completed with no new jobs.',\n    },\n  };\n});"
+        },
+        "id": "33745f7d-bf7f-479f-b1b4-f52c962a01ed",
+        "name": "Summary (No New Jobs)",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          688,
+          608
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "return $input.all().map((item) => ({\n  json: {\n    workflow: 'workflow_06b_career_page_monitor',\n    company: item.json.company?.name || 'unknown',\n    status: 'no-matches',\n    fetched_jobs: Number(item.json.fetched_jobs || 0),\n    matched_jobs: Number(item.json.matched_jobs || 0),\n    fetch_error: item.json.fetch_error || null,\n    company_list_count: Number(item.json.company_list_count || 0),\n    company_list_warning: item.json.company_list_warning || null,\n    message: 'No matching jobs for configured title filters.',\n  },\n}));"
+        },
+        "id": "e48cc6cc-6993-4c5d-9001-b9816bb8330a",
+        "name": "Summary (No Matches)",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          240,
+          704
+        ]
+      },
+      {
+        "parameters": {},
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          -880,
+          512
+        ],
+        "id": "45bf45bc-4f7a-453b-9aa4-d00503caeef4",
+        "name": "When clicking \u2018Execute workflow\u2019"
+      },
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 7,19 * * *"
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.3,
+        "position": [
+          -880,
+          704
+        ],
+        "id": "0edf1f3f-b237-44f2-97a5-3abf82eb571f",
+        "name": "Schedule Trigger"
+      }
+    ],
+    "connections": {
+      "Load Companies": {
+        "main": [
+          [
+            {
+              "node": "Fetch ATS Jobs",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch ATS Jobs": {
+        "main": [
+          [
+            {
+              "node": "Normalize + Filter Titles",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normalize + Filter Titles": {
+        "main": [
+          [
+            {
+              "node": "If Has Jobs",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "If Has Jobs": {
+        "main": [
+          [
+            {
+              "node": "Trigger Discovery Run",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Summary (No Matches)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Trigger Discovery Run": {
+        "main": [
+          [
+            {
+              "node": "If New Jobs",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "If New Jobs": {
+        "main": [
+          [
+            {
+              "node": "Trigger Evaluation Run",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Summary (No New Jobs)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Trigger Evaluation Run": {
+        "main": [
+          [
+            {
+              "node": "Summary (Eval Queued)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "When clicking \u2018Execute workflow\u2019": {
+        "main": [
+          [
+            {
+              "node": "Load Companies",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Schedule Trigger": {
+        "main": [
+          [
+            {
+              "node": "Load Companies",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "binaryMode": "separate",
+      "availableInMCP": false
+    },
+    "staticData": {
+      "node:Schedule Trigger": {
+        "recurrenceRules": []
+      }
+    },
+    "meta": null,
+    "pinData": {},
+    "versionId": "d94756e2-c467-4f5d-8eba-c52a421caed7",
+    "activeVersionId": "d94756e2-c467-4f5d-8eba-c52a421caed7",
+    "versionCounter": 54,
+    "triggerCount": 1,
+    "tags": [],
+    "shared": [
+      {
+        "updatedAt": "2026-03-04T20:00:01.823Z",
+        "createdAt": "2026-03-04T20:00:01.823Z",
+        "role": "workflow:owner",
+        "workflowId": "eE5wQFqV9oiSHKaL",
+        "projectId": "OZAMsoSRVLizehSN",
+        "project": {
+          "updatedAt": "2026-03-02T21:24:03.396Z",
+          "createdAt": "2026-03-02T17:15:56.599Z",
+          "id": "OZAMsoSRVLizehSN",
+          "name": "Jay Dreyer <jay.dreyer@gmail.com>",
+          "type": "personal",
+          "icon": null,
+          "description": null,
+          "creatorId": "70597d81-ccce-452d-b45f-ff1d2c1aa901"
+        }
+      }
+    ],
+    "versionMetadata": {
+      "name": "Version d94756e2",
+      "description": ""
+    }
+  }
+]

@@ -1,0 +1,290 @@
+{
+  "id": "9DEQqfD8JA5PCiVP",
+  "name": "Phase 6C - Workflow 3 - Evaluate & Notify",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "recall-job-evaluate",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "945e688f-766d-45ca-810e-f9adf8a66b70",
+      "name": "Webhook",
+      "webhookId": "09eb5cf1-7015-452d-9466-96b8df90f1ad"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst ids = Array.isArray(body.job_ids) ? body.job_ids.filter(Boolean) : [];\nreturn [{\n  json: {\n    job_ids: ids,\n    received_count: ids.length,\n    wait: body.wait === undefined ? true : !!body.wait\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "id": "d461cb3b-827d-49e4-bb78-7050a6dd840b",
+      "name": "Normalize Input"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://100.116.103.78:8090/v1/llm-settings",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "id": "9d6f89f1-7f3a-42fe-b7d9-f3382a5d5f07",
+      "name": "Load LLM Settings"
+    },
+    {
+      "parameters": {
+        "jsCode": "const incomingItems = $items('Normalize Input', 0, 0);\nconst incoming = Array.isArray(incomingItems) && incomingItems.length ? incomingItems[0].json : {};\nconst ids = Array.isArray(incoming.job_ids) ? incoming.job_ids : [];\nreturn [{\n  json: {\n    job_ids: ids,\n    wait: incoming.wait === undefined ? true : !!incoming.wait,\n    settings: ($json && $json.settings) ? $json.settings : {}\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "id": "31b71ec0-bfb7-47ca-af5f-fd6072ef9e4d",
+      "name": "Build Evaluation Payload"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://100.116.103.78:8090/v1/job-evaluation-runs",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        0
+      ],
+      "id": "ba18fe1e-9f45-4d58-b531-390f4b6f00c2",
+      "name": "Run Evaluation API"
+    },
+    {
+      "parameters": {
+        "jsCode": "const run = $json || {};\nconst rows = Array.isArray(run.results) ? run.results : [];\nconst highFit = rows.filter((row) => {\n  if (!row || row.status !== 'completed') return false;\n  const score = Number(row.fit_score ?? -1);\n  const tier = Number((row.evaluation && row.evaluation.company_tier) || 0);\n  return score >= 75 || (score >= 60 && [1, 2].includes(tier));\n});\n\nconst maxAlerts = 5;\nconst preview = highFit.slice(0, maxAlerts).map((row) => {\n  const ev = row.evaluation || {};\n  return {\n    job_id: row.job_id,\n    fit_score: Number(row.fit_score ?? -1),\n    title: ev.title || row.job_id || null,\n    company: ev.company || null,\n    url: ev.url || null\n  };\n});\n\nconst lines = preview.map((job, index) => {\n  const title = job.title || job.job_id || 'Unknown role';\n  const company = job.company || 'Unknown company';\n  const score = Number(job.fit_score ?? -1);\n  const url = job.url ? `\\n${job.url}` : '';\n  return `${index + 1}. ${title} @ ${company} (fit ${score})${url}`;\n});\n\nconst telegramMessage = lines.length\n  ? `Recall job alert\\nHigh-fit candidates: ${highFit.length}\\n\\n${lines.join('\\n\\n')}`\n  : '';\n\nreturn [{\n  json: {\n    run_id: run.run_id || null,\n    status: run.status || null,\n    queued: run.queued ?? null,\n    evaluated: run.evaluated ?? null,\n    failed: run.failed ?? null,\n    result_count: rows.length,\n    high_fit_count: highFit.length,\n    notifications_sent: 0,\n    notification_errors: [],\n    high_fit_jobs: preview,\n    telegram_message: telegramMessage,\n    message: `Evaluated ${rows.length} jobs. High-fit candidates: ${highFit.length}. Notifications sent: 0.`\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        0
+      ],
+      "id": "69e8a045-a259-455f-900f-e6d3f2d5dd77",
+      "name": "Evaluate + Notify"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1360,
+        0
+      ],
+      "id": "797c1392-ccb0-4b6b-9829-9889f72ee7a5",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ Number($json.high_fit_count || 0) }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        0
+      ],
+      "id": "ab9199b4-bde5-4eb5-9635-3ca38ff7c137",
+      "name": "If Has High Fit"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "8724583836",
+        "text": "={{ $json.telegram_message }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1580,
+        -120
+      ],
+      "id": "2b131004-70c5-4105-b73c-c0f256c04f89",
+      "name": "Send Telegram Alert",
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "telegramApi": {
+          "id": "6aWx4DnLbVi8JlGU",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const baseItems = $items('Evaluate + Notify', 0, 0);\nconst base = (Array.isArray(baseItems) && baseItems.length) ? { ...baseItems[0].json } : {};\nconst nodeOut = $json || {};\nconst errors = Array.isArray(base.notification_errors) ? base.notification_errors.slice() : [];\nlet sent = 1;\nif (nodeOut.error || nodeOut.ok === false) {\n  sent = 0;\n  const reason = nodeOut.description || nodeOut.message || 'telegram_send_failed';\n  errors.push(`telegram_send_failed:${reason}`);\n}\nbase.notifications_sent = sent;\nbase.notification_errors = errors;\nbase.message = `Evaluated ${Number(base.result_count || 0)} jobs. High-fit candidates: ${Number(base.high_fit_count || 0)}. Notifications sent: ${sent}.`;\nreturn [{ json: base }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        -120
+      ],
+      "id": "310f1d11-196f-4502-96f4-cbcf1484af34",
+      "name": "Mark Telegram Send Result"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Load LLM Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load LLM Settings": {
+      "main": [
+        [
+          {
+            "node": "Build Evaluation Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Evaluation Payload": {
+      "main": [
+        [
+          {
+            "node": "Run Evaluation API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Evaluation API": {
+      "main": [
+        [
+          {
+            "node": "Evaluate + Notify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate + Notify": {
+      "main": [
+        [
+          {
+            "node": "If Has High Fit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Has High Fit": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Telegram Alert": {
+      "main": [
+        [
+          {
+            "node": "Mark Telegram Send Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Telegram Send Result": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

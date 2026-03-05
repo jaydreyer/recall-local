@@ -1,5 +1,285 @@
 # Recall.local Implementation Log
 
+## 2026-03-04 - Phase 6C observation telemetry + evaluator hardening (local + ai-lab)
+
+### What was executed
+
+- Added evaluator observation telemetry persistence and merge safety:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/job_evaluator.py`
+  - fixed `_merge_evaluations` empty-value guard to avoid `TypeError` on list/dict values.
+- Exposed observation payloads on jobs API normalization:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/job_repository.py`
+  - added `_normalize_observation()` and `observation` passthrough in normalized job payloads.
+- Hardened metadata normalization for source and location type:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/job_metadata_extractor.py`
+  - added `ALLOWED_JOB_SOURCES`, `ALLOWED_LOCATION_TYPES`, `_normalize_source()`, `_normalize_location_type()`.
+- Updated jobs API example payload to include observation shape:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py`
+- Added focused Phase 6C regression coverage:
+  - `/Users/jaydreyer/projects/recall-local/tests/test_phase6c_evaluation_observation.py`
+  - covers malformed JSON retry strict prompt path, retry exhaustion failure, escalation observation content, metadata normalization, and repository observation sanitization.
+
+### Validation
+
+- Local:
+  - `python3 -m py_compile scripts/phase6/job_evaluator.py scripts/phase6/job_repository.py scripts/phase6/job_metadata_extractor.py scripts/phase1/ingest_bridge_api.py tests/test_phase6c_evaluation_observation.py`
+  - `python3 -m pytest -q tests/test_phase6c_evaluation_observation.py` -> `6 passed`
+  - `python3 -m pytest -q tests/test_bridge_api_contract.py` -> `28 passed`
+- ai-lab sync + spot-check:
+  - synced changed files to `/home/jaydreyer/recall-local` using SSH key `~/.ssh/codex_ai_lab`.
+  - remote `rg` spot-check confirmed new symbols in synced files:
+    - `_build_observation`, `_normalize_observation`, `_normalize_source`, `_normalize_location_type`,
+    - `test_evaluate_job_records_observation_with_escalation_context`.
+- ai-lab runtime verification (after sync):
+  - restarted bridge container: `docker restart recall-ingest-bridge`
+  - `GET http://100.116.103.78:8090/v1/healthz` -> `200`
+  - `POST /v1/job-evaluation-runs` (`wait=true`) for `job_8e1532ae101e822f` -> `200` with populated `observation` payload.
+  - `GET /v1/jobs/job_8e1532ae101e822f` -> `200` and persisted `observation` object present.
+
+### Results
+
+- Phase 6C now emits consistent observation telemetry in both evaluation-run responses and persisted `/v1/jobs` records.
+- Metadata extraction output is normalized for source/location typing, reducing malformed downstream fields.
+- Regression coverage now protects key Phase 6C reliability paths (retry, escalation, observation, metadata normalization).
+
+## 2026-03-04 - Career page monitor guardrail for company-list drift (ai-lab)
+
+### What was executed
+
+- Added a lightweight company-list drift guard to both repo and active import workflow artifacts:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6b_career_page_monitor_traditional_import.workflow.json`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6b_career_page_monitor_traditional_active_import.workflow.json`
+- Guard behavior in `Load Companies`:
+  - computes `expectedMinCompanies` (`11` for current config),
+  - emits `company_list_count` and `company_list_warning`,
+  - warning format: `career_page_company_list_low:<count> (expected >= <min>)`.
+- Updated workflow summary nodes to surface guard metadata:
+  - `Summary (Eval Queued)`
+  - `Summary (No New Jobs)`
+  - `Summary (No Matches)`
+  - all now include `company_list_count` and `company_list_warning`; warning is also appended into `errors[]` where present.
+- Synced active import artifact to ai-lab, imported/published/reactivated workflow `eE5wQFqV9oiSHKaL`, and restarted n8n.
+
+### Validation
+
+- Exported active workflow after deploy and confirmed:
+  - workflow is `active=true`,
+  - `Load Companies` contains `expectedMinCompanies` + warning expression,
+  - `company_count=13`,
+  - all three summary nodes include `company_list_warning`.
+
+### Results
+
+- If the active company set is unexpectedly reduced in future edits/imports, run outputs now include an explicit warning signal instead of silently degrading coverage.
+- Career-page monitoring remains expanded at 13 supported ATS companies with drift visibility built-in.
+
+## 2026-03-04 - Career page monitor hardcode removal (ai-lab active workflow)
+
+### What was executed
+
+- Identified active workflow drift on ai-lab:
+  - `Recall Phase6B - Career Page Monitor (Traditional Import)` (`eE5wQFqV9oiSHKaL`) had a 2-company hardcoded list (`Anthropic`, `Postman`) despite broader repo config.
+- Exported the active workflow and created an id-preserving import artifact:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6b_career_page_monitor_traditional_active_import.workflow.json`
+- Regenerated `Load Companies` node payload from `config/career_pages.json`, filtered to currently supported ATS fetchers in this workflow (`greenhouse|lever`) with valid `board_id`.
+  - resulting active set: `13` companies (all Greenhouse targets currently configured).
+- Synced the new import artifact to ai-lab and performed required remote spot-check before import/restart.
+- Imported + published + reactivated workflow id `eE5wQFqV9oiSHKaL` and restarted n8n.
+
+### Validation
+
+- Exported active workflow post-deploy and parsed `Load Companies` node:
+  - `company_count=13`
+  - names: `Anthropic, OpenAI, Postman, Aisera, Miro, Airtable, Smartsheet, Cohere, Glean, Writer, Atlassian, Workato, Datadog`
+- Workflow remained active after restart (`active=true`).
+
+### Results
+
+- Career page monitoring is no longer constrained to 2 hardcoded companies in production.
+- Discovery coverage now aligns with the supported ATS subset of your curated company config, increasing direct-company intake immediately.
+- Workday targets in `config/career_pages.json` remain out-of-scope for this specific workflow until Workday fetch support is added.
+
+## 2026-03-04 - Phase 6C Telegram credential wiring (ai-lab)
+
+### What was executed
+
+- Detected newly created n8n Telegram credential and bot identity on ai-lab:
+  - credential: `6aWx4DnLbVi8JlGU` (`Telegram account`, type `telegramApi`)
+  - bot: `@RecallJobScoutBot`
+- Retrieved chat context after `/start` and resolved target chat id:
+  - private chat id: `8724583836`
+- Updated Workflow 3 import artifact to send notifications through n8n Telegram credential (no `$env` dependency):
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6c_evaluate_notify_import.workflow.json`
+  - added `Send Telegram Alert` (`n8n-nodes-base.telegram`, `typeVersion: 1.2`, credential-bound, static chat id)
+  - added `Mark Telegram Send Result` node to finalize `notifications_sent`/`notification_errors`.
+  - retained explicit `If Has High Fit` gate and set node compatibility to `typeVersion: 1` so the numeric condition is enforced in this n8n build.
+- Synced workflow file to ai-lab and performed remote symbol spot-check before each import/restart cycle.
+- Imported, published, re-activated, and restarted n8n for the active workflow id:
+  - `9DEQqfD8JA5PCiVP` (`Phase 6C - Workflow 3 - Evaluate & Notify`)
+
+### Validation
+
+- Webhook probe (existing high-fit job id) returned `200` with successful notification outcome:
+  - `high_fit_count=1`
+  - `notifications_sent=1`
+  - `notification_errors=[]`
+- Additional probe with unknown job id returned `200` and correctly skipped notify path:
+  - `high_fit_count=0`
+  - `notifications_sent=0`
+  - `notification_errors=[]`
+- n8n run history for Workflow 3 now shows fresh successful executions with Telegram path exercised and non-high-fit path clean.
+
+### Results
+
+- Phase 6C notifications are now using a real Telegram credential and live chat destination on ai-lab.
+- Workflow 3 no longer relies on blocked env-variable access in n8n expressions.
+- High-fit candidates now trigger real Telegram alerts from `@RecallJobScoutBot`.
+
+## 2026-03-04 - n8n execution-error triage + workflow hardening (ai-lab)
+
+### What was executed
+
+- Pulled execution error details directly from ai-lab n8n SQLite (`/home/jaydreyer/recall-local/n8n/database.sqlite`) and decoded run payloads for:
+  - `Recall Phase1B - Gmail Forward Ingest (HTTP Bridge)` (`409d18db-fdd1-4aa4-a508-be8f36b6a920`)
+  - `Phase 6C - Workflow 3 - Evaluate & Notify` (`9DEQqfD8JA5PCiVP`)
+- Confirmed current recurring Gmail error signature before patch:
+  - `Invalid payload: Gmail payload has no body text and no attachment paths.`
+- Patched Gmail HTTP bridge workflow JSONs to prevent empty-content calls:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase1b_gmail_forward_ingest_http.workflow.json`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase1b_gmail_forward_ingest_http_import.workflow.json`
+  - changes:
+    - added `If Has Content` guard before `HTTP Ingest Gmail`
+    - updated payload `text` fallback to include `textHtml/html` before subject fallback.
+- Synced patched workflow files to ai-lab, imported, published, and restarted n8n.
+- Attempted Telegram gating via `$env` in Workflow 3 and confirmed ai-lab policy blocks env access in expressions (`access to env vars denied`), so removed all `$env`-dependent nodes/conditions from:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6c_evaluate_notify_import.workflow.json`
+  - kept non-failing high-fit branch behavior with explicit `telegram_not_configured`.
+- Re-synced Workflow 3 import file to ai-lab, imported/published, and restarted n8n.
+
+### Validation
+
+- Post-patch Gmail executions are now succeeding (no new payload-validation failures observed):
+  - latest runs: IDs `857`, `859`, `860` with `status=success`.
+- Workflow 3 latest run is now successful after removing env expressions:
+  - run ID `861`, `status=success`.
+- Workflow 3 webhook runtime probe:
+  - `POST /webhook/recall-job-evaluate` returned `200` with structured JSON result and `notification_errors=["telegram_not_configured"]`.
+
+### Results
+
+- The large red-error pattern in n8n was primarily from Gmail empty-payload events and earlier Workflow 3 transient wiring attempts; both now have successful fresh executions.
+- ai-lab n8n currently enforces blocked environment variable access in node expressions, so Telegram configuration cannot rely on `$env` in workflows on this host.
+- Telegram remains intentionally disabled until credentials are wired through a non-`$env` method.
+
+## 2026-03-04 - Phase 6C n8n Workflow 3 activation fix (ai-lab)
+
+### What was executed
+
+- Re-synced the Workflow 3 import artifact from Mac to ai-lab and re-ran remote content spot-check before n8n restart/validation:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6c_evaluate_notify_import.workflow.json`
+  - remote `rg` confirmed bridge URLs now target `http://100.116.103.78:8090` and code node fallback returns `telegram_not_configured`.
+- Imported and published active n8n workflow id `9DEQqfD8JA5PCiVP` on ai-lab:
+  - `docker exec n8n n8n import:workflow --input=/home/node/.n8n/workflows/phase6c_evaluate_notify_import.workflow.json`
+  - `docker exec n8n n8n publish:workflow --id=9DEQqfD8JA5PCiVP`
+- Restarted n8n to apply published workflow changes:
+  - `docker restart n8n`
+
+### Validation
+
+- `GET http://localhost:5678/healthz` returned `200` after restart.
+- `POST http://localhost:5678/webhook/recall-job-evaluate` with `{"job_ids":["job_459ef7bb606636af"],"wait":true}` returned `200` with expected Phase 6C payload fields:
+  - `run_id`, `status=completed`, `result_count=1`, `high_fit_count=1`
+  - `notification_errors=["telegram_not_configured"]`
+  - populated `high_fit_jobs[]` with Anthropic role metadata.
+
+### Results
+
+- Active n8n Workflow 3 (`recall-job-evaluate`) is now upgraded from skeleton behavior to the Phase 6C evaluate/notify flow.
+- Previous execution failure path from env/process access in code node is removed; workflow now returns deterministic success payloads without Telegram credentials.
+
+## 2026-03-04 - Phase 6C ai-lab rollout + qdrant scroll compatibility fix
+
+### What was executed
+
+- Synced Phase 6C implementation files from Mac to ai-lab and performed required remote spot-check before restart/curl:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/job_evaluator.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/gap_aggregator.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/job_metadata_extractor.py`
+  - `/Users/jaydreyer/projects/recall-local/tests/test_bridge_api_contract.py`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6/workflow3_evaluate_notify.md`
+- Restarted bridge container on ai-lab:
+  - `docker restart recall-ingest-bridge`
+- During sync-run evaluation verification, ai-lab returned:
+  - `workflow_failed: Unknown arguments: ['query_filter']`
+- Patched qdrant compatibility fallback in both locations that used `scroll(..., query_filter=...)`:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/job_evaluator.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py`
+  - behavior: if runtime rejects `query_filter`, retry with `scroll_filter`.
+- Re-synced patched files to ai-lab, re-spot-checked, and restarted bridge.
+
+### Validation
+
+- `GET /v1/healthz` returned `200`.
+- `POST /v1/job-evaluation-runs`:
+  - `wait=false` returned `202` with queued run metadata.
+  - `wait=true` returned `200` with `evaluated=1`, `failed=0`, and `results[]`.
+- `GET /v1/job-gaps` returned `200` and included:
+  - `aggregated_gaps`, `total_jobs_analyzed`, plus compatibility keys (`top_gaps`, `recommended_focus`).
+- `POST /v1/ingestions` (bookmarklet/text with `group=job-search` + LinkedIn-style URL metadata) returned `200` and included:
+  - `job_pipeline[0].routed=true`
+  - non-empty `new_job_ids`
+  - non-empty `evaluation_run_id` (async queue).
+- n8n probe of `POST /webhook/recall-job-evaluate` returned `200` from the currently active skeleton workflow (placeholder payload), indicating Workflow 3 in n8n has not yet been upgraded from skeleton nodes.
+
+### Results
+
+- Phase 6C bridge/runtime behavior is now verified on ai-lab for evaluation runs, gap aggregation, and Chrome-extension job routing.
+- qdrant-client version differences on ai-lab are now handled without runtime failure.
+- n8n Workflow 3 deployment remains a separate step (active workflow is still skeleton behavior).
+
+## 2026-03-04 - Phase 6C implementation (evaluation engine + ingestion hook + workflow 3 docs, local)
+
+### What was executed
+
+- Replaced Phase 6C evaluator scaffold with an operational evaluation pipeline in:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/job_evaluator.py`
+  - implemented resume/job loading, structured prompt generation, local/cloud provider calls with retry parity, strict JSON parsing/validation + retry, auto-escalation checks, and persistence of evaluated/error status back to `recall_jobs`.
+  - `queue_job_evaluations()` now supports async queue mode (`wait=false`) and synchronous return mode (`wait=true`) with per-job result rows.
+- Replaced gap aggregation scaffold with ranked, deduplicated aggregation in:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/gap_aggregator.py`
+  - added evaluated-job filtering (`status=evaluated`, `fit_score>0`), fuzzy merge via embedding/lexical similarity, severity averaging, and top recommendation rollups.
+  - response now includes Phase 6 PRD-style `aggregated_gaps` and `total_jobs_analyzed` while retaining previous compatibility fields.
+- Replaced metadata extractor scaffold with LLM-backed extraction in:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/job_metadata_extractor.py`
+  - expanded job URL pattern detection, source inference, Ollama JSON extraction prompt, robust JSON cleaning/parsing, and fallback heuristics.
+- Wired the Chrome-extension post-ingestion hook and Phase 6C evaluation run behavior in:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py`
+  - `POST /v1/job-evaluation-runs` now returns `202` for async queue and `200` for sync completion, with richer response payloads.
+  - added post-ingestion job routing for `group=job-search` + matching job URL patterns: metadata extraction -> `POST /v1/job-discovery-runs` logic (`phase6_run_discovery`) -> async evaluation queue.
+  - ingestion responses now include `job_pipeline[]` routing outcomes when applicable.
+- Upgraded Workflow 3 runbook from skeleton to full Phase 6C flow in:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6/workflow3_evaluate_notify.md`
+- Updated docs index wording to reflect full Workflow 3 notes in:
+  - `/Users/jaydreyer/projects/recall-local/docs/README.md`
+- Extended bridge API contract tests for new 6C behaviors in:
+  - `/Users/jaydreyer/projects/recall-local/tests/test_bridge_api_contract.py`
+  - added async/sync `POST /v1/job-evaluation-runs` assertions and ingestion hook routing assertions.
+
+### Validation
+
+- `python3 -m py_compile scripts/phase6/job_evaluator.py scripts/phase6/gap_aggregator.py scripts/phase6/job_metadata_extractor.py scripts/phase1/ingest_bridge_api.py tests/test_bridge_api_contract.py`
+- `python3 -m pytest -q tests/test_bridge_api_contract.py -q`
+
+### Results
+
+- Phase 6C core backend logic is now implemented locally (no longer scaffold-only):
+  - evaluation run endpoint executes real scoring flows,
+  - gap aggregation returns ranked deduplicated outputs,
+  - Chrome-extension ingestion can route job URLs into `recall_jobs` and queue evaluations.
+- n8n Workflow 3 documentation is now implementation-complete for evaluate/notify orchestration.
+- This entry covers local implementation and local validation only; ai-lab sync/restart/runtime verification was not performed in this step.
+
 ## 2026-03-04 - Phase 6B closeout hardening (API visibility + n8n URL/payload fixes)
 
 ### What was executed

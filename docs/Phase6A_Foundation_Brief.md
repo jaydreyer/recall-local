@@ -49,6 +49,7 @@ Create a setup script at `scripts/phase6/setup_collections.py` that creates two 
     "gaps": "json",
     "application_tips": "text",
     "cover_letter_angle": "text",
+    "observation": "json",
     "applied": "bool",
     "applied_at": "datetime",
     "notes": "text",
@@ -57,7 +58,7 @@ Create a setup script at `scripts/phase6/setup_collections.py` that creates two 
 }
 ```
 
-**Status values:** `new` → `evaluated` → `applied` | `dismissed` | `expired`
+**Status values:** `new` → `evaluated` → `applied` | `dismissed` | `expired` | `error`
 
 ### `recall_resume` Collection
 
@@ -95,7 +96,7 @@ Implement Phase 6 bridge routes in `scripts/phase1/ingest_bridge_api.py` (existi
 |--------|------|---------|----------|
 | `GET` | `/v1/jobs` | List jobs with filtering, sorting, pagination | Array of job objects |
 | `GET` | `/v1/jobs/{jobId}` | Single job with full evaluation | Job object |
-| `POST` | `/v1/job-evaluation-runs` | Create evaluation run(s) for one or more job IDs | `{ "queued": N }` |
+| `POST` | `/v1/job-evaluation-runs` | Create evaluation run(s) for one or more job IDs | Run metadata (`queued`,`run_id`,`status`,`job_ids`) plus `results` when `wait=true` |
 | `GET` | `/v1/job-stats` | Dashboard stats (counts by score range, source, day) | Stats object |
 | `GET` | `/v1/job-gaps` | Aggregated gap analysis across all evaluated jobs | Gaps object |
 | `POST` | `/v1/job-deduplications` | Deduplication check for candidate job payload | Dedup result |
@@ -113,7 +114,7 @@ Implement Phase 6 bridge routes in `scripts/phase1/ingest_bridge_api.py` (existi
 
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
-| `status` | string | `evaluated` | Filter: new, evaluated, applied, dismissed, expired |
+| `status` | string | `evaluated` | Filter: new, evaluated, applied, dismissed, expired, error |
 | `min_score` | int | 0 | Minimum fit score (`-1` includes unevaluated/unscored jobs) |
 | `max_score` | int | 100 | Maximum fit score |
 | `company_tier` | int | null | Filter by company tier (1, 2, 3) |
@@ -127,6 +128,34 @@ Implement Phase 6 bridge routes in `scripts/phase1/ingest_bridge_api.py` (existi
 ### `GET /v1/job-gaps` Response Shape
 
 See parent PRD Component 3 for the full aggregated gap analysis response. This is one of the most important endpoints — it answers "what should I study?"
+
+### Job Observation Payload (stored + returned)
+
+Each evaluated job includes `observation` telemetry for non-scoring diagnostics:
+
+```json
+{
+  "provider_sequence": "local|cloud|local->cloud",
+  "escalation": {
+    "enabled": true,
+    "triggered": false,
+    "reasons": ["gaps_below_threshold", "rationale_too_short"]
+  },
+  "location": {
+    "raw": "Minneapolis, MN, US",
+    "location_type": "remote|hybrid|onsite",
+    "is_remote": false,
+    "is_twin_cities": true,
+    "preference_bucket": "remote|twin_cities|other"
+  },
+  "settings_snapshot": {
+    "evaluation_model": "local",
+    "auto_escalate": true,
+    "escalate_threshold_gaps": 2,
+    "escalate_threshold_rationale_words": 20
+  }
+}
+```
 
 ### `PATCH /v1/llm-settings` Request Body
 

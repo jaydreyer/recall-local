@@ -728,6 +728,122 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(body["new_job_ids"], ["job_1", "job_2"])
         self.assertEqual(body["collections"][0]["name"], "recall_jobs")
 
+    def test_phase6_job_evaluation_endpoint_returns_accepted_for_async_runs(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        queued_response = {
+            "run_id": "job_eval_123",
+            "queued": 1,
+            "job_ids": ["job_1"],
+            "status": "queued",
+            "wait": False,
+            "results": [],
+        }
+        with patch("scripts.phase1.ingest_bridge_api.phase6_queue_job_evaluations", return_value=queued_response) as mock_queue:
+            with build_client(env) as client:
+                response = client.post(
+                    "/v1/job-evaluation-runs",
+                    json={"job_ids": ["job_1"], "wait": False},
+                )
+
+        self.assertEqual(response.status_code, 202)
+        body = response.json()
+        self.assertEqual(body["workflow"], "workflow_06a_job_evaluations")
+        self.assertEqual(body["status"], "queued")
+        self.assertEqual(mock_queue.call_args.kwargs["wait"], False)
+
+    def test_phase6_job_evaluation_endpoint_returns_completed_for_sync_runs(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        completed_response = {
+            "run_id": "job_eval_456",
+            "queued": 1,
+            "job_ids": ["job_1"],
+            "status": "completed",
+            "wait": True,
+            "evaluated": 1,
+            "failed": 0,
+            "results": [{"job_id": "job_1", "status": "completed", "fit_score": 82}],
+        }
+        with patch("scripts.phase1.ingest_bridge_api.phase6_queue_job_evaluations", return_value=completed_response) as mock_queue:
+            with build_client(env) as client:
+                response = client.post(
+                    "/v1/job-evaluation-runs",
+                    json={"job_ids": ["job_1"], "wait": True},
+                )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["workflow"], "workflow_06a_job_evaluations")
+        self.assertEqual(body["evaluated"], 1)
+        self.assertEqual(mock_queue.call_args.kwargs["wait"], True)
+
+    def test_ingestion_routes_job_search_job_urls_into_phase6_pipeline(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        fake_ingest = IngestResult(
+            run_id="run-1",
+            ingest_id="ingest-1",
+            doc_id="doc-1",
+            source_type="url",
+            source_ref="https://linkedin.com/jobs/view/123",
+            title="Job Posting",
+            source_identity="job:123",
+            chunks_created=2,
+            moved_to=None,
+            replace_existing=False,
+            replaced_points=0,
+            replacement_status="skipped",
+            latency_ms=10,
+            status="completed",
+        )
+        extracted = {
+            "source": "linkedin",
+            "title": "Senior Solutions Engineer",
+            "company": "ExampleCo",
+            "location": "Remote",
+            "description": "Role responsibilities and requirements.",
+            "salary_min": 150000,
+            "salary_max": 180000,
+        }
+        discovery = {"run_id": "job_discovery_abc", "new_job_ids": ["job_a1b2"]}
+        queued_eval = {"run_id": "job_eval_abc", "status": "queued", "job_ids": ["job_a1b2"], "queued": 1, "wait": False}
+
+        with patch("scripts.phase1.ingest_bridge_api.ingest_request", return_value=fake_ingest):
+            with patch("scripts.phase1.ingest_bridge_api.phase6_looks_like_job_url", return_value=True):
+                with patch("scripts.phase1.ingest_bridge_api._load_ingested_doc_text", return_value="Sample job content"):
+                    with patch("scripts.phase1.ingest_bridge_api.phase6_extract_job_metadata", return_value=extracted):
+                        with patch("scripts.phase1.ingest_bridge_api.phase6_run_discovery", return_value=discovery) as mock_discovery:
+                            with patch("scripts.phase1.ingest_bridge_api.phase6_queue_job_evaluations", return_value=queued_eval) as mock_queue:
+                                with build_client(env) as client:
+                                    response = client.post(
+                                        "/v1/ingestions",
+                                        json={
+                                            "channel": "bookmarklet",
+                                            "type": "url",
+                                            "content": "https://linkedin.com/jobs/view/123",
+                                            "group": "job-search",
+                                        },
+                                    )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body["job_pipeline"][0]["routed"])
+        self.assertEqual(body["job_pipeline"][0]["new_job_ids"], ["job_a1b2"])
+        manual_jobs = mock_discovery.call_args.args[0]["jobs"]
+        self.assertEqual(manual_jobs[0]["source"], "chrome_extension")
+        self.assertEqual(manual_jobs[0]["company"], "ExampleCo")
+        self.assertEqual(mock_queue.call_args.kwargs["job_ids"], ["job_a1b2"])
+
     def test_phase6_company_and_job_aliases_return_not_found(self) -> None:
         env = {
             "RECALL_API_KEY": "",

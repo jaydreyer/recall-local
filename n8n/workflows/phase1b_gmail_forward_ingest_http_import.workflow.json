@@ -1,0 +1,136 @@
+[
+  {
+    "updatedAt": "2026-03-04T21:31:10.246Z",
+    "createdAt": "2026-03-02T21:16:35.395Z",
+    "id": "409d18db-fdd1-4aa4-a508-be8f36b6a920",
+    "name": "Recall Phase1B - Gmail Forward Ingest (HTTP Bridge)",
+    "description": null,
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+      {
+        "parameters": {
+          "postProcessAction": "nothing",
+          "downloadAttachments": true,
+          "options": {}
+        },
+        "id": "node-email-trigger",
+        "name": "Email Trigger (IMAP)",
+        "type": "n8n-nodes-base.emailReadImap",
+        "typeVersion": 2,
+        "position": [
+          288,
+          272
+        ],
+        "notesInFlow": true,
+        "credentials": {
+          "imap": {
+            "id": "74qvoT5ePd1hOn7H",
+            "name": "IMAP account"
+          }
+        },
+        "notes": "Configure IMAP credentials for the Recall ingest inbox before activating."
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "number": [
+              {
+                "value1": "={{ (((($json.textPlain || $json.text || $json.textHtml || $json.html || '').toString().trim().length) + (Array.isArray($json.attachment_paths) ? $json.attachment_paths.length : 0) + (($json.subject || '').toString().trim().length)) ) }}",
+                "operation": "larger",
+                "value2": 0
+              }
+            ]
+          }
+        },
+        "id": "node-if-has-gmail-content",
+        "name": "If Has Content",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          420,
+          272
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://100.116.103.78:8090/v1/ingestions",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ ({\n  channel: 'gmail-forward',\n  subject: $json.subject || '',\n  from: (typeof $json.from === 'string' ? $json.from : (($json.from && $json.from.text) ? $json.from.text : '')),\n  messageId: $json.messageId || $json.message_id || '',\n  text: $json.textPlain || $json.text || $json.textHtml || $json.html || ($json.subject ? ('Subject: ' + $json.subject) : ''),\n  html: $json.textHtml || $json.html || '',\n  attachment_paths: Array.isArray($json.attachment_paths) ? $json.attachment_paths : []\n}) }}",
+          "options": {}
+        },
+        "id": "node-http-ingest-gmail",
+        "name": "HTTP Ingest Gmail",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          560,
+          272
+        ]
+      }
+    ],
+    "connections": {
+      "Email Trigger (IMAP)": {
+        "main": [
+          [
+            {
+              "node": "If Has Content",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "If Has Content": {
+        "main": [
+          [
+            {
+              "node": "HTTP Ingest Gmail",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "staticData": null,
+    "meta": {
+      "templateCredsSetupCompleted": true
+    },
+    "pinData": {},
+    "versionId": "2a560f83-e76e-45b8-8432-72c45882474c",
+    "activeVersionId": "39baa5b0-2e93-4536-905c-800b48551476",
+    "versionCounter": 39,
+    "triggerCount": 1,
+    "tags": [],
+    "shared": [
+      {
+        "updatedAt": "2026-03-02T21:16:35.399Z",
+        "createdAt": "2026-03-02T21:16:35.399Z",
+        "role": "workflow:owner",
+        "workflowId": "409d18db-fdd1-4aa4-a508-be8f36b6a920",
+        "projectId": "OZAMsoSRVLizehSN",
+        "project": {
+          "updatedAt": "2026-03-02T21:24:03.396Z",
+          "createdAt": "2026-03-02T17:15:56.599Z",
+          "id": "OZAMsoSRVLizehSN",
+          "name": "Jay Dreyer <jay.dreyer@gmail.com>",
+          "type": "personal",
+          "icon": null,
+          "description": null,
+          "creatorId": "70597d81-ccce-452d-b45f-ff1d2c1aa901"
+        }
+      }
+    ],
+    "versionMetadata": {
+      "name": null,
+      "description": null
+    }
+  }
+]

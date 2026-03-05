@@ -33,7 +33,7 @@ if str(ROOT) not in sys.path:
 from scripts.phase1.channel_adapters import normalize_payload  # noqa: E402
 from scripts.phase1.group_model import CANONICAL_GROUPS, normalize_group  # noqa: E402
 from scripts.phase1.ingest_from_payload import payload_to_requests  # noqa: E402
-from scripts.phase1.ingestion_pipeline import IngestRequest, ingest_request  # noqa: E402
+from scripts.phase1.ingestion_pipeline import IngestRequest, ingest_request, qdrant_client_from_env  # noqa: E402
 from scripts.phase1.rag_query import run_rag_query  # noqa: E402
 from scripts.phase5.vault_sync import list_vault_tree, run_vault_sync_once  # noqa: E402
 from scripts.phase2.meeting_action_items import run_meeting_action_items  # noqa: E402
@@ -49,6 +49,8 @@ from scripts.phase6.ingest_resume import ingest_resume as phase6_ingest_resume  
 from scripts.phase6.job_dedup import check_job_duplicate as phase6_check_job_duplicate  # noqa: E402
 from scripts.phase6.job_discovery_runner import run_discovery as phase6_run_discovery  # noqa: E402
 from scripts.phase6.job_evaluator import queue_job_evaluations as phase6_queue_job_evaluations  # noqa: E402
+from scripts.phase6.job_metadata_extractor import extract_job_metadata as phase6_extract_job_metadata  # noqa: E402
+from scripts.phase6.job_metadata_extractor import looks_like_job_url as phase6_looks_like_job_url  # noqa: E402
 from scripts.phase6.job_repository import all_jobs as phase6_all_jobs  # noqa: E402
 from scripts.phase6.job_repository import get_job as phase6_get_job  # noqa: E402
 from scripts.phase6.job_repository import job_stats as phase6_job_stats  # noqa: E402
@@ -75,7 +77,7 @@ DEFAULT_RECENT_EVAL_RUNS = 5
 DEFAULT_EVAL_RUN_TIMEOUT_SECONDS = 900
 DEFAULT_CORS_ORIGINS = "*"
 CANONICAL_GROUP_ENUM = list(CANONICAL_GROUPS)
-PHASE6_JOB_STATUSES = {"new", "evaluated", "applied", "dismissed", "expired"}
+PHASE6_JOB_STATUSES = {"new", "evaluated", "applied", "dismissed", "expired", "error"}
 PHASE6_JOB_SOURCES = {"jobspy", "adzuna", "serpapi", "career_page", "chrome_extension"}
 
 
@@ -131,6 +133,7 @@ class IngestWorkflowResponse(BaseModel):
     ingested: list[dict[str, Any]]
     errors: list[dict[str, Any]]
     dry_run: bool
+    job_pipeline: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class FileIngestionResponse(BaseModel):
@@ -252,6 +255,10 @@ class JobEvaluationRunResponse(BaseModel):
     run_id: str
     status: str
     job_ids: list[str]
+    wait: bool = False
+    evaluated: Optional[int] = None
+    failed: Optional[int] = None
+    results: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ResumeIngestionResponse(BaseModel):
@@ -386,6 +393,19 @@ INGEST_SUCCESS_EXAMPLE = {
     ],
     "errors": [],
     "dry_run": False,
+    "job_pipeline": [
+        {
+            "request_index": 0,
+            "routed": True,
+            "url": "https://example.com/job-posting",
+            "source": "career_page",
+            "title": "Senior Solutions Engineer",
+            "company": "ExampleCo",
+            "new_job_ids": ["job_a1b2c3d4"],
+            "discovery_run_id": "job_discovery_123abc",
+            "evaluation_run_id": "job_eval_123abc",
+        }
+    ],
 }
 
 FILE_INGEST_SUCCESS_EXAMPLE = {
@@ -616,6 +636,10 @@ JOBS_LIST_SUCCESS_EXAMPLE = {
             "status": "evaluated",
             "fit_score": 84,
             "source": "career_page",
+            "observation": {
+                "provider_sequence": "local",
+                "location": {"preference_bucket": "remote"},
+            },
         },
         {
             "jobId": "job_002",
@@ -624,6 +648,10 @@ JOBS_LIST_SUCCESS_EXAMPLE = {
             "status": "evaluated",
             "fit_score": 79,
             "source": "jobspy",
+            "observation": {
+                "provider_sequence": "local->cloud",
+                "location": {"preference_bucket": "twin_cities"},
+            },
         },
     ],
 }
@@ -636,10 +664,54 @@ JOB_STATS_SUCCESS_EXAMPLE = {
     "by_day": {"2026-03-04": 6, "2026-03-03": 6},
 }
 
+JOB_EVALUATION_RUN_ACCEPTED_EXAMPLE = {
+    "workflow": "workflow_06a_job_evaluations",
+    "queued": 3,
+    "run_id": "job_eval_1a2b3c4d5e6f",
+    "status": "queued",
+    "job_ids": ["job_001", "job_002", "job_003"],
+    "wait": False,
+    "message": "Job evaluation run queued.",
+}
+
+JOB_EVALUATION_RUN_COMPLETED_EXAMPLE = {
+    "workflow": "workflow_06a_job_evaluations",
+    "queued": 2,
+    "run_id": "job_eval_1a2b3c4d5e6f",
+    "status": "completed",
+    "job_ids": ["job_001", "job_002"],
+    "wait": True,
+    "evaluated": 2,
+    "failed": 0,
+    "results": [
+        {"job_id": "job_001", "status": "completed", "fit_score": 84},
+        {"job_id": "job_002", "status": "completed", "fit_score": 76},
+    ],
+}
+
 JOB_GAPS_SUCCESS_EXAMPLE = {
     "workflow": "workflow_06a_job_gaps",
     "total_jobs": 12,
     "evaluated_jobs": 10,
+    "total_jobs_analyzed": 10,
+    "aggregated_gaps": [
+        {
+            "gap": "Kubernetes / container orchestration experience",
+            "frequency": 5,
+            "avg_severity": "moderate",
+            "avg_severity_score": 2.1,
+            "top_recommendations": [
+                {
+                    "type": "course",
+                    "title": "Kubernetes for Developers",
+                    "source": "KodeKloud",
+                    "effort": "20 hours",
+                }
+            ],
+            "variants": ["kubernetes experience", "k8s orchestration"],
+        }
+    ],
+    "generated_at": "2026-03-04T19:10:00Z",
     "top_gaps": [{"skill": "kubernetes", "count": 5}, {"skill": "enterprise-ai", "count": 4}],
     "top_matching_skills": [{"skill": "api-strategy", "count": 7}, {"skill": "solution-design", "count": 6}],
     "recommended_focus": ["kubernetes", "enterprise-ai", "developer-advocacy"],
@@ -1886,12 +1958,14 @@ def create_app() -> FastAPI:
         f"{API_PREFIX}/job-evaluation-runs",
         tags=["Jobs"],
         summary="Create job evaluation run",
-        description="Queues evaluation run(s) for one or more job identifiers.",
+        description="Queues or executes evaluation run(s) for one or more job identifiers.",
         response_model=JobEvaluationRunResponse,
         responses={
-            200: {"description": "Evaluation run accepted."},
+            200: {"description": "Synchronous evaluation run completed.", "content": {"application/json": {"example": JOB_EVALUATION_RUN_COMPLETED_EXAMPLE}}},
+            202: {"description": "Async evaluation run accepted.", "content": {"application/json": {"example": JOB_EVALUATION_RUN_ACCEPTED_EXAMPLE}}},
             400: {"model": ErrorResponse, "description": "Invalid run payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
             401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            500: {"model": ErrorResponse, "description": "Evaluation run failed.", "content": {"application/json": {"example": ERROR_EXAMPLE_WORKFLOW}}},
             **RATE_LIMIT_ERROR_RESPONSE,
         },
         openapi_extra={"requestBody": JOB_EVALUATION_RUN_REQUEST_BODY},
@@ -1923,9 +1997,19 @@ def create_app() -> FastAPI:
             return _error_response(status_code=400, code="validation_failed", message=str(exc), request_id=request_id)
         settings = payload.get("settings") if isinstance(payload.get("settings"), dict) else {}
 
-        result = phase6_queue_job_evaluations(job_ids=[str(item) for item in raw_job_ids], wait=wait, settings=settings)
+        try:
+            result = phase6_queue_job_evaluations(job_ids=[str(item) for item in raw_job_ids], wait=wait, settings=settings)
+        except Exception as exc:  # noqa: BLE001
+            return _error_response(
+                status_code=500,
+                code="workflow_failed",
+                message=f"Job evaluation run failed: {exc}",
+                request_id=request_id,
+            )
+
         result["workflow"] = "workflow_06a_job_evaluations"
-        return _json_response(200, result)
+        status_code = 200 if wait else 202
+        return _json_response(status_code, result)
 
     @app.get(
         f"{API_PREFIX}/job-stats",
@@ -2920,10 +3004,19 @@ def _process_ingestion(*, channel: str, payload: dict[str, Any], dry_run: bool, 
 
     results: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
+    job_pipeline: list[dict[str, Any]] = []
     for index, item in enumerate(requests):
         try:
             result = ingest_request(item, dry_run=dry_run)
             results.append(asdict(result))
+            route_result = _maybe_route_job_pipeline(
+                request_index=index,
+                item=item,
+                ingest_result=result,
+                dry_run=dry_run,
+            )
+            if route_result is not None:
+                job_pipeline.append(route_result)
         except Exception as exc:  # noqa: BLE001
             errors.append(
                 {
@@ -2941,7 +3034,209 @@ def _process_ingestion(*, channel: str, payload: dict[str, Any], dry_run: bool, 
         "errors": errors,
         "dry_run": dry_run,
     }
+    if job_pipeline:
+        response["job_pipeline"] = job_pipeline
     return _json_response(200 if not errors else 207, response)
+
+
+def _maybe_route_job_pipeline(
+    *,
+    request_index: int,
+    item: IngestRequest,
+    ingest_result: Any,
+    dry_run: bool,
+) -> dict[str, Any] | None:
+    normalized_group = normalize_group(item.group)
+    if normalized_group != "job-search":
+        return None
+
+    source_url = _resolve_ingest_source_url(item=item, ingest_result=ingest_result)
+    if not source_url:
+        return {
+            "request_index": request_index,
+            "routed": False,
+            "reason": "missing_source_url",
+        }
+
+    if not phase6_looks_like_job_url(source_url):
+        return {
+            "request_index": request_index,
+            "routed": False,
+            "reason": "url_not_job_posting",
+            "url": source_url,
+        }
+
+    if dry_run:
+        return {
+            "request_index": request_index,
+            "routed": False,
+            "reason": "dry_run",
+            "url": source_url,
+        }
+
+    metadata = dict(item.metadata) if isinstance(item.metadata, dict) else {}
+    doc_text = _load_ingested_doc_text(str(getattr(ingest_result, "doc_id", "") or ""))
+
+    try:
+        extracted = phase6_extract_job_metadata(
+            {
+                "url": source_url,
+                "title": item.title or metadata.get("title"),
+                "company": metadata.get("company"),
+                "location": metadata.get("location"),
+                "source": "chrome_extension",
+                "content": doc_text,
+            }
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "request_index": request_index,
+            "routed": False,
+            "reason": "metadata_extraction_failed",
+            "url": source_url,
+            "error": str(exc),
+        }
+
+    title = str(extracted.get("title") or "").strip()
+    company = str(extracted.get("company") or "").strip()
+    if not title or not company:
+        return {
+            "request_index": request_index,
+            "routed": False,
+            "reason": "metadata_incomplete",
+            "url": source_url,
+            "title": title,
+            "company": company,
+        }
+
+    manual_job = {
+        "title": title,
+        "company": company,
+        "location": str(extracted.get("location") or "Unknown"),
+        "url": source_url,
+        "description": str(extracted.get("description") or doc_text or ""),
+        "source": "chrome_extension",
+        "salary_min": extracted.get("salary_min"),
+        "salary_max": extracted.get("salary_max"),
+    }
+
+    try:
+        discovery_summary = phase6_run_discovery({"jobs": [manual_job], "dry_run": False})
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "request_index": request_index,
+            "routed": False,
+            "reason": "job_pipeline_store_failed",
+            "url": source_url,
+            "error": str(exc),
+        }
+
+    new_job_ids = discovery_summary.get("new_job_ids") if isinstance(discovery_summary.get("new_job_ids"), list) else []
+    eval_run_id: str | None = None
+    if new_job_ids:
+        try:
+            eval_result = phase6_queue_job_evaluations(job_ids=[str(job_id) for job_id in new_job_ids], wait=False)
+            eval_run_id = str(eval_result.get("run_id") or "")
+        except Exception as exc:  # noqa: BLE001
+            return {
+                "request_index": request_index,
+                "routed": True,
+                "url": source_url,
+                "new_job_ids": new_job_ids,
+                "reason": "evaluation_queue_failed",
+                "error": str(exc),
+            }
+
+    return {
+        "request_index": request_index,
+        "routed": True,
+        "url": source_url,
+        "source": extracted.get("source"),
+        "title": title,
+        "company": company,
+        "new_job_ids": new_job_ids,
+        "discovery_run_id": discovery_summary.get("run_id"),
+        "evaluation_run_id": eval_run_id,
+    }
+
+
+def _resolve_ingest_source_url(*, item: IngestRequest, ingest_result: Any) -> str:
+    if item.source_type == "url":
+        return str(item.content or "").strip()
+
+    if item.source_type == "gdoc" and isinstance(item.content, dict):
+        value = str(item.content.get("url") or "").strip()
+        if value:
+            return value
+
+    metadata = item.metadata if isinstance(item.metadata, dict) else {}
+    for key in ("url", "page_url", "source_url"):
+        value = str(metadata.get(key) or "").strip()
+        if value:
+            return value
+
+    source_ref = str(getattr(ingest_result, "source_ref", "") or "").strip()
+    if source_ref.startswith("http://") or source_ref.startswith("https://"):
+        return source_ref
+    return ""
+
+
+def _load_ingested_doc_text(doc_id: str) -> str:
+    target = str(doc_id or "").strip()
+    if not target:
+        return ""
+
+    try:
+        client = qdrant_client_from_env(os.getenv("QDRANT_HOST", "http://localhost:6333"))
+        collection_name = os.getenv("QDRANT_COLLECTION", "recall_docs")
+        from qdrant_client import models
+
+        query_filter = models.Filter(
+            must=[models.FieldCondition(key="doc_id", match=models.MatchValue(value=target))]
+        )
+        response = None
+        try:
+            response = client.scroll(
+                collection_name=collection_name,
+                limit=200,
+                with_payload=True,
+                with_vectors=False,
+                query_filter=query_filter,
+            )
+        except Exception as exc:
+            if "query_filter" not in str(exc):
+                raise
+            response = client.scroll(
+                collection_name=collection_name,
+                limit=200,
+                with_payload=True,
+                with_vectors=False,
+                scroll_filter=query_filter,
+            )
+
+        if isinstance(response, tuple) and len(response) == 2:
+            points = response[0]
+        else:
+            points = getattr(response, "points", None)
+
+        if not isinstance(points, list):
+            return ""
+
+        chunks: list[tuple[int, str]] = []
+        for point in points:
+            payload = dict(getattr(point, "payload", {}) or {})
+            text = str(payload.get("text") or "").strip()
+            if not text:
+                continue
+            try:
+                index = int(payload.get("chunk_index", 999999))
+            except (TypeError, ValueError):
+                index = 999999
+            chunks.append((index, text))
+        chunks.sort(key=lambda entry: entry[0])
+        return "\n\n".join(text for _, text in chunks)
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def _process_rag_query(*, payload: dict[str, Any], dry_run: bool, request_id: str) -> JSONResponse:

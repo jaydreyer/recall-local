@@ -38,6 +38,12 @@ def _parse_datetime(value: Any) -> datetime | None:
         return None
 
 
+def _normalize_observation(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    return {}
+
+
 def _to_slug(value: str) -> str:
     lowered = value.strip().lower()
     cleaned = "".join(char if char.isalnum() else "-" for char in lowered)
@@ -76,6 +82,7 @@ def _normalize_job(record: Any) -> dict[str, Any]:
         "gaps": payload.get("gaps") or [],
         "application_tips": payload.get("application_tips") or "",
         "cover_letter_angle": payload.get("cover_letter_angle") or "",
+        "observation": _normalize_observation(payload.get("observation")),
         "applied": bool(payload.get("applied", False)),
         "applied_at": payload.get("applied_at"),
         "notes": payload.get("notes") or "",

@@ -422,6 +422,7 @@ Evaluate how well the candidate fits this role. Return ONLY valid JSON:
     "gaps": "json",
     "application_tips": "text",
     "cover_letter_angle": "text",
+    "observation": "json",
     "applied": "bool",
     "applied_at": "datetime",
     "notes": "text",
@@ -430,7 +431,7 @@ Evaluate how well the candidate fits this role. Return ONLY valid JSON:
 }
 ```
 
-**Status values:** `new` → `evaluated` → `applied` | `dismissed` | `expired`
+**Status values:** `new` → `evaluated` → `applied` | `dismissed` | `expired` | `error`
 
 ### New Collection: `recall_resume`
 
@@ -464,7 +465,7 @@ Stores Jay's current resume, chunked and embedded like any other Recall document
 |--------|------|---------|
 | `GET` | `/v1/jobs` | List jobs with filtering, sorting, pagination |
 | `GET` | `/v1/jobs/{jobId}` | Get single job with full evaluation |
-| `POST` | `/v1/job-evaluation-runs` | Create job evaluation run(s) for one or more job IDs |
+| `POST` | `/v1/job-evaluation-runs` | Create job evaluation run(s) for one or more job IDs (returns run metadata; includes per-job `results` when `wait=true`) |
 | `GET` | `/v1/job-stats` | Dashboard stats (counts by score range, by source, by day) |
 | `GET` | `/v1/job-gaps` | Aggregated gap analysis across all evaluated jobs |
 | `POST` | `/v1/job-deduplications` | Check duplicate status for candidate job payloads |
@@ -482,16 +483,44 @@ Stores Jay's current resume, chunked and embedded like any other Recall document
 
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
-| `status` | string | `evaluated` | Filter: new, evaluated, applied, dismissed, expired |
+| `status` | string | `evaluated` | Filter: new, evaluated, applied, dismissed, expired, error |
 | `min_score` | int | 0 | Minimum fit score (`-1` includes unevaluated/unscored jobs) |
 | `max_score` | int | 100 | Maximum fit score |
 | `company_tier` | int | null | Filter by company tier (1, 2, 3) |
-| `source` | string | null | Filter by source (jobspy, adzuna, serpapi, career_page) |
+| `source` | string | null | Filter by source (jobspy, adzuna, serpapi, career_page, chrome_extension) |
 | `title_query` | string | null | Fuzzy title search |
 | `sort` | string | `fit_score` | Sort field: fit_score, discovered_at, company |
 | `order` | string | `desc` | Sort order: asc, desc |
 | `limit` | int | 50 | Page size |
 | `offset` | int | 0 | Pagination offset |
+
+### Job Observation Telemetry
+
+Each evaluated job now stores and returns an `observation` object used for diagnostics and tuning (without affecting score math):
+
+```json
+{
+  "provider_sequence": "local|cloud|local->cloud",
+  "escalation": {
+    "enabled": true,
+    "triggered": false,
+    "reasons": ["gaps_below_threshold", "rationale_too_short"]
+  },
+  "location": {
+    "raw": "Minneapolis, MN, US",
+    "location_type": "remote|hybrid|onsite",
+    "is_remote": false,
+    "is_twin_cities": true,
+    "preference_bucket": "remote|twin_cities|other"
+  },
+  "settings_snapshot": {
+    "evaluation_model": "local",
+    "auto_escalate": true,
+    "escalate_threshold_gaps": 2,
+    "escalate_threshold_rationale_words": 20
+  }
+}
+```
 
 ### `GET /v1/job-gaps` — Aggregated Gap Analysis
 

@@ -148,6 +148,15 @@ def should_escalate(evaluation: JobEvaluation, settings: LLMSettings) -> bool:
     return False
 ```
 
+### Observation Telemetry (non-scoring)
+
+Persist an `observation` payload with each evaluated job and include it in evaluation-run responses. This is used for tuning and alert quality review without changing scoring thresholds:
+
+- provider sequence (`local`, `cloud`, `local->cloud`)
+- escalation trace (`enabled`, `triggered`, `reasons`)
+- location diagnostics (`raw`, normalized `location_type`, `is_remote`, `is_twin_cities`, `preference_bucket`)
+- evaluation settings snapshot (`evaluation_model`, escalation thresholds)
+
 ### LLM Provider Calls
 
 **Ollama:**
