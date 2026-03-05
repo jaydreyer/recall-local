@@ -1,0 +1,13 @@
+{
+  "success": true,
+  "buttonInjected": true,
+  "prefillSaved": true,
+  "group": "job-search",
+  "tags": [
+    "gmail",
+    "email",
+    "openai"
+  ],
+  "reinjectedAfterDomMutation": true,
+  "error": null
+}
