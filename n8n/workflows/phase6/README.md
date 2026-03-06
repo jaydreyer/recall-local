@@ -6,7 +6,7 @@ Purpose: build Phase 6B job-discovery workflows in n8n without JSON imports, usi
 
 - `workflow1_aggregator.md`: Job board aggregator (JobSpy/Adzuna/SerpAPI via bridge discovery runner)
 - `workflow2_career_pages.md`: Career page monitor (Greenhouse/Lever in n8n, then hand off normalized jobs to bridge)
-- `workflow3_evaluate_notify.md`: Evaluation/notify skeleton webhook (Phase 6C fills scoring logic)
+- `workflow3_evaluate_notify.md`: Full Phase 6C evaluation/notify webhook with Telegram preferred-location gating
 - `../phase6b_career_page_monitor_traditional_import.workflow.json`: Import-ready traditional Workflow 2 (multi-node) for easier node-level debugging.
 
 ## Bridge endpoints used

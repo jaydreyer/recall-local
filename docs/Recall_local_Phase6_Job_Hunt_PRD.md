@@ -667,11 +667,11 @@ A small Recharts bar chart showing the distribution of fit scores across all eva
 
 ### Overview
 
-When a job scores 75+ on fit evaluation, send a push notification via Telegram so Jay doesn't have to check the dashboard constantly. Telegram is already set up via the OpenClaw/Arthur bot — reuse the existing bot token and chat ID. Zero new infrastructure.
+When a job clears the alert threshold and matches a preferred location bucket, send a push notification via Telegram so Jay doesn't have to check the dashboard constantly. The live implementation uses a dedicated Recall Telegram bot credential in n8n.
 
 ### Telegram Bot API Integration
 
-The notification service sends messages via the Telegram Bot API using the existing Arthur bot credentials:
+The notification service is implemented in n8n Workflow 3 using a dedicated Telegram credential for the Recall bot. The simplified Bot API example below is still representative of the message payload shape, but the live runtime path is the n8n Telegram node rather than a bridge-side direct API call:
 
 ```python
 import requests
@@ -697,8 +697,9 @@ def send_telegram_notification(job):
 
 ### Notification Rules
 
-- Score >= 75: Telegram notification (high priority)
-- Score >= 60 AND company_tier in [1, 2]: Telegram notification (normal priority)
+- Score >= 75 and `observation.location.preference_bucket` in `remote`, `twin_cities`: Telegram notification
+- Score >= 60 and `company_tier` in `[1, 2]` and `observation.location.preference_bucket` in `remote`, `twin_cities`: Telegram notification
+- High-score jobs outside preferred-location buckets: dashboard only, counted as skipped for location in Workflow 3
 - All others: Dashboard only
 
 ---

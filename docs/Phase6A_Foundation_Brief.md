@@ -356,8 +356,8 @@ ADZUNA_APP_ID=
 ADZUNA_API_KEY=
 SERPAPI_KEY=
 
-# Notifications (reuse existing Arthur/OpenClaw Telegram bot)
-RECALL_TELEGRAM_BOT_TOKEN=your_existing_bot_token
+# Notifications (dedicated Recall bot; Phase 6C uses n8n credential wiring)
+RECALL_TELEGRAM_BOT_TOKEN=your_recall_bot_token
 RECALL_TELEGRAM_CHAT_ID=your_chat_id
 
 # Daily Dashboard

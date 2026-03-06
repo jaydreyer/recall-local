@@ -340,7 +340,7 @@ Nothing changes in Jay's workflow — the intelligence layer is invisible.
 - [ ] Cloud fallback works when toggled on
 - [ ] Auto-escalation correctly detects thin local responses
 - [ ] n8n Workflow 3 is fully wired: evaluate → notify
-- [ ] Telegram notifications fire for high-scoring jobs
+- [ ] Telegram notifications fire for high-scoring jobs in preferred-location buckets
 - [ ] Gap aggregation returns ranked, deduplicated gaps
 - [ ] Chrome extension ingestion routes job-tagged URLs to the job pipeline
 - [ ] Job metadata extraction works for LinkedIn, Greenhouse, and Indeed pages
