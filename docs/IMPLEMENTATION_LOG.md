@@ -37,6 +37,36 @@
 - New jobs discovered by the scheduled career-page monitor will now flow through Workflow 3 and can generate Telegram alerts.
 - The prior behavior where jobs were evaluated silently without hitting the notify workflow is removed.
 
+## 2026-03-06 - Phase 6C Telegram location gating tightened (ai-lab)
+
+### What was executed
+
+- Tightened Workflow 3 notify gating to align with current preference order:
+  - alert only when `evaluation.observation.location.preference_bucket` is `remote` or `twin_cities`
+  - retain existing score thresholds on top of that gate
+- Updated Workflow 3 artifact and runbook:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6c_evaluate_notify_import.workflow.json`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6/workflow3_evaluate_notify.md`
+- Telegram message format now includes:
+  - preference bucket
+  - raw location text
+  - preferred-location candidate count
+  - skipped-for-location count in workflow summary
+- Synced updated Workflow 3 artifact to ai-lab and applied the active workflow update.
+
+### Validation
+
+- Verified active Workflow 3 `Evaluate + Notify` node on ai-lab contains preferred-location gating logic and `skipped_location_count`.
+- Live smoke test before final wording cleanup:
+  - remote sample `job_cb5faa2003e31baa` -> `notifications_sent=1`, `high_fit_count=1`, `preference_bucket=remote`
+  - non-preferred sample `job_43fed45f47605c87` -> `notifications_sent=0`, `high_fit_count=0`, `skipped_location_count=1`
+- Replay of March 6 backlog earlier in the day already confirmed Telegram delivery path was working end-to-end before this tighter filter was introduced.
+
+### Results
+
+- Telegram alerts are now materially less noisy: strong scores alone no longer notify unless the role is tagged `remote` or `twin_cities`.
+- This is a notification-layer tightening only; evaluation scoring itself was not changed.
+
 ## 2026-03-04 - Phase 6C observation telemetry + evaluator hardening (local + ai-lab)
 
 ### What was executed

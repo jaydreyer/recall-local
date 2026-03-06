@@ -1,6 +1,6 @@
 # Workflow 3: Evaluate + Notify (Phase 6C)
 
-Goal: evaluate newly discovered jobs through the canonical bridge endpoint and send Telegram alerts for high-fit opportunities.
+Goal: evaluate newly discovered jobs through the canonical bridge endpoint and send Telegram alerts only for high-fit opportunities in preferred locations (`remote` first, then `twin_cities`).
 
 ## Node 1: Webhook Trigger
 
@@ -77,81 +77,47 @@ Notes:
 - For this workflow, keep `wait=true` so fit scores are returned immediately.
 - Endpoint returns `200` for sync runs and `202` for async runs.
 
-## Node 5: Flatten Evaluation Results
+## Node 5: Evaluate + Notify
 
 - Node type: `Code`
-- Code:
+- Purpose: keep only alertable jobs that pass both score and preferred-location filters.
+- Preferred location buckets come from `evaluation.observation.location.preference_bucket`.
+- Alertable buckets:
+  - `remote`
+  - `twin_cities`
+- Score gate:
+  - `fit_score >= 75`
+  - or `fit_score >= 60 && company_tier in [1,2]`
 
-```javascript
-const results = Array.isArray($json.results) ? $json.results : [];
-return results.map((row) => ({
-  json: {
-    run_id: $json.run_id,
-    job_id: row.job_id,
-    status: row.status,
-    fit_score: row.fit_score,
-    evaluation: row.evaluation || {}
-  }
-}));
-```
+This node also:
+- builds the Telegram message
+- counts jobs skipped for non-preferred locations
+- caps each Telegram message preview to 5 jobs
 
-## Node 6: Wait Between Alerts
-
-- Node type: `Wait`
-- Wait amount: `2` seconds
-
-## Node 7: Score Gate
+## Node 6: If Has High Fit
 
 - Node type: `IF`
-- Condition (Expression):
+- Condition: `high_fit_count > 0`
 
-```javascript
-{{
-  const score = Number($json.fit_score || -1);
-  const tier = Number($json.evaluation?.company_tier || 0);
-  return score >= 75 || (score >= 60 && [1,2].includes(tier));
-}}
-```
+## Node 7: Telegram Notify
 
-`true` path => Telegram notification.
+- Node type: `Telegram`
+- Sends one batched message for the qualifying jobs in the current webhook run.
+- Message includes:
+  - fit score
+  - preference bucket
+  - raw location text
+  - job URL
 
-`false` path => no alert.
-
-## Node 8: Telegram Notify (true path)
-
-- Node type: `HTTP Request`
-- Method: `POST`
-- URL:
-
-```text
-=https://api.telegram.org/bot{{$env.RECALL_TELEGRAM_BOT_TOKEN}}/sendMessage
-```
-
-Body JSON:
-
-```json
-{
-  "chat_id": "={{ $env.RECALL_TELEGRAM_CHAT_ID }}",
-  "text": "={{ `Job fit alert\nJob: ${$json.evaluation?.title || $json.job_id}\nCompany: ${$json.evaluation?.company || 'Unknown'}\nScore: ${$json.fit_score}\nURL: ${$json.evaluation?.url || 'n/a'}` }}"
-}
-```
-
-## Node 9: Run Summary
+## Node 8: Run Summary
 
 - Node type: `Code`
-- Run this after merge/aggregation of both IF branches.
-- Example summary output:
-
-```javascript
-const items = $input.all().map(i => i.json);
-const scores = items.map(i => Number(i.fit_score || -1)).filter(s => s >= 0);
-const sent = items.filter(i => i.telegram_sent === true).length;
-return [{
-  json: {
-    summary: `Evaluated ${items.length} jobs. Scores: ${scores.length ? Math.min(...scores) : 'n/a'}-${scores.length ? Math.max(...scores) : 'n/a'}. ${sent} notifications sent.`
-  }
-}];
-```
+- Captures:
+  - `result_count`
+  - `high_fit_count`
+  - `skipped_location_count`
+  - `notifications_sent`
+  - `notification_errors`
 
 ## Respond to Webhook
 
@@ -172,4 +138,6 @@ Expected response includes:
 - `run_id`
 - `status` (`completed`)
 - `evaluated`
-- `results[]` with `fit_score`
+- `high_fit_count`
+- `skipped_location_count`
+- `notifications_sent`
