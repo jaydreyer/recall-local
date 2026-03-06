@@ -163,15 +163,15 @@ return [{ json: { company: company.name, jobs } }];
 - Node type: `IF`
 - Expression: `={{ ($json.new_job_ids || []).length > 0 }}`
 
-## Node 10: Queue Evaluation Skeleton
+## Node 10: Trigger Evaluate + Notify
 
 - Node type: `HTTP Request`
 - Method: `POST`
-- URL: `http://100.116.103.78:8090/v1/job-evaluation-runs`
+- URL: `http://100.116.103.78:5678/webhook/recall-job-evaluate`
 - JSON body:
 
 ```javascript
-={{ { job_ids: $json.new_job_ids, wait: false } }}
+={{ { job_ids: $json.new_job_ids, wait: true } }}
 ```
 
 ## Node 11: Summary
@@ -184,9 +184,10 @@ return [{
   json: {
     company: $json.company || "batch",
     run_id: $json.run_id,
-    new_jobs: ($json.new_job_ids || []).length,
-    duplicates: $json.duplicates_skipped || 0,
-    errors: $json.errors || []
+    result_count: Number($json.result_count || 0),
+    high_fit_count: Number($json.high_fit_count || 0),
+    notifications_sent: Number($json.notifications_sent || 0),
+    notification_errors: $json.notification_errors || []
   }
 }];
 ```
@@ -195,4 +196,4 @@ return [{
 
 1. Run manually with 2-3 Greenhouse companies.
 2. Confirm Node 8 returns `new_job_ids`.
-3. Re-run immediately and confirm higher `duplicates_skipped`.
+3. Confirm high-fit matches produce `notifications_sent > 0` and arrive in Telegram.

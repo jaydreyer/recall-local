@@ -1,5 +1,42 @@
 # Recall.local Implementation Log
 
+## 2026-03-06 - Phase 6B -> 6C notification handoff fix (ai-lab)
+
+### What was executed
+
+- Investigated missing Telegram alerts after new jobs were discovered/evaluated on ai-lab.
+- Confirmed root cause in active Workflow 2:
+  - `Recall Phase6B - Career Page Monitor (Traditional Import)` was calling `POST /v1/job-evaluation-runs` directly.
+  - This evaluated jobs in the bridge, but bypassed Workflow 3 (`recall-job-evaluate`), so Telegram notifications never ran.
+- Patched workflow artifacts to hand off new job ids to Workflow 3 webhook instead:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6b_career_page_monitor_traditional_import.workflow.json`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6b_career_page_monitor_traditional_active_import.workflow.json`
+  - changed `Trigger Evaluation Run` URL to `http://100.116.103.78:5678/webhook/recall-job-evaluate`
+  - changed payload to `{ job_ids: $json.new_job_ids, wait: true }`
+- Updated Workflow 2 runbook to match the live handoff design:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6/workflow2_career_pages.md`
+- Synced updated workflow artifacts to ai-lab, spot-checked remote content, imported the active workflow artifact, published the current version, and restarted `n8n`.
+
+### Validation
+
+- Verified active ai-lab Workflow 2 node wiring directly from n8n SQLite:
+  - `Trigger Evaluation Run` now points to `http://100.116.103.78:5678/webhook/recall-job-evaluate`
+  - payload now uses `wait: true`
+- Verified Workflow 3 webhook execution from ai-lab after the fix:
+  - one sample execution completed successfully through n8n (`execution id 1217`), confirming the webhook path is live.
+- Performed end-to-end notify smoke test through Workflow 3 webhook with a known high-fit job:
+  - `POST http://100.116.103.78:5678/webhook/recall-job-evaluate`
+  - response included:
+    - `evaluated=1`
+    - `high_fit_count=1`
+    - `notifications_sent=1`
+    - `notification_errors=[]`
+
+### Results
+
+- New jobs discovered by the scheduled career-page monitor will now flow through Workflow 3 and can generate Telegram alerts.
+- The prior behavior where jobs were evaluated silently without hitting the notify workflow is removed.
+
 ## 2026-03-04 - Phase 6C observation telemetry + evaluator hardening (local + ai-lab)
 
 ### What was executed
