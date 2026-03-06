@@ -60,6 +60,13 @@
 - Live smoke test before final wording cleanup:
   - remote sample `job_cb5faa2003e31baa` -> `notifications_sent=1`, `high_fit_count=1`, `preference_bucket=remote`
   - non-preferred sample `job_43fed45f47605c87` -> `notifications_sent=0`, `high_fit_count=0`, `skipped_location_count=1`
+- Follow-up drift repair on ai-lab:
+  - found that `workflow_entity` had the updated node code, but the active `workflow_history` version `17a9d75f-f30c-46e3-9bb3-1fa592a3a565` still carried the older `High-fit candidates` response summary in `Mark Telegram Send Result`
+  - patched both `workflow_entity` and the active `workflow_history` row directly from the synced import artifact, then restarted `n8n`
+- Post-repair live validation on March 6, 2026:
+  - preferred sample `job_17c80b4e4cd23374` -> `evaluated=1`, `high_fit_count=1`, `skipped_location_count=0`, `notifications_sent=1`
+  - non-preferred sample `job_6886f6bfccfe4eaf` -> `evaluated=1`, `high_fit_count=0`, `skipped_location_count=1`, `notifications_sent=0`
+  - confirmed webhook response summary now reports `Preferred-location candidates` and `Skipped for location` on the notification path as intended
 - Replay of March 6 backlog earlier in the day already confirmed Telegram delivery path was working end-to-end before this tighter filter was introduced.
 
 ### Results
