@@ -64,6 +64,27 @@
   gap: 14px;
 }
 
+.header-link-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  border-radius: 999px;
+  padding: 6px 12px;
+  color: #f8c46c;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-family: var(--font-mono);
+  text-decoration: none;
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.header-link-pill:hover {
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.38);
+}
+
 .health-pill {
   display: inline-flex;
   align-items: center;
@@ -302,6 +323,13 @@ button:disabled {
   margin: 0;
   font-family: var(--font-mono);
   letter-spacing: -0.01em;
+}
+
+.section-copy {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
 }
 
 .field-row {
@@ -770,6 +798,12 @@ button:disabled {
 
 .header-row {
   justify-content: space-between;
+}
+
+.activity-meta {
+  margin: -2px 0 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
 }
 
 pre {

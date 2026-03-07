@@ -44,6 +44,8 @@ from scripts.phase6.company_profiler import (  # noqa: E402
 )
 from scripts.phase6.company_profiler import list_company_profiles as phase6_list_company_profiles  # noqa: E402
 from scripts.phase6.company_profiler import refresh_company_profile as phase6_refresh_company_profile  # noqa: E402
+from scripts.phase6.company_profiler import upsert_tracked_company_config as phase6_upsert_tracked_company_config  # noqa: E402
+from scripts.phase6.cover_letter_drafter import generate_cover_letter_draft as phase6_generate_cover_letter_draft  # noqa: E402
 from scripts.phase6.gap_aggregator import aggregate_gaps as phase6_aggregate_gaps  # noqa: E402
 from scripts.phase6.ingest_resume import ingest_resume as phase6_ingest_resume  # noqa: E402
 from scripts.phase6.job_dedup import check_job_duplicate as phase6_check_job_duplicate  # noqa: E402
@@ -55,6 +57,7 @@ from scripts.phase6.job_repository import all_jobs as phase6_all_jobs  # noqa: E
 from scripts.phase6.job_repository import get_job as phase6_get_job  # noqa: E402
 from scripts.phase6.job_repository import job_stats as phase6_job_stats  # noqa: E402
 from scripts.phase6.job_repository import list_jobs as phase6_list_jobs  # noqa: E402
+from scripts.phase6.job_repository import update_company_tier as phase6_update_company_tier  # noqa: E402
 from scripts.phase6.job_repository import update_job as phase6_update_job  # noqa: E402
 from scripts.phase6.setup_collections import ensure_phase6_collections as phase6_ensure_collections  # noqa: E402
 
@@ -659,7 +662,16 @@ JOBS_LIST_SUCCESS_EXAMPLE = {
 JOB_STATS_SUCCESS_EXAMPLE = {
     "workflow": "workflow_06a_job_stats",
     "total_jobs": 12,
+    "new_today": 4,
+    "high_fit_count": 4,
+    "average_fit_score": 68.3,
     "score_ranges": {"high": 4, "medium": 5, "low": 3, "unscored": 0},
+    "score_distribution": [
+        {"range": "0-24", "count": 1},
+        {"range": "25-49", "count": 2},
+        {"range": "50-74", "count": 5},
+        {"range": "75-100", "count": 4},
+    ],
     "by_source": {"jobspy": 7, "career_page": 3, "adzuna": 2},
     "by_day": {"2026-03-04": 6, "2026-03-03": 6},
 }
@@ -721,12 +733,38 @@ LLM_SETTINGS_SUCCESS_EXAMPLE = {
     "workflow": "workflow_06a_llm_settings",
     "settings": {
         "evaluation_model": "local",
+        "local_model": "llama3.2:3b",
         "cloud_provider": "anthropic",
         "cloud_model": "claude-sonnet-4-5-20250929",
         "auto_escalate": True,
         "escalate_threshold_gaps": 2,
         "escalate_threshold_rationale_words": 20,
     },
+}
+
+COVER_LETTER_DRAFT_SUCCESS_EXAMPLE = {
+    "workflow": "workflow_06a_cover_letter_draft",
+    "draft_id": "cover_letter_job-001",
+    "job_id": "job-001",
+    "provider": "ollama",
+    "model": "llama3.2:3b",
+    "generated_at": "2026-03-06T16:00:00+00:00",
+    "word_count": 278,
+    "draft": "Dear Hiring Team,\n\nI am excited to apply for the Solutions Engineer role...",
+    "saved_to_vault": False,
+    "vault_path": None,
+}
+
+COMPANY_SUCCESS_EXAMPLE = {
+    "workflow": "workflow_06a_company_watchlist",
+    "company_id": "airbnb",
+    "company_name": "Airbnb",
+    "tier": 1,
+    "ats": "greenhouse",
+    "board_id": "airbnb",
+    "careers_url": "https://boards-api.greenhouse.io/v1/boards/airbnb/jobs",
+    "title_filter": ["solutions", "platform", "technical"],
+    "your_connection": "Interview loop in progress.",
 }
 
 RESUME_SUCCESS_EXAMPLE = {
@@ -1185,6 +1223,7 @@ LLM_SETTINGS_PATCH_REQUEST_BODY = {
                 "type": "object",
                 "properties": {
                     "evaluation_model": {"type": "string", "enum": ["local", "cloud"]},
+                    "local_model": {"type": "string"},
                     "cloud_provider": {"type": "string", "enum": ["anthropic", "openai", "gemini"]},
                     "cloud_model": {"type": "string"},
                     "auto_escalate": {"type": "boolean"},
@@ -1193,6 +1232,104 @@ LLM_SETTINGS_PATCH_REQUEST_BODY = {
                 },
                 "additionalProperties": False,
             }
+        }
+    },
+}
+
+COVER_LETTER_DRAFT_REQUEST_BODY = {
+    "required": True,
+    "content": {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "required": ["job_id"],
+                "properties": {
+                    "job_id": {"type": "string", "description": "Evaluated job identifier."},
+                    "save_to_vault": {"type": "boolean", "default": False},
+                    "settings": {
+                        "type": "object",
+                        "description": "Optional runtime override for draft generation model settings.",
+                        "properties": {
+                            "evaluation_model": {"type": "string", "enum": ["local", "cloud"]},
+                            "cloud_provider": {"type": "string", "enum": ["anthropic", "openai", "gemini"]},
+                            "cloud_model": {"type": "string"},
+                            "auto_escalate": {"type": "boolean"},
+                            "local_model": {"type": "string"},
+                            "max_tokens": {"type": "integer", "minimum": 256},
+                        },
+                        "additionalProperties": False,
+                    },
+                },
+                "additionalProperties": False,
+            },
+            "examples": {
+                "default": {
+                    "summary": "Generate cover letter draft",
+                    "value": {"job_id": "job_001", "save_to_vault": False},
+                }
+            },
+        }
+    },
+}
+
+COMPANY_CREATE_REQUEST_BODY = {
+    "required": True,
+    "content": {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "required": ["company_name"],
+                "properties": {
+                    "company_name": {"type": "string", "description": "Tracked company display name."},
+                    "tier": {"type": "integer", "minimum": 1, "maximum": 3, "default": 3},
+                    "ats": {"type": "string", "description": "Applicant tracking system identifier."},
+                    "board_id": {"type": "string", "description": "Board identifier for ATS-backed company pages."},
+                    "url": {"type": "string", "description": "Career page or ATS jobs URL."},
+                    "title_filter": {"type": "array", "items": {"type": "string"}},
+                    "your_connection": {"type": "string", "description": "Personal context shown in the profile."},
+                },
+                "additionalProperties": False,
+            },
+            "examples": {
+                "greenhouse": {
+                    "summary": "Create watched Greenhouse company",
+                    "value": {
+                        "company_name": "Airbnb",
+                        "tier": 1,
+                        "ats": "greenhouse",
+                        "board_id": "airbnb",
+                        "url": "https://boards-api.greenhouse.io/v1/boards/airbnb/jobs",
+                        "title_filter": ["solutions", "platform", "technical"],
+                        "your_connection": "Interview loop in progress.",
+                    },
+                }
+            },
+        }
+    },
+}
+
+COMPANY_PATCH_REQUEST_BODY = {
+    "required": True,
+    "content": {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "tier": {"type": "integer", "minimum": 1, "maximum": 3},
+                    "ats": {"type": "string"},
+                    "board_id": {"type": "string"},
+                    "url": {"type": "string"},
+                    "title_filter": {"type": "array", "items": {"type": "string"}},
+                    "your_connection": {"type": "string"},
+                },
+                "additionalProperties": False,
+            },
+            "examples": {
+                "moveTier": {
+                    "summary": "Move company to another tier",
+                    "value": {"tier": 2, "your_connection": "Still in touch with the recruiter."},
+                }
+            },
         }
     },
 }
@@ -1244,6 +1381,7 @@ def create_app() -> FastAPI:
             {"name": "Resumes", "description": "Ingest and inspect resume versions used for job evaluation."},
             {"name": "Companies", "description": "List and refresh company profile summaries for job intelligence."},
             {"name": "LLM Settings", "description": "Read and update Phase 6 evaluation model settings."},
+            {"name": "Cover Letter Drafts", "description": "Generate cover letter drafts from the current resume and job context."},
         ],
     )
     cors_origins = _cors_origins_from_env()
@@ -1777,13 +1915,13 @@ def create_app() -> FastAPI:
             return control_error
 
         normalized_status = str(status).strip().lower()
-        if normalized_status not in PHASE6_JOB_STATUSES:
+        if normalized_status not in PHASE6_JOB_STATUSES and normalized_status != "all":
             return _error_response(
                 status_code=400,
                 code="validation_failed",
                 message=f"Invalid status: {status}",
                 request_id=request_id,
-                details=[{"field": "status", "issue": f"allowed values: {', '.join(sorted(PHASE6_JOB_STATUSES))}"}],
+                details=[{"field": "status", "issue": f"allowed values: {', '.join(sorted(PHASE6_JOB_STATUSES | {'all'}))}"}],
             )
 
         normalized_source = str(source or "").strip().lower() or None
@@ -1818,7 +1956,7 @@ def create_app() -> FastAPI:
 
         try:
             payload = phase6_list_jobs(
-                status=normalized_status,
+                status=None if normalized_status == "all" else normalized_status,
                 min_score=min_score,
                 max_score=max_score,
                 company_tier=company_tier,
@@ -2351,6 +2489,100 @@ def create_app() -> FastAPI:
         return _json_response(200, profile)
 
     @app.post(
+        f"{API_PREFIX}/companies",
+        tags=["Companies"],
+        summary="Create watched company",
+        description="Creates or persists a watched company entry used by the companies dashboard and future discovery runs.",
+        responses={
+            201: {"description": "Watched company created.", "content": {"application/json": {"example": COMPANY_SUCCESS_EXAMPLE}}},
+            400: {"model": ErrorResponse, "description": "Invalid company payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+        openapi_extra={"requestBody": COMPANY_CREATE_REQUEST_BODY},
+    )
+    async def create_company(request: Request) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        try:
+            payload = await _read_json_body(request)
+            normalized = _normalize_company_watch_payload(payload, require_company_name=True)
+            saved = phase6_upsert_tracked_company_config(patch=normalized)
+            jobs_updated = 0
+            if "tier" in normalized:
+                jobs_updated = phase6_update_company_tier(company_id=saved["company_id"], tier=int(saved["tier"]))
+            profile = phase6_get_company_profile(saved["company_id"], phase6_all_jobs())
+        except ValueError as exc:
+            return _error_response(status_code=400, code="validation_failed", message=str(exc), request_id=request_id)
+        except Exception as exc:  # noqa: BLE001
+            return _error_response(
+                status_code=500,
+                code="workflow_failed",
+                message=f"Company create failed: {exc}",
+                request_id=request_id,
+            )
+
+        return _json_response(
+            201,
+            {"workflow": "workflow_06a_company_watchlist", "jobs_updated": jobs_updated, **(profile or saved)},
+        )
+
+    @app.patch(
+        f"{API_PREFIX}/companies/{{companyId}}",
+        tags=["Companies"],
+        summary="Update watched company",
+        description="Updates tracked company settings such as tier, ATS source, title filters, and connection notes.",
+        responses={
+            200: {"description": "Watched company updated.", "content": {"application/json": {"example": COMPANY_SUCCESS_EXAMPLE}}},
+            400: {"model": ErrorResponse, "description": "Invalid company payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            404: {"model": ErrorResponse, "description": "Company not found."},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+        openapi_extra={"requestBody": COMPANY_PATCH_REQUEST_BODY},
+    )
+    async def patch_company(request: Request, companyId: str) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        current = phase6_get_company_profile(companyId, phase6_all_jobs())
+        if current is None:
+            return _error_response(
+                status_code=404,
+                code="not_found",
+                message=f"Company not found: {companyId}",
+                request_id=request_id,
+            )
+
+        try:
+            payload = await _read_json_body(request)
+            normalized = _normalize_company_watch_payload(payload, require_company_name=False)
+            saved = phase6_upsert_tracked_company_config(company_id=companyId, patch=normalized)
+            jobs_updated = 0
+            if "tier" in normalized:
+                jobs_updated = phase6_update_company_tier(company_id=saved["company_id"], tier=int(saved["tier"]))
+            profile = phase6_get_company_profile(saved["company_id"], phase6_all_jobs())
+        except ValueError as exc:
+            return _error_response(status_code=400, code="validation_failed", message=str(exc), request_id=request_id)
+        except Exception as exc:  # noqa: BLE001
+            return _error_response(
+                status_code=500,
+                code="workflow_failed",
+                message=f"Company update failed: {exc}",
+                request_id=request_id,
+            )
+
+        return _json_response(
+            200,
+            {"workflow": "workflow_06a_company_watchlist", "jobs_updated": jobs_updated, **(profile or saved)},
+        )
+
+    @app.post(
         f"{API_PREFIX}/company-profile-refresh-runs",
         tags=["Companies"],
         summary="Create company profile refresh run",
@@ -2385,6 +2617,85 @@ def create_app() -> FastAPI:
 
         result = phase6_refresh_company_profile(company_id, phase6_all_jobs())
         return _json_response(200, {"workflow": "workflow_06a_company_profile_refresh", **result})
+
+    @app.post(
+        f"{API_PREFIX}/cover-letter-drafts",
+        tags=["Cover Letter Drafts"],
+        summary="Create cover letter draft",
+        description="Generates a tailored cover letter draft from the current resume and one evaluated job.",
+        responses={
+            200: {
+                "description": "Cover letter draft generated.",
+                "content": {"application/json": {"example": COVER_LETTER_DRAFT_SUCCESS_EXAMPLE}},
+            },
+            400: {"model": ErrorResponse, "description": "Invalid draft payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            404: {"model": ErrorResponse, "description": "Job not found."},
+            500: {"model": ErrorResponse, "description": "Draft generation failed."},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+        openapi_extra={"requestBody": COVER_LETTER_DRAFT_REQUEST_BODY},
+    )
+    async def create_cover_letter_draft(request: Request) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        try:
+            payload = await _read_json_body(request)
+        except ValueError as exc:
+            return _error_response(status_code=400, code="invalid_json", message=str(exc), request_id=request_id)
+
+        job_id = str(payload.get("job_id") or "").strip()
+        if not job_id:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message="Missing required field: job_id.",
+                request_id=request_id,
+                details=[{"field": "job_id", "issue": "value is required"}],
+            )
+
+        try:
+            save_to_vault = _normalize_bool(payload.get("save_to_vault", False), field_name="save_to_vault")
+        except ValueError as exc:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message=str(exc),
+                request_id=request_id,
+            )
+
+        settings = payload.get("settings") if isinstance(payload.get("settings"), dict) else None
+        try:
+            result = phase6_generate_cover_letter_draft(
+                job_id=job_id,
+                settings=settings,
+                save_to_vault=save_to_vault,
+            )
+        except FileNotFoundError:
+            return _error_response(
+                status_code=404,
+                code="not_found",
+                message=f"Job not found: {job_id}",
+                request_id=request_id,
+            )
+        except ValueError as exc:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message=str(exc),
+                request_id=request_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return _error_response(
+                status_code=500,
+                code="workflow_failed",
+                message=f"Cover letter draft generation failed: {exc}",
+                request_id=request_id,
+            )
+        return _json_response(200, {"workflow": "workflow_06a_cover_letter_draft", **result})
 
     @app.get(
         f"{API_PREFIX}/llm-settings",
@@ -2479,6 +2790,17 @@ def create_app() -> FastAPI:
                     details=[{"field": "cloud_model", "issue": "value is required"}],
                 )
             normalized["cloud_model"] = model_value
+        if "local_model" in payload:
+            model_value = str(payload["local_model"]).strip()
+            if not model_value:
+                return _error_response(
+                    status_code=400,
+                    code="validation_failed",
+                    message="local_model cannot be empty.",
+                    request_id=request_id,
+                    details=[{"field": "local_model", "issue": "value is required"}],
+                )
+            normalized["local_model"] = model_value
         if "auto_escalate" in payload:
             try:
                 normalized["auto_escalate"] = _normalize_bool(payload["auto_escalate"], field_name="auto_escalate")
@@ -3397,6 +3719,46 @@ def _normalize_bool(value: Any, *, field_name: str = "value") -> bool:
         if normalized in {"0", "false", "no", "off", ""}:
             return False
     raise ValueError(f"{field_name} must be boolean-like.")
+
+
+def _normalize_company_watch_payload(payload: dict[str, Any], *, require_company_name: bool) -> dict[str, Any]:
+    allowed_fields = {"company_name", "tier", "ats", "board_id", "url", "title_filter", "your_connection"}
+    unknown = [field for field in payload.keys() if field not in allowed_fields]
+    if unknown:
+        raise ValueError(f"Unsupported company fields: {', '.join(sorted(unknown))}.")
+
+    normalized: dict[str, Any] = {}
+    if "company_name" in payload:
+        company_name = str(payload.get("company_name") or "").strip()
+        if not company_name:
+            raise ValueError("company_name is required.")
+        normalized["company_name"] = company_name
+    elif require_company_name:
+        raise ValueError("company_name is required.")
+
+    if "tier" in payload:
+        try:
+            tier = int(payload["tier"])
+        except (TypeError, ValueError) as exc:
+            raise ValueError("tier must be an integer between 1 and 3.") from exc
+        if tier not in {1, 2, 3}:
+            raise ValueError("tier must be an integer between 1 and 3.")
+        normalized["tier"] = tier
+
+    for field_name in ("ats", "board_id", "url", "your_connection"):
+        if field_name in payload:
+            normalized[field_name] = str(payload.get(field_name) or "").strip()
+
+    if "ats" in normalized and normalized["ats"]:
+        normalized["ats"] = normalized["ats"].lower()
+
+    if "title_filter" in payload:
+        raw_filters = payload.get("title_filter")
+        if not isinstance(raw_filters, list):
+            raise ValueError("title_filter must be an array of strings.")
+        normalized["title_filter"] = [str(item or "").strip() for item in raw_filters if str(item or "").strip()]
+
+    return normalized
 
 
 def _normalize_optional_positive_int(value: Any) -> int | None:

@@ -12,6 +12,7 @@ from typing import Any
 
 DEFAULT_LLM_SETTINGS: dict[str, Any] = {
     "evaluation_model": "local",
+    "local_model": "llama3.2:3b",
     "cloud_provider": "anthropic",
     "cloud_model": "claude-sonnet-4-5-20250929",
     "auto_escalate": True,

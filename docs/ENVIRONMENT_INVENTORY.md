@@ -1,6 +1,6 @@
 # Recall.local Environment Inventory
 
-Last updated: 2026-03-04
+Last updated: 2026-03-06
 
 ## Decision Snapshot
 
@@ -31,6 +31,7 @@ Last updated: 2026-03-04
 - `recall-mkdocs` container: `0.0.0.0:8100->8000`
 - `recall-ui` container: `0.0.0.0:8170->80` (verified running on ai-lab via `scripts/phase5/run_operator_stack_now.sh up` on 2026-02-26)
 - `recall-daily-dashboard` container: `0.0.0.0:3001->80` (verified running on ai-lab via `docker compose -f docker/docker-compose.yml up -d --build daily-dashboard` on 2026-03-04)
+- `recall-daily-dashboard` HTTP check: `GET/HEAD http://100.116.103.78:3001` -> `200` after Phase 6D deploy validation on 2026-03-06
 
 ## Data and Storage
 
@@ -39,6 +40,16 @@ Last updated: 2026-03-04
 - Artifacts: `/home/jaydreyer/recall-local/data/artifacts`
 - SQLite DB: `/home/jaydreyer/recall-local/data/recall.db`
 - Vault sync state DB (Phase 5C): `/home/jaydreyer/recall-local/data/vault_sync_state.db`
+- Daily full-backup root: `/home/jaydreyer/recall-local/data/artifacts/backups/daily_full`
+- Daily backup schedule on `ai-lab`: `2:15 AM` America/Chicago via cron
+- Daily backup retention: `14` days
+- Daily backup manual verification snapshot: `/home/jaydreyer/recall-local/data/artifacts/backups/daily_full/manual_verify_20260306T2006Z`
+- Daily backup coverage:
+  - logical SQLite + all Qdrant collections export
+  - raw Qdrant Docker volume snapshot
+  - `n8n` SQLite snapshot + archived `n8n/` runtime directory
+  - archived `data/` tree excluding nested backup folders
+  - `docker/.env`, `docker/.env.example`, `docker/docker-compose.yml`, and git revision snapshot
 
 ## Qdrant
 
@@ -47,6 +58,11 @@ Last updated: 2026-03-04
 - Phase 6 collections: `recall_jobs`, `recall_resume`
 - Vector size: `768`
 - Distance metric: cosine
+- Live state (ai-lab, 2026-03-06 after Phase 6D restore):
+  - Phase 6 collections were recreated with `python3 scripts/phase6/setup_collections.py`.
+  - `recall_resume` was reseeded from `/home/jaydreyer/obsidian-vault/career/Jay-Dreyer-Resume.md`.
+  - `recall_jobs` was repopulated from career-page discovery and now contains `539` live jobs.
+  - Production bridge stats returned `high_fit_count=16` after a local evaluation pass with `llama3.2:3b`.
 
 ## LLM Runtime
 

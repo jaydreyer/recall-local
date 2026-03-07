@@ -30,6 +30,20 @@ ALLOWED_CLOUD_PROVIDERS = {"anthropic", "openai", "gemini"}
 ALLOWED_RECOMMENDATION_TYPES = {"course", "project", "video", "certification", "article"}
 ALLOWED_SEVERITY = {"critical", "moderate", "minor"}
 ALLOWED_LOCATION_TYPES = {"remote", "hybrid", "onsite"}
+SCORECARD_FIELDS = (
+    "role_alignment",
+    "technical_alignment",
+    "domain_alignment",
+    "seniority_alignment",
+    "communication_alignment",
+)
+SCORECARD_WEIGHTS = {
+    "role_alignment": 0.32,
+    "technical_alignment": 0.24,
+    "domain_alignment": 0.16,
+    "seniority_alignment": 0.14,
+    "communication_alignment": 0.14,
+}
 
 
 def _now_iso() -> str:
@@ -211,6 +225,12 @@ def evaluate_job(*, job_id: str, settings: dict[str, Any]) -> dict[str, Any]:
         escalated=escalated,
         escalation_reasons=escalation_reasons,
     )
+    evaluation["observation"]["scoring"] = {
+        "version": evaluation.get("scoring_version") or "rubric_v1",
+        "scorecard": evaluation.get("scorecard") or {},
+        "raw_model_fit_score": evaluation.get("raw_model_fit_score"),
+        "computed_fit_score": evaluation.get("fit_score"),
+    }
 
     _store_evaluation(job_id=job_id, evaluation=evaluation)
     return evaluation
@@ -251,14 +271,10 @@ def parse_evaluation(response_text: str) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise MalformedResponseError("Evaluation payload must be a JSON object.")
 
-    required_keys = ["fit_score", "score_rationale", "matching_skills", "gaps"]
+    required_keys = ["score_rationale", "matching_skills", "gaps", "scorecard"]
     for key in required_keys:
         if key not in data:
             raise MalformedResponseError(f"Missing required key: {key}")
-
-    fit_score = _coerce_int(data.get("fit_score"), field="fit_score")
-    if fit_score < 0 or fit_score > 100:
-        raise MalformedResponseError(f"fit_score {fit_score} out of range")
 
     score_rationale = str(data.get("score_rationale") or "").strip()
     if not score_rationale:
@@ -266,9 +282,19 @@ def parse_evaluation(response_text: str) -> dict[str, Any]:
 
     matching_skills = _normalize_matching_skills(data.get("matching_skills"))
     gaps = _normalize_gaps(data.get("gaps"))
+    scorecard = _normalize_scorecard(data.get("scorecard"))
+    fit_score = _compute_fit_score(scorecard=scorecard, matching_skills=matching_skills, gaps=gaps)
+    raw_model_fit_score = None
+    if "fit_score" in data and data.get("fit_score") not in (None, ""):
+        raw_model_fit_score = _coerce_int(data.get("fit_score"), field="fit_score")
+        if raw_model_fit_score < 0 or raw_model_fit_score > 100:
+            raise MalformedResponseError(f"fit_score {raw_model_fit_score} out of range")
 
     return {
         "fit_score": fit_score,
+        "raw_model_fit_score": raw_model_fit_score,
+        "scorecard": scorecard,
+        "scoring_version": "rubric_v1",
         "score_rationale": score_rationale,
         "matching_skills": matching_skills,
         "gaps": gaps,
@@ -281,8 +307,21 @@ def _should_escalate(*, evaluation: dict[str, Any], settings: dict[str, Any]) ->
     return bool(_escalation_reasons(evaluation=evaluation, settings=settings))
 
 
+def _cloud_escalation_available(settings: dict[str, Any]) -> bool:
+    provider = str(settings.get("cloud_provider") or "anthropic").strip().lower()
+    if provider == "anthropic":
+        return bool(os.getenv("ANTHROPIC_API_KEY", "").strip())
+    if provider == "openai":
+        return bool(os.getenv("OPENAI_API_KEY", "").strip())
+    if provider == "gemini":
+        return bool(os.getenv("GEMINI_API_KEY", "").strip())
+    return False
+
+
 def _escalation_reasons(*, evaluation: dict[str, Any], settings: dict[str, Any]) -> list[str]:
     if not bool(settings.get("auto_escalate", False)):
+        return []
+    if not _cloud_escalation_available(settings):
         return []
 
     threshold_gaps = int(settings.get("escalate_threshold_gaps", 2) or 0)
@@ -333,10 +372,15 @@ def _build_observation(
         preference_bucket = "other"
 
     provider_sequence = "local->cloud" if escalated else initial_mode
+    escalation_enabled = (
+        bool(settings.get("auto_escalate", False))
+        and initial_mode == "local"
+        and _cloud_escalation_available(settings)
+    )
     return {
         "provider_sequence": provider_sequence,
         "escalation": {
-            "enabled": bool(settings.get("auto_escalate", False)) and initial_mode == "local",
+            "enabled": escalation_enabled,
             "triggered": escalated,
             "reasons": list(escalation_reasons),
         },
@@ -360,6 +404,9 @@ def _merge_evaluations(*, local_eval: dict[str, Any], cloud_eval: dict[str, Any]
     merged = dict(local_eval)
     for key in (
         "fit_score",
+        "raw_model_fit_score",
+        "scorecard",
+        "scoring_version",
         "score_rationale",
         "matching_skills",
         "gaps",
@@ -385,10 +432,20 @@ def _build_evaluation_prompt(*, job: dict[str, Any], resume_text: str) -> str:
         "(1) a job listing and (2) a candidate resume.\n"
         "Evaluate how well the candidate fits the role. Be critical and honest. "
         "A score of 70+ means the candidate is a strong fit.\n"
+        "Use the full range. 90-100 is only for exceptional fits with minimal ramp. "
+        "80-89 means strong fit with notable but manageable gaps. "
+        "65-79 means plausible fit with meaningful ramp. "
+        "45-64 means stretch. Below 45 means weak fit.\n"
         "Be specific about missing skills and provide practical recommendations.\n\n"
         "Return ONLY valid JSON:\n"
         "{\n"
-        '  "fit_score": <0-100>,\n'
+        '  "scorecard": {\n'
+        '    "role_alignment": <0-5 integer>,\n'
+        '    "technical_alignment": <0-5 integer>,\n'
+        '    "domain_alignment": <0-5 integer>,\n'
+        '    "seniority_alignment": <0-5 integer>,\n'
+        '    "communication_alignment": <0-5 integer>\n'
+        "  },\n"
         '  "score_rationale": "<2-3 sentence summary>",\n'
         '  "matching_skills": [{"skill": "<skill>", "evidence": "<resume evidence>"}],\n'
         '  "gaps": [\n'
@@ -399,7 +456,8 @@ def _build_evaluation_prompt(*, job: dict[str, Any], resume_text: str) -> str:
         "        {\n"
         '          "type": "course|project|video|certification|article",\n'
         '          "title": "<specific suggestion>",\n'
-        '          "source": "<platform or URL>",\n'
+        '          "source": "<platform name>",\n'
+        '          "url": "<direct link if known, otherwise empty string>",\n'
         '          "effort": "<estimated effort>"\n'
         "        }\n"
         "      ]\n"
@@ -408,6 +466,12 @@ def _build_evaluation_prompt(*, job: dict[str, Any], resume_text: str) -> str:
         '  "application_tips": "<1-2 sentences>",\n'
         '  "cover_letter_angle": "<strongest narrative angle>"\n'
         "}\n\n"
+        "Scoring rubric:\n"
+        "- role_alignment: title and core responsibilities match the candidate's background.\n"
+        "- technical_alignment: tools, systems, architecture, and implementation demands match.\n"
+        "- domain_alignment: industry, buyer, or workflow context match.\n"
+        "- seniority_alignment: scope, autonomy, and leadership level match.\n"
+        "- communication_alignment: customer-facing, cross-functional, and storytelling demands match.\n\n"
         "Job listing:\n"
         f"Title: {job.get('title', 'Unknown')}\n"
         f"Company: {job.get('company', 'Unknown')}\n"
@@ -634,6 +698,48 @@ def _normalize_matching_skills(raw: Any) -> list[dict[str, str]]:
     return normalized
 
 
+def _normalize_scorecard(raw: Any) -> dict[str, int]:
+    if not isinstance(raw, dict):
+        raise MalformedResponseError("scorecard must be an object")
+
+    normalized: dict[str, int] = {}
+    for field in SCORECARD_FIELDS:
+        value = _coerce_int(raw.get(field), field=field)
+        if value < 0 or value > 5:
+            raise MalformedResponseError(f"{field} {value} out of range")
+        normalized[field] = value
+    return normalized
+
+
+def _compute_fit_score(
+    *,
+    scorecard: dict[str, int],
+    matching_skills: list[dict[str, str]],
+    gaps: list[dict[str, Any]],
+) -> int:
+    weighted_average = sum(scorecard[field] * SCORECARD_WEIGHTS[field] for field in SCORECARD_FIELDS)
+    base_score = 20 + (weighted_average * 15)
+
+    evidence_bonus = min(
+        sum(1 for item in matching_skills if str(item.get("evidence") or "").strip()),
+        3,
+    )
+
+    penalties = 0.0
+    for gap in gaps:
+        severity = str(gap.get("severity") or "moderate").strip().lower()
+        if severity == "critical":
+            penalties += 10
+        elif severity == "moderate":
+            penalties += 5
+        else:
+            penalties += 2
+
+    gap_penalty = min(penalties, 24)
+    computed = round(base_score + evidence_bonus - gap_penalty)
+    return max(0, min(100, int(computed)))
+
+
 def _normalize_gaps(raw: Any) -> list[dict[str, Any]]:
     if not isinstance(raw, list):
         raise MalformedResponseError("gaps must be a list")
@@ -674,6 +780,7 @@ def _normalize_gaps(raw: Any) -> list[dict[str, Any]]:
                             "type": "article",
                             "title": text,
                             "source": "",
+                            "url": "",
                             "effort": "",
                         }
                     )
@@ -691,6 +798,7 @@ def _normalize_gaps(raw: Any) -> list[dict[str, Any]]:
                     "type": rec_type,
                     "title": title,
                     "source": str(rec.get("source") or "").strip(),
+                    "url": str(rec.get("url") or "").strip(),
                     "effort": str(rec.get("effort") or "").strip(),
                 }
             )
@@ -715,6 +823,9 @@ def _store_evaluation(*, job_id: str, evaluation: dict[str, Any]) -> None:
     payload.update(
         {
             "fit_score": int(evaluation.get("fit_score", -1)),
+            "scorecard": evaluation.get("scorecard") or {},
+            "raw_model_fit_score": evaluation.get("raw_model_fit_score"),
+            "scoring_version": evaluation.get("scoring_version"),
             "score_rationale": str(evaluation.get("score_rationale") or ""),
             "matching_skills": evaluation.get("matching_skills") or [],
             "gaps": evaluation.get("gaps") or [],

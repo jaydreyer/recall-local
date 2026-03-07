@@ -527,6 +527,7 @@ class BridgeApiContractTests(unittest.TestCase):
             "/v1/companies/{companyId}",
             "/v1/company-profile-refresh-runs",
             "/v1/llm-settings",
+            "/v1/cover-letter-drafts",
         }
         forbidden_paths = {
             "/config/auto-tags",
@@ -606,6 +607,20 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(mocked.call_args.kwargs["status"], "new")
         self.assertEqual(mocked.call_args.kwargs["min_score"], -1)
 
+    def test_phase6_jobs_endpoint_accepts_status_all(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        with patch("scripts.phase1.ingest_bridge_api.phase6_list_jobs", return_value={"total": 0, "limit": 50, "offset": 0, "items": []}) as mocked:
+            with build_client(env) as client:
+                response = client.get("/v1/jobs?status=all&limit=5")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["workflow"], "workflow_06a_jobs")
+        self.assertIsNone(mocked.call_args.kwargs["status"])
+
     def test_phase6_llm_settings_patch_persists(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             db_path = os.path.join(temp_dir, "recall.db")
@@ -625,12 +640,155 @@ class BridgeApiContractTests(unittest.TestCase):
 
         self.assertEqual(initial.status_code, 200)
         self.assertEqual(initial.json()["settings"]["evaluation_model"], "local")
+        self.assertEqual(initial.json()["settings"]["local_model"], "llama3.2:3b")
         self.assertEqual(patched.status_code, 200)
         self.assertEqual(patched.json()["settings"]["evaluation_model"], "cloud")
         self.assertEqual(patched.json()["settings"]["cloud_provider"], "openai")
         self.assertFalse(patched.json()["settings"]["auto_escalate"])
         self.assertEqual(after.status_code, 200)
         self.assertEqual(after.json()["settings"]["evaluation_model"], "cloud")
+
+    def test_phase6_llm_settings_patch_accepts_local_model(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = os.path.join(temp_dir, "recall.db")
+            env = {
+                "RECALL_API_KEY": "",
+                "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+                "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+                "RECALL_DB_PATH": db_path,
+            }
+            with build_client(env) as client:
+                patched = client.patch(
+                    "/v1/llm-settings",
+                    json={"evaluation_model": "local", "local_model": "llama3.2:3b"},
+                )
+                after = client.get("/v1/llm-settings")
+
+        self.assertEqual(patched.status_code, 200)
+        self.assertEqual(patched.json()["settings"]["evaluation_model"], "local")
+        self.assertEqual(patched.json()["settings"]["local_model"], "llama3.2:3b")
+        self.assertEqual(after.status_code, 200)
+        self.assertEqual(after.json()["settings"]["local_model"], "llama3.2:3b")
+
+    def test_phase6_companies_create_endpoint_returns_created_profile(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        saved = {
+            "company_id": "airbnb",
+            "company_name": "Airbnb",
+            "tier": 1,
+            "metadata": {"ats": "greenhouse", "board_id": "airbnb"},
+        }
+        profile = {
+            "company_id": "airbnb",
+            "company_name": "Airbnb",
+            "tier": 1,
+            "ats": "greenhouse",
+            "board_id": "airbnb",
+            "jobs_summary": {"highest_fit_score": 92},
+        }
+        with (
+            patch("scripts.phase1.ingest_bridge_api.phase6_upsert_tracked_company_config", return_value=saved) as mock_save,
+            patch("scripts.phase1.ingest_bridge_api.phase6_update_company_tier", return_value=6) as mock_tier,
+            patch("scripts.phase1.ingest_bridge_api.phase6_get_company_profile", return_value=profile),
+            patch("scripts.phase1.ingest_bridge_api.phase6_all_jobs", return_value=[]),
+        ):
+            with build_client(env) as client:
+                response = client.post(
+                    "/v1/companies",
+                    json={
+                        "company_name": "Airbnb",
+                        "tier": 1,
+                        "ats": "greenhouse",
+                        "board_id": "airbnb",
+                        "url": "https://boards-api.greenhouse.io/v1/boards/airbnb/jobs",
+                        "title_filter": ["solutions", "platform"],
+                    },
+                )
+
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["workflow"], "workflow_06a_company_watchlist")
+        self.assertEqual(body["company_id"], "airbnb")
+        self.assertEqual(body["jobs_updated"], 6)
+        self.assertEqual(mock_save.call_args.kwargs["patch"]["company_name"], "Airbnb")
+        self.assertEqual(mock_tier.call_args.kwargs["tier"], 1)
+
+    def test_phase6_companies_patch_endpoint_updates_tier(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        current = {"company_id": "airbnb", "company_name": "Airbnb", "tier": 1}
+        saved = {
+            "company_id": "airbnb",
+            "company_name": "Airbnb",
+            "tier": 2,
+            "metadata": {"ats": "greenhouse", "board_id": "airbnb"},
+        }
+        updated = {
+            "company_id": "airbnb",
+            "company_name": "Airbnb",
+            "tier": 2,
+            "ats": "greenhouse",
+            "board_id": "airbnb",
+        }
+        with (
+            patch("scripts.phase1.ingest_bridge_api.phase6_get_company_profile", side_effect=[current, updated]),
+            patch("scripts.phase1.ingest_bridge_api.phase6_upsert_tracked_company_config", return_value=saved) as mock_save,
+            patch("scripts.phase1.ingest_bridge_api.phase6_update_company_tier", return_value=88) as mock_tier,
+            patch("scripts.phase1.ingest_bridge_api.phase6_all_jobs", return_value=[]),
+        ):
+            with build_client(env) as client:
+                response = client.patch(
+                    "/v1/companies/airbnb",
+                    json={"tier": 2, "your_connection": "Recruiter screen complete."},
+                )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["company_id"], "airbnb")
+        self.assertEqual(body["tier"], 2)
+        self.assertEqual(body["jobs_updated"], 88)
+        self.assertEqual(mock_save.call_args.kwargs["company_id"], "airbnb")
+        self.assertEqual(mock_save.call_args.kwargs["patch"]["tier"], 2)
+        self.assertEqual(mock_tier.call_args.kwargs["company_id"], "airbnb")
+
+    def test_phase6_cover_letter_draft_endpoint_returns_generated_draft(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        fake_result = {
+            "draft_id": "cover_letter_job-1",
+            "job_id": "job-1",
+            "provider": "ollama",
+            "model": "llama3.2:3b",
+            "generated_at": "2026-03-06T16:00:00+00:00",
+            "word_count": 120,
+            "draft": "Dear Hiring Team,\\n\\nI would love to help...",
+            "saved_to_vault": False,
+            "vault_path": None,
+        }
+        with patch("scripts.phase1.ingest_bridge_api.phase6_generate_cover_letter_draft", return_value=fake_result) as mocked:
+            with build_client(env) as client:
+                response = client.post(
+                    "/v1/cover-letter-drafts",
+                    json={"job_id": "job-1", "save_to_vault": False, "settings": {"evaluation_model": "local"}},
+                )
+                invalid = client.post("/v1/cover-letter-drafts", json={})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["workflow"], "workflow_06a_cover_letter_draft")
+        self.assertEqual(response.json()["job_id"], "job-1")
+        self.assertEqual(invalid.status_code, 400)
+        self.assertEqual(mocked.call_args.kwargs["job_id"], "job-1")
+        self.assertFalse(mocked.call_args.kwargs["save_to_vault"])
 
     def test_phase6_resume_endpoint_accepts_markdown_payload(self) -> None:
         env = {

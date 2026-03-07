@@ -19,6 +19,7 @@ import httpx
 from scripts.llm_client import embed
 from scripts.phase1.ingestion_pipeline import qdrant_client_from_env
 from scripts.phase6 import storage
+from scripts.phase6.company_profiler import list_tracked_company_configs
 from scripts.phase6.job_dedup import check_job_duplicate
 from scripts.phase6.setup_collections import COLLECTION_JOBS
 
@@ -138,7 +139,7 @@ def _load_search_config() -> dict[str, Any]:
 
 
 def _load_career_config() -> dict[str, Any]:
-    return _read_json(CAREER_PAGES_CONFIG)
+    return {"companies": list_tracked_company_configs()}
 
 
 def _get_json_setting(*, key: str, default: dict[str, Any]) -> dict[str, Any]:

@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from scripts.phase1.ingestion_pipeline import qdrant_client_from_env
@@ -146,6 +146,8 @@ def list_jobs(
     records = _scroll_jobs(with_vectors=False)
 
     normalized_status = str(status or "").strip().lower()
+    if normalized_status == "all":
+        normalized_status = ""
     normalized_source = str(source or "").strip().lower()
     normalized_title_query = str(title_query or "").strip().lower()
 
@@ -252,11 +254,57 @@ def update_job(*, job_id: str, status: str | None, applied: bool | None, dismiss
     return refreshed
 
 
+def update_company_tier(*, company_id: str, tier: int) -> int:
+    target = _to_slug(company_id)
+    if not target:
+        return 0
+
+    rows = _scroll_jobs(with_vectors=True)
+    if not rows:
+        return 0
+
+    from qdrant_client import models
+
+    client = qdrant_client_from_env(os.getenv("QDRANT_HOST", "http://localhost:6333"))
+    points: list[Any] = []
+    updated = 0
+
+    for item in rows:
+        item_company_id = _to_slug(str(item.get("company_id") or item.get("company") or ""))
+        if item_company_id != target:
+            continue
+
+        payload = dict(item.get("_payload") or {})
+        payload["company_tier"] = int(tier)
+        points.append(
+            models.PointStruct(
+                id=item.get("_qdrant_id"),
+                vector=item.get("_vector"),
+                payload=payload,
+            )
+        )
+        updated += 1
+
+    if not points:
+        return 0
+
+    for start in range(0, len(points), 128):
+        client.upsert(collection_name=COLLECTION_JOBS, points=points[start : start + 128])
+
+    return updated
+
+
 def job_stats() -> dict[str, Any]:
     rows = _scroll_jobs(with_vectors=False)
     by_source: dict[str, int] = {}
     by_day: dict[str, int] = {}
     score_buckets = {"high": 0, "medium": 0, "low": 0, "unscored": 0}
+    score_distribution = {"0-24": 0, "25-49": 0, "50-74": 0, "75-100": 0}
+    total_scored = 0
+    score_sum = 0
+    new_today = 0
+    now = datetime.now(timezone.utc)
+    lookback = now - timedelta(hours=24)
 
     for item in rows:
         source = str(item.get("source") or "unknown")
@@ -266,19 +314,43 @@ def job_stats() -> dict[str, Any]:
         discovered_day = discovered[:10] if len(discovered) >= 10 else "unknown"
         by_day[discovered_day] = by_day.get(discovered_day, 0) + 1
 
+        discovered_at = _parse_datetime(item.get("discovered_at"))
+        if discovered_at is not None:
+            if discovered_at.tzinfo is None:
+                discovered_at = discovered_at.replace(tzinfo=timezone.utc)
+            if discovered_at >= lookback:
+                new_today += 1
+
         score = _parse_int(item.get("fit_score"), default=-1)
         if score >= 75:
             score_buckets["high"] += 1
+            score_distribution["75-100"] += 1
         elif score >= 50:
             score_buckets["medium"] += 1
+            score_distribution["50-74"] += 1
         elif score >= 0:
             score_buckets["low"] += 1
+            if score >= 25:
+                score_distribution["25-49"] += 1
+            else:
+                score_distribution["0-24"] += 1
         else:
             score_buckets["unscored"] += 1
 
+        if score >= 0:
+            total_scored += 1
+            score_sum += score
+
     return {
         "total_jobs": len(rows),
+        "new_today": new_today,
+        "high_fit_count": score_buckets["high"],
+        "average_fit_score": round(score_sum / total_scored, 1) if total_scored else 0.0,
         "score_ranges": score_buckets,
+        "score_distribution": [
+            {"range": key, "count": value}
+            for key, value in score_distribution.items()
+        ],
         "by_source": by_source,
         "by_day": by_day,
     }

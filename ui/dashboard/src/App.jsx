@@ -11,18 +11,21 @@ const TABS = [
   { key: "vault", label: "Vault" },
 ];
 
-const INGEST_CHANNELS = ["bookmarklet", "webhook", "ios-share", "gmail-forward"];
+const INGEST_CHANNELS = ["bookmarklet", "webhook", "ios-share"];
 const SOURCE_TYPES = ["url", "text", "gdoc", "email"];
 const QUERY_MODES = ["default", "job-search"];
 const EVAL_SUITES = ["core", "job-search", "learning", "both"];
 const SIMPLE_INGEST_GROUP_IDS = new Set(["job-search", "reference"]);
+const MANUAL_ACTIVITY_CHANNELS = new Set(["bookmarklet", "webhook", "ios-share"]);
+const ACTIVITY_FETCH_LIMIT = 200;
+const ACTIVITY_DISPLAY_LIMIT = 50;
 const FILE_UPLOAD_ACCEPT = ".pdf,.docx,.txt,.md,.html,.eml";
 const FILE_UPLOAD_EXTENSIONS = new Set([".pdf", ".docx", ".txt", ".md", ".html", ".eml"]);
 const INGEST_QUICK_ACTIONS = [
   { key: "url", icon: "LINK", label: "Capture URL", description: "Fetch and index a web page.", sourceType: "url", channel: "bookmarklet" },
   { key: "text", icon: "TXT", label: "Paste Text", description: "Store raw notes or snippets.", sourceType: "text", channel: "webhook" },
   { key: "gdoc", icon: "DOC", label: "Google Doc", description: "Ingest a doc URL or id.", sourceType: "gdoc", channel: "webhook" },
-  { key: "email", icon: "MAIL", label: "Email Body", description: "Ingest copied email content.", sourceType: "email", channel: "gmail-forward" },
+  { key: "email", icon: "MAIL", label: "Email Body", description: "Paste email text without connecting a mailbox.", sourceType: "email", channel: "webhook" },
 ];
 
 function inferDefaultBaseUrl() {
@@ -37,8 +40,30 @@ function inferDefaultBaseUrl() {
   return `http://${hostname}:8090`;
 }
 
+function inferSiblingAppUrl(port) {
+  if (typeof window === "undefined") {
+    return `http://127.0.0.1:${port}`;
+  }
+  const protocol = window.location.protocol === "https:" ? "https:" : "http:";
+  const hostname = String(window.location.hostname || "127.0.0.1").trim() || "127.0.0.1";
+  return `${protocol}//${hostname}:${port}`;
+}
+
 function formatClock(date) {
   return date.toLocaleTimeString("en-US", { hour12: false });
+}
+
+function formatActivityTimestamp(value) {
+  const parsed = new Date(String(value || "").trim());
+  if (Number.isNaN(parsed.getTime())) {
+    return String(value || "");
+  }
+  return parsed.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function parseCsv(raw) {
@@ -106,6 +131,27 @@ function formatSourceDisplay(sourceValue, parsedUrl) {
     return segments.length > 0 ? segments[segments.length - 1] : raw;
   }
   return raw;
+}
+
+function formatActivitySource(item) {
+  const sourceValue = String(item?.source_ref || "").trim();
+  const parsedUrl = parseUrl(sourceValue);
+  if (parsedUrl) {
+    return formatSourceDisplay(sourceValue, parsedUrl);
+  }
+  if (sourceValue) {
+    return normalizeWhitespace(sourceValue);
+  }
+  const sourceType = String(item?.source_type || "").trim().toLowerCase();
+  if (sourceType === "email") {
+    return "Email body";
+  }
+  return sourceType || "Unknown source";
+}
+
+function isManualActivity(item) {
+  const channel = String(item?.channel || "").trim().toLowerCase();
+  return MANUAL_ACTIVITY_CHANNELS.has(channel);
 }
 
 function formatChunkLabel(chunkId) {
@@ -398,6 +444,7 @@ function App() {
   const [rulesLoading, setRulesLoading] = useState(false);
   const [bridgeHealthy, setBridgeHealthy] = useState(false);
   const [clock, setClock] = useState(() => new Date());
+  const jobsDashboardUrl = inferSiblingAppUrl(3001);
 
   const request = useCallback(
     (path, options = {}) =>
@@ -502,6 +549,9 @@ function App() {
           </div>
         </div>
         <div className="header-status">
+          <a className="header-link-pill" href={jobsDashboardUrl}>
+            Open Jobs Console
+          </a>
           <span className={bridgeHealthy ? "health-pill ok" : "health-pill"}>
             <span className="health-dot" />
             {bridgeHealthy ? "all systems nominal" : "bridge unavailable"}
@@ -1356,6 +1406,7 @@ function QueryPanel({ request, groupOptions }) {
 function ActivityPanel({ request, groupOptions, isActive }) {
   const [items, setItems] = useState([]);
   const [groupFilter, setGroupFilter] = useState("");
+  const [showImports, setShowImports] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -1363,7 +1414,7 @@ function ActivityPanel({ request, groupOptions, isActive }) {
     setLoading(true);
     setError("");
     try {
-      const query = new URLSearchParams({ limit: "50" });
+      const query = new URLSearchParams({ limit: String(ACTIVITY_FETCH_LIMIT) });
       if (groupFilter) {
         query.set("group", groupFilter);
       }
@@ -1386,11 +1437,29 @@ function ActivityPanel({ request, groupOptions, isActive }) {
     return () => clearInterval(timer);
   }, [isActive, loadActivity]);
 
+  const visibleItems = useMemo(() => {
+    const filtered = showImports ? items : items.filter((item) => isManualActivity(item));
+    return filtered.slice(0, ACTIVITY_DISPLAY_LIMIT);
+  }, [items, showImports]);
+
+  const hiddenImportsCount = useMemo(() => {
+    if (showImports) {
+      return 0;
+    }
+    return items.filter((item) => !isManualActivity(item)).length;
+  }, [items, showImports]);
+
   return (
     <section className="card">
       <div className="header-row">
-        <h2>Recent Activity</h2>
+        <div>
+          <h2>Recent Captures</h2>
+          <p className="section-copy">Showing direct captures by default. Toggle imports to inspect low-level automation events.</p>
+        </div>
         <div className="inline-actions">
+          <button type="button" className="secondary" onClick={() => setShowImports((current) => !current)}>
+            {showImports ? "Hide imports" : "Show imports"}
+          </button>
           <select value={groupFilter} onChange={(event) => setGroupFilter(event.target.value)}>
             <option value="">all groups</option>
             {groupOptions.map((entry) => (
@@ -1405,14 +1474,18 @@ function ActivityPanel({ request, groupOptions, isActive }) {
         </div>
       </div>
 
-      {loading && <p className="muted">Loading activity...</p>}
+      {!showImports && hiddenImportsCount > 0 && (
+        <p className="activity-meta">{hiddenImportsCount} automation/import events hidden from this view.</p>
+      )}
+
+      {loading && <p className="muted">Loading captures...</p>}
       {error && <p className="error-text">{error}</p>}
 
       <div className="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>Timestamp</th>
+              <th>Captured</th>
               <th>Source</th>
               <th>Channel</th>
               <th>Group</th>
@@ -1422,17 +1495,17 @@ function ActivityPanel({ request, groupOptions, isActive }) {
             </tr>
           </thead>
           <tbody>
-            {items.length === 0 ? (
+            {visibleItems.length === 0 ? (
               <tr>
                 <td colSpan={7} className="muted">
-                  No activity rows.
+                  {showImports ? "No activity rows in the current window." : "No direct captures in the current window."}
                 </td>
               </tr>
             ) : (
-              items.map((item) => (
+              visibleItems.map((item) => (
                 <tr key={item.ingest_id}>
-                  <td>{item.timestamp}</td>
-                  <td>{item.source_ref || item.source_type}</td>
+                  <td>{formatActivityTimestamp(item.timestamp)}</td>
+                  <td>{formatActivitySource(item)}</td>
                   <td>{item.channel}</td>
                   <td>{item.group}</td>
                   <td>{Array.isArray(item.tags) ? item.tags.join(", ") : ""}</td>

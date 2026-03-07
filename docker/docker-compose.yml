@@ -9,6 +9,8 @@ services:
       - "6334:6334"
     volumes:
       - qdrant-storage:/qdrant/storage
+    networks:
+      - backend
     healthcheck:
       test: ["CMD-SHELL", "bash -lc '</dev/tcp/127.0.0.1/6333'"]
       interval: 10s
@@ -23,6 +25,8 @@ services:
       - "11434:11434"
     volumes:
       - ollama-models:/root/.ollama
+    networks:
+      - backend
     deploy:
       resources:
         reservations:
@@ -37,6 +41,8 @@ services:
       - "5678:5678"
     volumes:
       - ../n8n:/home/node/.n8n
+    networks:
+      - backend
     environment:
       - N8N_SECURE_COOKIE=false
     restart: unless-stopped
@@ -66,6 +72,8 @@ services:
       - DATA_ARTIFACTS=/app/data/artifacts
       - RECALL_DB_PATH=/app/data/recall.db
       - N8N_HOST=http://n8n:5678
+    networks:
+      - backend
     depends_on:
       qdrant:
         condition: service_healthy
@@ -85,6 +93,8 @@ services:
     container_name: recall-ui
     ports:
       - "8170:80"
+    networks:
+      - backend
     depends_on:
       recall-ingest-bridge:
         condition: service_healthy
@@ -97,6 +107,8 @@ services:
     container_name: recall-daily-dashboard
     ports:
       - "${RECALL_DASHBOARD_PORT:-3001}:80"
+    networks:
+      - backend
     depends_on:
       recall-ingest-bridge:
         condition: service_healthy
@@ -112,8 +124,19 @@ services:
     volumes:
       - ../docs:/docs
       - ../data/artifacts:/docs/docs/artifacts:ro
+    networks:
+      - backend
     restart: unless-stopped
 
 volumes:
   qdrant-storage:
+    external: true
+    name: docker_qdrant-storage
   ollama-models:
+    external: true
+    name: docker_ollama-models
+
+networks:
+  backend:
+    external: true
+    name: recall_backend

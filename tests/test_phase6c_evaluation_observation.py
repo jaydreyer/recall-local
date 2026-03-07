@@ -11,6 +11,76 @@ from scripts.phase6 import job_evaluator, job_metadata_extractor, job_repository
 
 
 class Phase6CEvaluatorObservationTests(unittest.TestCase):
+    def test_parse_evaluation_computes_rubric_based_fit_score(self) -> None:
+        parsed = job_evaluator.parse_evaluation(
+            """
+            {
+              "fit_score": 92,
+              "scorecard": {
+                "role_alignment": 5,
+                "technical_alignment": 4,
+                "domain_alignment": 3,
+                "seniority_alignment": 4,
+                "communication_alignment": 5
+              },
+              "score_rationale": "Strong alignment with customer-facing technical work.",
+              "matching_skills": [
+                {"skill": "solution design", "evidence": "Led technical discovery"},
+                {"skill": "api strategy", "evidence": "Led API governance"},
+                {"skill": "enablement", "evidence": "Ran cross-functional launch plans"},
+                {"skill": "stakeholder management", "evidence": ""}
+              ],
+              "gaps": [
+                {
+                  "gap": "Kubernetes",
+                  "severity": "moderate",
+                  "recommendations": []
+                }
+              ]
+            }
+            """
+        )
+
+        self.assertEqual(parsed["fit_score"], 82)
+        self.assertEqual(parsed["raw_model_fit_score"], 92)
+        self.assertEqual(parsed["scoring_version"], "rubric_v1")
+        self.assertEqual(parsed["scorecard"]["technical_alignment"], 4)
+
+    def test_parse_evaluation_preserves_recommendation_urls(self) -> None:
+        parsed = job_evaluator.parse_evaluation(
+            """
+            {
+              "scorecard": {
+                "role_alignment": 4,
+                "technical_alignment": 4,
+                "domain_alignment": 3,
+                "seniority_alignment": 4,
+                "communication_alignment": 4
+              },
+              "score_rationale": "Strong alignment with customer-facing technical work.",
+              "matching_skills": [{"skill": "solution design", "evidence": "Led technical discovery"}],
+              "gaps": [
+                {
+                  "gap": "Kubernetes",
+                  "severity": "moderate",
+                  "recommendations": [
+                    {
+                      "type": "course",
+                      "title": "Kubernetes for Developers",
+                      "source": "KodeKloud",
+                      "url": "https://kodekloud.com/courses/kubernetes-for-developers/",
+                      "effort": "20 hours"
+                    }
+                  ]
+                }
+              ]
+            }
+            """
+        )
+
+        recommendation = parsed["gaps"][0]["recommendations"][0]
+        self.assertEqual(recommendation["url"], "https://kodekloud.com/courses/kubernetes-for-developers/")
+
     def test_parse_with_retry_uses_strict_prompt_after_malformed_json(self) -> None:
         with (
             patch(
@@ -95,6 +165,7 @@ class Phase6CEvaluatorObservationTests(unittest.TestCase):
         }
 
         with (
+            patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}, clear=True),
             patch("scripts.phase6.job_evaluator._load_job_payload", return_value=job_payload),
             patch("scripts.phase6.job_evaluator._load_resume_text", return_value="Resume body"),
             patch("scripts.phase6.job_evaluator._call_ollama", return_value='{"fit_score": 62}'),
@@ -113,9 +184,55 @@ class Phase6CEvaluatorObservationTests(unittest.TestCase):
         self.assertIn("rationale_too_short", observation["escalation"]["reasons"])
         self.assertTrue(observation["location"]["is_remote"])
         self.assertEqual(observation["location"]["preference_bucket"], "remote")
+        self.assertEqual(observation["scoring"]["version"], "rubric_v1")
+        self.assertEqual(observation["scoring"]["computed_fit_score"], 91)
         self.assertEqual(store_mock.call_count, 1)
         persisted = store_mock.call_args.kwargs["evaluation"]
         self.assertIn("observation", persisted)
+
+    def test_evaluate_job_keeps_local_result_when_cloud_escalation_is_unavailable(self) -> None:
+        local_eval = {
+            "fit_score": 79,
+            "score_rationale": "Short rationale",
+            "matching_skills": [{"skill": "api strategy", "evidence": "Led API governance"}],
+            "gaps": [],
+            "application_tips": "Lead with platform storytelling.",
+            "cover_letter_angle": "Bridge technical systems with business adoption.",
+        }
+        job_payload = {
+            "job_id": "job-2",
+            "title": "Platform Lead",
+            "company": "ExampleCo",
+            "company_tier": 1,
+            "location": "Remote - US",
+            "description": "Remote role working with platform teams.",
+            "url": "https://jobs.example.com/2",
+        }
+        settings = {
+            "evaluation_model": "local",
+            "cloud_provider": "anthropic",
+            "auto_escalate": True,
+            "escalate_threshold_gaps": 2,
+            "escalate_threshold_rationale_words": 20,
+        }
+
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch("scripts.phase6.job_evaluator._load_job_payload", return_value=job_payload),
+            patch("scripts.phase6.job_evaluator._load_resume_text", return_value="Resume body"),
+            patch("scripts.phase6.job_evaluator._call_ollama", return_value='{"fit_score": 79}'),
+            patch("scripts.phase6.job_evaluator._call_cloud") as cloud_mock,
+            patch("scripts.phase6.job_evaluator._parse_with_retry", return_value=local_eval),
+            patch("scripts.phase6.job_evaluator._store_evaluation"),
+        ):
+            result = job_evaluator.evaluate_job(job_id="job-2", settings=settings)
+
+        self.assertEqual(result["evaluation_model"], "local")
+        self.assertEqual(result["observation"]["provider_sequence"], "local")
+        self.assertFalse(result["observation"]["escalation"]["enabled"])
+        self.assertFalse(result["observation"]["escalation"]["triggered"])
+        self.assertEqual(result["observation"]["escalation"]["reasons"], [])
+        cloud_mock.assert_not_called()
 
 
 class Phase6CMetadataNormalizationTests(unittest.TestCase):

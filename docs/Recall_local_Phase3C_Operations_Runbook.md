@@ -10,11 +10,13 @@ Purpose: provide deterministic restart, preflight, and backup/restore procedures
    - `/Users/jaydreyer/projects/recall-local/scripts/phase3/run_deterministic_restart_now.sh`
 3. Backup wrapper (SQLite + Qdrant export):
    - `/Users/jaydreyer/projects/recall-local/scripts/phase3/run_backup_now.sh`
-4. Restore wrapper:
+4. Daily full-backup wrapper:
+   - `/Users/jaydreyer/projects/recall-local/scripts/phase3/run_daily_full_backup.sh`
+5. Restore wrapper:
    - `/Users/jaydreyer/projects/recall-local/scripts/phase3/run_restore_now.sh`
-5. Shared backup/restore utility:
+6. Shared backup/restore utility:
    - `/Users/jaydreyer/projects/recall-local/scripts/phase3/backup_restore_state.py`
-6. Portfolio bundle builder:
+7. Portfolio bundle builder:
    - `/Users/jaydreyer/projects/recall-local/scripts/phase3/build_portfolio_bundle_now.sh`
    - `/Users/jaydreyer/projects/recall-local/scripts/phase3/build_portfolio_bundle.py`
 
@@ -83,6 +85,39 @@ Each backup contains:
 1. `sqlite/recall.db`
 2. `qdrant/points.jsonl`
 3. `manifest.json`
+
+## Daily full backup snapshot
+
+Default output root:
+
+- `/home/jaydreyer/recall-local/data/artifacts/backups/daily_full/`
+
+Run on demand:
+
+```bash
+/home/jaydreyer/recall-local/scripts/phase3/run_daily_full_backup.sh
+```
+
+Daily ai-lab cron schedule:
+
+```cron
+CRON_TZ=America/Chicago
+15 2 * * * cd /home/jaydreyer/recall-local && PYTHON_BIN=/home/jaydreyer/recall-local/.venv/bin/python /bin/bash scripts/phase3/run_daily_full_backup.sh >> /home/jaydreyer/recall-local/data/artifacts/backups/daily_full/cron.log 2>&1
+```
+
+Coverage:
+
+1. logical SQLite + all-Qdrant export under `state/`
+2. consistent `n8n` SQLite snapshot (`runtime/n8n-database.sqlite`)
+3. archived `n8n` runtime directory excluding the live SQLite files
+4. archived `data/` tree excluding nested backup folders
+5. raw `recall_qdrant-storage` Docker volume tarball
+6. compose/env config bundle plus git revision snapshot
+
+Retention:
+
+- default `14` days via `RECALL_DAILY_BACKUP_RETENTION_DAYS`
+- current backup is also linked at `/home/jaydreyer/recall-local/data/artifacts/backups/daily_full/latest`
 
 ## Restore snapshot
 

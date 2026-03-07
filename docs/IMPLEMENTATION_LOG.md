@@ -1,5 +1,116 @@
 # Recall.local Implementation Log
 
+## 2026-03-06 - Daily full-backup hardening after Qdrant recovery
+
+### What was executed
+
+- Investigated the missing live `recall_docs` / `newsletter_stories` collections on `ai-lab` and confirmed they were absent from the running Qdrant storage directory, not just from UI/API listing.
+- Restored both collections from `/home/jaydreyer/recall-local/backups/2026-03-02-164642/qdrant-volume.tgz` after taking a fresh safety backup of the current live Qdrant volume:
+  - `/home/jaydreyer/recall-local/backups/20260306T200044Z-pre-restore/qdrant-volume.tgz`
+- Added a new full-backup wrapper:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase3/run_daily_full_backup.sh`
+- Expanded operator documentation to define the daily full-backup path, schedule, retention, and artifact coverage:
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase3C_Operations_Runbook.md`
+  - `/Users/jaydreyer/projects/recall-local/docs/ENVIRONMENT_INVENTORY.md`
+- Replaced the previous `RECALL_DAILY_ALL_COLLECTIONS_BACKUP` cron block on `ai-lab` with `RECALL_DAILY_FULL_BACKUP`:
+  - schedule: `2:15 AM` America/Chicago
+  - command: `scripts/phase3/run_daily_full_backup.sh`
+- Executed a manual verification backup on `ai-lab`:
+  - `/home/jaydreyer/recall-local/data/artifacts/backups/daily_full/manual_verify_20260306T2006Z`
+
+### Validation
+
+- Restored live collection counts on `ai-lab`:
+  - `recall_docs=1739`
+  - `newsletter_stories=39`
+  - `recall_jobs=539`
+  - `recall_resume=10`
+- Verified `recall_docs` payload retrieval after restore with a direct Qdrant scroll request.
+- Verified the new daily full-backup wrapper end to end:
+  - logical export completed for all four live Qdrant collections
+  - runtime artifacts written: `n8n-database.sqlite`, `n8n-dir.tgz`, `data.tgz`, `qdrant-volume.tgz`, `compose-config.tgz`
+  - resulting manual verification snapshot size: `535M`
+
+### Results
+
+- The live knowledge collections are back on `ai-lab`.
+- Backup coverage is now defined to include not only logical SQLite/Qdrant exports, but also raw Qdrant volume state, `n8n` runtime state, `data/` contents, and deployment config.
+- Daily full backups are now scheduled on the live host rather than only the narrower all-collections export.
+
+## 2026-03-06 - Phase 6D dashboard implementation + ai-lab deploy validation
+
+### What was executed
+
+- Implemented the Phase 6D dashboard rebuild in `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard`:
+  - replaced the Phase 6A placeholder app with real job, company, gap, settings, and cover-letter flows
+  - added componentized React structure:
+    - `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/JobHuntPanel.jsx`
+    - `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/JobCard.jsx`
+    - `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/JobDetail.jsx`
+    - `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/SkillGapRadar.jsx`
+    - `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/ScoreDistribution.jsx`
+    - `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/StatsBar.jsx`
+    - `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/Filters.jsx`
+    - `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/CompanyProfile.jsx`
+    - `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/CompanyList.jsx`
+    - `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/SettingsPanel.jsx`
+    - `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/CoverLetterDraft.jsx`
+    - `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/FutureWidgetSlot.jsx`
+  - added data hooks:
+    - `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/hooks/useJobs.js`
+    - `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/hooks/useCompanies.js`
+    - `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/hooks/useSettings.js`
+  - added Atelier Ops theme styling in `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/styles/theme.css`
+  - changed dashboard API wiring to same-origin `/v1` calls with Vite dev proxy + nginx reverse proxy:
+    - `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/api.js`
+    - `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/vite.config.js`
+    - `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/nginx.conf`
+- Completed the backend/API support needed for the new UI:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py`
+    - added `POST /v1/cover-letter-drafts`
+    - widened `/v1/job-stats` payload with `new_today`, `high_fit_count`, `average_fit_score`, and score-distribution buckets
+    - allowed `GET /v1/jobs?status=all`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/cover_letter_drafter.py`
+    - new service to draft cover letters from `recall_resume` + evaluated job context
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/company_profiler.py`
+    - upgraded company profile payloads for list/detail dashboard views
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/job_repository.py`
+    - widened stats support for dashboard metrics
+- Added contract coverage for the new API surface in `/Users/jaydreyer/projects/recall-local/tests/test_bridge_api_contract.py`.
+- Local validation:
+  - `python3 -m py_compile scripts/phase1/ingest_bridge_api.py scripts/phase6/company_profiler.py scripts/phase6/job_repository.py scripts/phase6/cover_letter_drafter.py`
+  - `python3 -m pytest -q tests/test_bridge_api_contract.py tests/test_phase6c_evaluation_observation.py` -> `36 passed`
+  - `npm install && npm run build` in `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard`
+- Synced updated files from Mac to ai-lab with `rsync`, then performed required remote content spot-checks before any restart or curl verification.
+- ai-lab deploy actions:
+  - rebuilt `daily-dashboard` via `docker compose -f docker/docker-compose.yml up -d --build daily-dashboard`
+  - restarted/recreated `recall-ingest-bridge` as part of the compose run / restart cycle
+
+### Validation
+
+- ai-lab remote content spot-checks confirmed:
+  - `cover-letter-drafts` route and related test cases were present in `/home/jaydreyer/recall-local/scripts/phase1/ingest_bridge_api.py` and `/home/jaydreyer/recall-local/tests/test_bridge_api_contract.py`
+  - `JobHuntPanel` and `useJobs` were present in `/home/jaydreyer/recall-local/ui/daily-dashboard/src/...`
+- Runtime probes after deploy:
+  - `GET http://100.116.103.78:8090/v1/healthz` -> `200 {"status":"ok"}`
+  - `HEAD http://100.116.103.78:3001` -> `200`
+- Live data restore on ai-lab after deploy validation exposed empty Phase 6 collections:
+  - `GET http://localhost:6333/collections` initially returned an empty collections list.
+  - Recreated Phase 6 collections with `python3 scripts/phase6/setup_collections.py` on ai-lab.
+  - Re-pulled missing Ollama models inside the container: `nomic-embed-text` and `llama3.2:3b`.
+  - Re-ingested the live resume from `/home/jaydreyer/obsidian-vault/career/Jay-Dreyer-Resume.md` into `recall_resume`.
+  - Re-ran job discovery against career pages, restoring `539` live jobs into `recall_jobs`.
+  - Executed a local evaluation batch for 20 selected jobs through `POST /v1/job-evaluation-runs` with `llama3.2:3b`.
+- Final live API checks on 2026-03-06:
+  - `GET http://localhost:8090/v1/job-stats` -> `total_jobs=539`, `high_fit_count=16`, `average_fit_score=90.4`
+  - `GET http://localhost:8090/v1/jobs?status=evaluated&sort=fit_score&order=desc&limit=5` returned evaluated jobs with persisted fit scores and recommendation payloads
+
+### Results
+
+- Phase 6D code is implemented locally, validated in tests/build, synced to ai-lab, and deployed to the running dashboard and bridge services.
+- The live dashboard is no longer blocked by empty Qdrant state on ai-lab; jobs and resume data were restored successfully and high-fit evaluated jobs are now visible through the production API.
+- Remaining live follow-up: the first 20-job local evaluation batch completed with `16` successful evaluations and `4` failed items, so additional cleanup or reruns may still be needed for full coverage.
+
 ## 2026-03-06 - Phase 6B -> 6C notification handoff fix (ai-lab)
 
 ### What was executed
