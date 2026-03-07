@@ -12,10 +12,10 @@
     {
       "name": "OpenAI",
       "tier": 2,
-      "ats": "greenhouse",
+      "ats": "ashby",
       "board_id": "openai",
-      "url": "https://boards-api.greenhouse.io/v1/boards/openai/jobs",
-      "title_filter": ["solutions", "engineer", "architect", "sales", "deployment", "applied ai", "customer"],
+      "url": "https://openai.com/careers/search/",
+      "title_filter": ["deployment", "solutions engineer", "solution engineer", "forward deployed", "architect", "pre-sales"],
       "your_connection": "ChatGPT champion at Gap. Built custom GPTs replacing enterprise spend."
     },
     {

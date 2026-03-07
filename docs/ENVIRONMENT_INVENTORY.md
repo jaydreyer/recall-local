@@ -1,6 +1,6 @@
 # Recall.local Environment Inventory
 
-Last updated: 2026-03-06
+Last updated: 2026-03-07
 
 ## Decision Snapshot
 
@@ -61,8 +61,31 @@ Last updated: 2026-03-06
 - Live state (ai-lab, 2026-03-06 after Phase 6D restore):
   - Phase 6 collections were recreated with `python3 scripts/phase6/setup_collections.py`.
   - `recall_resume` was reseeded from `/home/jaydreyer/obsidian-vault/career/Jay-Dreyer-Resume.md`.
-  - `recall_jobs` was repopulated from career-page discovery and now contains `539` live jobs.
+  - `recall_jobs` was repopulated from career-page discovery and later expanded with additional live discovery passes.
+  - Current live bridge stats on 2026-03-07:
+    - `total_jobs=984`
+    - `career_page=881`
+    - `jobspy=100`
+    - `serpapi=2`
+    - `chrome_extension=1`
   - Production bridge stats returned `high_fit_count=16` after a local evaluation pass with `llama3.2:3b`.
+
+## OpenAI Career Source
+
+- OpenAI tracking now uses:
+  - ATS: `ashby`
+  - Company board id: `openai`
+  - Human-facing careers URL: `https://openai.com/careers/search/`
+  - Data source URL: `https://api.ashbyhq.com/posting-api/job-board/openai`
+- Live automation alignment on `ai-lab`:
+  - bridge discovery runner supports `ashby`
+  - bridge default `career_page` source limit is `25`
+  - active n8n workflow `Recall Phase6B - Career Page Monitor (Traditional Import)` (`eE5wQFqV9oiSHKaL`) is published with the same OpenAI Ashby logic
+- Current live OpenAI state on 2026-03-07:
+  - `job_count=97`
+  - source mix: `jobs.ashbyhq.com/openai/...` plus one preserved LinkedIn posting
+  - operator backup of the pre-reseed OpenAI slice:
+    - `/home/jaydreyer/recall-local/backups/20260307T-openai-reseed/openai_jobs.pre-reseed.json`
 
 ## LLM Runtime
 

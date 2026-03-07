@@ -20,7 +20,7 @@ return [
     json: {
       companies: [
         { name: "Anthropic", ats: "greenhouse", board_id: "anthropic", tier: 2, title_filter: ["solutions", "engineer", "architect", "technical"] },
-        { name: "OpenAI", ats: "greenhouse", board_id: "openai", tier: 2, title_filter: ["solutions", "engineer", "architect", "sales"] },
+        { name: "OpenAI", ats: "ashby", board_id: "openai", tier: 2, title_filter: ["deployment", "solutions engineer", "solution engineer", "forward deployed", "architect", "pre-sales"] },
         { name: "Postman", ats: "greenhouse", board_id: "postman", tier: 1, title_filter: ["solutions", "engineer", "architect", "technical"] }
       ]
     }
@@ -40,6 +40,7 @@ return [
 - Expression: `={{ $json.ats }}`
 - Cases:
 - `greenhouse`
+- `ashby`
 - `lever`
 - default (`workday` / unsupported)
 
@@ -65,7 +66,17 @@ return [
 ={{ `https://api.lever.co/v0/postings/${$json.board_id}?mode=json` }}
 ```
 
-## Node 5C: Workday/Other Placeholder (default case)
+## Node 5C: Ashby API (case: ashby)
+
+- Node type: `HTTP Request`
+- Method: `GET`
+- URL expression:
+
+```javascript
+={{ `https://api.ashbyhq.com/posting-api/job-board/${$json.board_id}` }}
+```
+
+## Node 5D: Workday/Other Placeholder (default case)
 
 - Node type: `Code`
 - Code:
@@ -136,6 +147,34 @@ const jobs = sourceJobs
 return [{ json: { company: company.name, jobs } }];
 ```
 
+## Node 6C: Normalize Ashby Jobs
+
+- Node type: `Code`
+- Code:
+
+```javascript
+const company = $items("Split In Batches", 0, 0).json;
+const filters = (company.title_filter || []).map(v => String(v).toLowerCase());
+const sourceJobs = Array.isArray($json.jobs) ? $json.jobs : [];
+const jobs = sourceJobs
+  .filter(j => {
+    const title = String(j.title || "").toLowerCase();
+    return filters.length === 0 || filters.some(token => title.includes(token));
+  })
+  .map(j => ({
+    title: j.title,
+    company: company.name,
+    location: j.location || "Unknown",
+    url: j.jobUrl || j.applyUrl,
+    description: j.descriptionPlain || j.descriptionHtml || "",
+    source: "career_page",
+    search_query: `${company.name} careers`,
+    company_tier: company.tier,
+    date_posted: j.publishedAt || null
+  }));
+return [{ json: { company: company.name, jobs } }];
+```
+
 ## Node 7: Wait (Rate Limit)
 
 - Node type: `Wait`
@@ -194,6 +233,6 @@ return [{
 
 ## Quick test
 
-1. Run manually with 2-3 Greenhouse companies.
+1. Run manually with 2-3 companies, including the OpenAI Ashby board.
 2. Confirm Node 8 returns `new_job_ids`.
 3. Confirm high-fit matches produce `notifications_sent > 0` and arrive in Telegram.

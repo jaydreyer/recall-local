@@ -28,7 +28,7 @@ JOB_SEARCH_CONFIG = ROOT / "config" / "job_search.json"
 CAREER_PAGES_CONFIG = ROOT / "config" / "career_pages.json"
 
 DEFAULT_SOURCE_ORDER = ["jobspy", "adzuna", "serpapi"]
-DEFAULT_SOURCE_LIMITS = {"jobspy": 2, "adzuna": 2, "serpapi": 1, "career_page": 3}
+DEFAULT_SOURCE_LIMITS = {"jobspy": 2, "adzuna": 2, "serpapi": 1, "career_page": 25}
 DEFAULT_QUERY_BATCH_SIZE = 4
 DEFAULT_MAX_DAYS_OLD = 7
 DEFAULT_DELAY_SECONDS = 2.0
@@ -613,6 +613,35 @@ def _discover_career_pages(
                             search_query=f"{name} careers",
                             company_tier=tier,
                             date_posted=_to_iso(job.get("updated_at")),
+                        )
+                    )
+            elif ats == "ashby":
+                board_id = _norm(company.get("board_id"))
+                if not board_id:
+                    raise ValueError(f"missing board_id for {name}")
+                response = client.get(f"https://api.ashbyhq.com/posting-api/job-board/{board_id}")
+                response.raise_for_status()
+                payload = response.json()
+                jobs = payload.get("jobs") if isinstance(payload, dict) else []
+                if not isinstance(jobs, list):
+                    jobs = []
+                for job in jobs:
+                    if not isinstance(job, dict):
+                        continue
+                    title = _norm(job.get("title"))
+                    if not _title_matches_filters(title, title_filter):
+                        continue
+                    discovered.append(
+                        _normalize_job_payload(
+                            title=title,
+                            company=name,
+                            location=_norm(job.get("location")),
+                            url=_norm(job.get("jobUrl") or job.get("applyUrl")),
+                            description=_norm(job.get("descriptionPlain")) or _clean_html(job.get("descriptionHtml")),
+                            source="career_page",
+                            search_query=f"{name} careers",
+                            company_tier=tier,
+                            date_posted=_to_iso(job.get("publishedAt")),
                         )
                     )
             elif ats == "lever":

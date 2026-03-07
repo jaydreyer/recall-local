@@ -1,5 +1,74 @@
 # Recall.local Implementation Log
 
+## 2026-03-07 - OpenAI careers automation migrated to Ashby (ai-lab)
+
+### What was executed
+
+- Investigated why `OpenAI` jobs were not arriving automatically in the Phase 6 board even though the company was tracked.
+- Verified the old source was stale:
+  - `config/career_pages.json` still pointed OpenAI at the deprecated Greenhouse board.
+  - the live n8n workflow `Recall Phase6B - Career Page Monitor (Traditional Import)` also still hard-coded OpenAI as `greenhouse`.
+- Confirmed the current official OpenAI careers surface is the Ashby board behind:
+  - `https://openai.com/careers/search/`
+  - `https://api.ashbyhq.com/posting-api/job-board/openai`
+- Extended bridge-side career-page discovery in `/Users/jaydreyer/projects/recall-local/scripts/phase6/job_discovery_runner.py`:
+  - added `ashby` board support
+  - widened the bridge default `career_page` source limit from `3` to `25` so OpenAI is not silently skipped by alphabetical company ordering
+- Updated tracked-company config in `/Users/jaydreyer/projects/recall-local/config/career_pages.json`:
+  - OpenAI `ats: ashby`
+  - OpenAI `url: https://openai.com/careers/search/`
+  - narrowed OpenAI title filters to the intended customer-facing / deployment slice:
+    - `deployment`
+    - `solutions engineer`
+    - `solution engineer`
+    - `forward deployed`
+    - `architect`
+    - `pre-sales`
+- Added regression coverage in `/Users/jaydreyer/projects/recall-local/tests/test_phase6b_job_discovery_runner.py` for Ashby board discovery + payload normalization.
+- Updated the Phase 6B workflow artifacts and runbook to match the new OpenAI source:
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6b_career_page_monitor_import.workflow.json`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6b_career_page_monitor_traditional_import.workflow.json`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6b_career_page_monitor_traditional_active_import.workflow.json`
+  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6/workflow2_career_pages.md`
+- Synced all changes from Mac to `ai-lab`, spot-checked the remote files, restarted `recall-ingest-bridge`, imported/published the updated live Workflow 2, and restarted `n8n`.
+- Backed up the over-broad OpenAI live job slice created during validation to:
+  - `/home/jaydreyer/recall-local/backups/20260307T-openai-reseed/openai_jobs.pre-reseed.json`
+- Re-seeded OpenAI jobs on `ai-lab` by:
+  - deleting the noisy OpenAI slice from `recall_jobs`
+  - re-ingesting the filtered Ashby roles
+  - preserving the manually added LinkedIn `AI Deployment Engineer` post in the final seeded set
+
+### Validation
+
+- Local validation:
+  - `python3 -m unittest tests/test_phase6b_job_discovery_runner.py` -> `OK`
+  - `python3 -m py_compile scripts/phase6/job_discovery_runner.py`
+- Live bridge validation after sync/restart:
+  - `GET http://127.0.0.1:8090/v1/healthz` -> `200 {"status":"ok"}`
+- Verified direct OpenAI Ashby discovery on `ai-lab`:
+  - `341` matches with the first broad Ashby port, confirming source reachability
+  - `96` matches after the title-filter tightening
+- Verified live n8n Workflow 2 is active after re-import:
+  - workflow id: `eE5wQFqV9oiSHKaL`
+  - startup logs show `Recall Phase6B - Career Page Monitor (Traditional Import)` active
+  - live workflow node payload contains `deployment`, `forward deployed`, and `solution engineer` filter terms
+- Verified live company/profile result after the OpenAI reseed:
+  - `GET http://127.0.0.1:8090/v1/companies/openai`
+  - `job_count=97`
+  - `ats=ashby`
+  - `url=https://openai.com/careers/search/`
+  - sample stored jobs now resolve to `https://jobs.ashbyhq.com/openai/...` plus the preserved LinkedIn role
+- Verified overall live stats after the updated discovery state:
+  - `GET http://127.0.0.1:8090/v1/job-stats`
+  - `total_jobs=984`
+  - `by_source.career_page=881`
+
+### Results
+
+- OpenAI job discovery is now wired to the current official careers source instead of the dead Greenhouse board.
+- The bridge-side discovery path will now reach OpenAI by default, and the live n8n career-page monitor is aligned to the same Ashby source.
+- The live OpenAI company view is no longer manual-only; it now contains a curated Ashby-backed role set plus the saved LinkedIn posting.
+
 ## 2026-03-06 - Daily full-backup hardening after Qdrant recovery
 
 ### What was executed
