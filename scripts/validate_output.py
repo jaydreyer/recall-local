@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import re
 import sys
@@ -11,6 +12,7 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 JSON_BLOCK_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL | re.IGNORECASE)
+BARE_KEY_RE = re.compile(r'([{,]\s*)([A-Za-z_][A-Za-z0-9_]*)(\s*:)')
 
 
 @dataclass
@@ -26,6 +28,9 @@ def validate_rag_output(
     valid_citation_pairs: set[tuple[str, str]],
     require_confidence: bool = True,
     require_assumptions: bool = True,
+    min_citation_count: int | None = None,
+    min_distinct_doc_count: int | None = None,
+    min_bullet_count: int | None = None,
 ) -> ValidationResult:
     errors: list[str] = []
 
@@ -76,6 +81,22 @@ def validate_rag_output(
             errors.append("Field 'assumptions' must contain only strings.")
 
     parsed["citations"] = _dedupe_citations(normalized_citations)
+    if min_citation_count is not None and len(parsed["citations"]) < min_citation_count:
+        errors.append(
+            f"Field 'citations' must contain at least {min_citation_count} valid citations."
+        )
+    if min_distinct_doc_count is not None:
+        distinct_doc_count = len({citation["doc_id"] for citation in parsed["citations"]})
+        if distinct_doc_count < min_distinct_doc_count:
+            errors.append(
+                f"Field 'citations' must reference at least {min_distinct_doc_count} distinct documents."
+            )
+    if min_bullet_count is not None:
+        bullet_count = _count_bullets(str(parsed.get("answer", "")))
+        if bullet_count < min_bullet_count:
+            errors.append(
+                f"Field 'answer' must contain at least {min_bullet_count} bullet lines."
+            )
     return ValidationResult(valid=not errors, errors=errors, parsed_response=parsed)
 
 
@@ -186,17 +207,46 @@ def _parse_relaxed_json(candidate: str) -> Any:
         try:
             return json.loads(fence_match.group(1).strip())
         except json.JSONDecodeError:
-            pass
+            repaired = _repair_json_like_object(fence_match.group(1).strip())
+            if repaired is not None:
+                return repaired
 
     first_brace = candidate.find("{")
     last_brace = candidate.rfind("}")
     if first_brace != -1 and last_brace > first_brace:
+        json_candidate = candidate[first_brace : last_brace + 1]
         try:
-            return json.loads(candidate[first_brace : last_brace + 1])
+            return json.loads(json_candidate)
         except json.JSONDecodeError as exc:
+            repaired = _repair_json_like_object(json_candidate)
+            if repaired is not None:
+                return repaired
             raise ValueError(f"Model response is not valid JSON: {exc}") from exc
 
     raise ValueError("Model response is not valid JSON.")
+
+
+def _repair_json_like_object(candidate: str) -> Any | None:
+    repaired = BARE_KEY_RE.sub(r'\1"\2"\3', candidate)
+    try:
+        return json.loads(repaired)
+    except json.JSONDecodeError:
+        python_like = repaired
+        python_like = re.sub(r"\btrue\b", "True", python_like, flags=re.IGNORECASE)
+        python_like = re.sub(r"\bfalse\b", "False", python_like, flags=re.IGNORECASE)
+        python_like = re.sub(r"\bnull\b", "None", python_like, flags=re.IGNORECASE)
+        try:
+            return ast.literal_eval(python_like)
+        except (SyntaxError, ValueError):
+            return None
+
+
+def _count_bullets(answer: str) -> int:
+    return sum(
+        1
+        for line in answer.splitlines()
+        if line.lstrip().startswith(("-", "*", "•"))
+    )
 
 
 def parse_args() -> argparse.Namespace:

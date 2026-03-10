@@ -1,0 +1,113 @@
+[
+  {
+    "case_id": "doc-context-engineering-summary",
+    "category": "specific_document",
+    "question": "Summarize the article \"The New Skill in AI is Not Prompting, It's Context Engineering\" for me. Give me highlights as bullet points.",
+    "expected_title_contains": ["Context Engineering"],
+    "expected_source_contains": ["philschmid.de/context-engineering"],
+    "required_terms": ["context engineering", "prompt", "context"],
+    "min_bullet_count": 4,
+    "min_citation_count": 2,
+    "min_answer_chars": 250,
+    "max_latency_ms": 45000
+  },
+  {
+    "case_id": "doc-vector-embeddings-summary",
+    "category": "specific_document",
+    "question": "Summarize the document \"Vector Embeddings Guide\" as a practical bulleted cheat sheet.",
+    "expected_title_contains": ["Vector Embeddings Guide"],
+    "expected_source_contains": ["vector-embeddings-guide.pdf"],
+    "required_terms": ["embedding", "vector", "retrieval"],
+    "filter_tags": ["learning", "genai-docs"],
+    "filter_tag_mode": "all",
+    "min_bullet_count": 4,
+    "min_citation_count": 2,
+    "min_answer_chars": 220,
+    "max_latency_ms": 45000
+  },
+  {
+    "case_id": "doc-rag-flow-summary",
+    "category": "specific_document",
+    "question": "Summarize the document \"Advanced RAG Decision Flow Chart\" and tell me the key decision points as bullets.",
+    "expected_title_contains": ["Advanced RAG Decision Flow Chart"],
+    "expected_source_contains": ["advance-rag-decision-flow-chart.pdf"],
+    "required_terms": ["rag", "retrieval", "decision"],
+    "filter_tags": ["learning", "genai-docs"],
+    "filter_tag_mode": "all",
+    "min_bullet_count": 4,
+    "min_citation_count": 2,
+    "min_answer_chars": 220,
+    "max_latency_ms": 45000
+  },
+  {
+    "case_id": "synth-prompt-vs-context",
+    "category": "multi_document_synthesis",
+    "question": "How is prompt engineering different than context engineering? Give examples, if possible.",
+    "expected_source_contains": [
+      "philschmid.de/context-engineering",
+      "platform.claude.com/docs/en/build-with-claude/prompt-engineering"
+    ],
+    "required_terms": ["prompt engineering", "context engineering", "example"],
+    "min_citation_count": 2,
+    "min_distinct_doc_count": 2,
+    "min_answer_chars": 260,
+    "max_latency_ms": 45000
+  },
+  {
+    "case_id": "synth-embeddings-vs-vectordb",
+    "category": "multi_document_synthesis",
+    "question": "Compare the \"Vector Embeddings Guide\" with the \"LLM Embeddings Vector DB Comparison Guide\". When should I optimize the embedding model versus the vector database?",
+    "expected_title_contains": [
+      "Vector Embeddings Guide",
+      "LLM Embeddings Vector DB Comparison Guide"
+    ],
+    "required_terms": ["embedding", "vector database", "tradeoff"],
+    "filter_tags": ["learning", "genai-docs"],
+    "filter_tag_mode": "all",
+    "min_citation_count": 2,
+    "min_distinct_doc_count": 2,
+    "min_answer_chars": 260,
+    "max_latency_ms": 45000
+  },
+  {
+    "case_id": "synth-latency-and-rag",
+    "category": "multi_document_synthesis",
+    "question": "What are practical ways to reduce latency in multi-agent systems, and what tradeoffs should I expect in RAG design?",
+    "expected_title_contains": [
+      "Handling Latency in Multi-Agentic Systems",
+      "Advanced RAG Decision Flow Chart"
+    ],
+    "required_terms": ["latency", "tradeoff", "rag"],
+    "filter_tags": ["learning", "genai-docs"],
+    "filter_tag_mode": "all",
+    "min_citation_count": 2,
+    "min_distinct_doc_count": 2,
+    "min_answer_chars": 260,
+    "max_latency_ms": 45000
+  },
+  {
+    "case_id": "targeted-article-question",
+    "category": "source_discipline",
+    "question": "According to the article \"The New Skill in AI is Not Prompting, It's Context Engineering\", what is the main bottleneck in building useful LLM systems?",
+    "expected_title_contains": ["Context Engineering"],
+    "expected_source_contains": ["philschmid.de/context-engineering"],
+    "required_terms": ["context", "system", "llm"],
+    "min_citation_count": 1,
+    "min_answer_chars": 140,
+    "max_latency_ms": 45000
+  },
+  {
+    "case_id": "abstain-private-api-key",
+    "category": "source_discipline",
+    "question": "What is the exact private API key currently configured for the production LLM provider?",
+    "expect_unanswerable": true,
+    "max_latency_ms": 45000
+  },
+  {
+    "case_id": "abstain-confidential-outage",
+    "category": "source_discipline",
+    "question": "What exact day and time did the most recent confidential enterprise outage occur?",
+    "expect_unanswerable": true,
+    "max_latency_ms": 45000
+  }
+]

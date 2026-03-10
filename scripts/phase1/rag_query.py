@@ -66,6 +66,63 @@ STEPS_QUERY_PATTERN = re.compile(r"\b(how to|steps?|process|plan|improve|fix|mak
 SUMMARY_QUERY_PATTERN = re.compile(r"\b(summarize|summary|highlights|key takeaways|recap|overview)\b", flags=re.IGNORECASE)
 DOCUMENT_REFERENCE_PATTERN = re.compile(r"\b(article|post|blog post|essay|paper|write-?up|document)\b", flags=re.IGNORECASE)
 QUOTED_TARGET_PATTERN = re.compile(r'["“”](.+?)["“”]')
+RANKING_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "by",
+    "could",
+    "different",
+    "do",
+    "does",
+    "examples",
+    "for",
+    "from",
+    "give",
+    "how",
+    "i",
+    "if",
+    "in",
+    "into",
+    "is",
+    "it",
+    "me",
+    "of",
+    "on",
+    "or",
+    "possible",
+    "should",
+    "than",
+    "that",
+    "the",
+    "this",
+    "to",
+    "vs",
+    "what",
+    "when",
+    "with",
+}
+SNIPPET_BOILERPLATE_PATTERNS = (
+    "thursday am",
+    "sent an invite",
+    "this guide assumes",
+    "if not, we highly suggest",
+)
+DOCUMENT_SUMMARY_MAX_SELECTED_CHUNKS = 8
+DOCUMENT_SUMMARY_MAX_CHARS_PER_CHUNK = 1200
+DOCUMENT_SUMMARY_MAX_CONTEXT_CHARS = 9000
+COMPARE_MAX_SELECTED_DOCS = 2
+COMPARE_CHUNKS_PER_DOC = 2
+COMPARE_MAX_CHARS_PER_CHUNK = 900
+COMPARE_MAX_CONTEXT_CHARS = 7000
+GENERAL_QA_MAX_SELECTED_DOCS = 3
+GENERAL_QA_CHUNKS_PER_DOC = 2
+GENERAL_QA_MAX_CHARS_PER_CHUNK = 850
+GENERAL_QA_MAX_CONTEXT_CHARS = 6000
 
 
 @dataclass
@@ -73,6 +130,7 @@ class RagSettings:
     db_path: Path
     artifacts_dir: Path
     prompt_path: Path
+    compare_prompt_path: Path
     summary_prompt_path: Path
     retry_prompt_path: Path
     job_search_prompt_path: Path
@@ -120,6 +178,7 @@ def load_settings() -> RagSettings:
         db_path=db_path,
         artifacts_dir=artifacts_root / "rag",
         prompt_path=ROOT / "prompts" / "workflow_02_rag_answer.md",
+        compare_prompt_path=ROOT / "prompts" / "workflow_02_compare_synthesis.md",
         summary_prompt_path=ROOT / "prompts" / "workflow_02_document_summary.md",
         retry_prompt_path=ROOT / "prompts" / "workflow_02_rag_answer_retry.md",
         job_search_prompt_path=ROOT / "prompts" / "job_search_coach.md",
@@ -179,7 +238,9 @@ def run_rag_query(
     normalized_filter_tags = _normalize_filter_tags(filter_tags)
     normalized_filter_tag_mode = _normalize_filter_tag_mode(filter_tag_mode)
     normalized_filter_group = _normalize_filter_group(filter_group)
-    summary_hint = _is_named_document_summary_query(query)
+    query_strategy_hint = _query_strategy(question=query, retrieved=[])
+    summary_hint = query_strategy_hint == "document_summary"
+    compare_hint = query_strategy_hint == "compare_synthesis"
     active_mode = _resolve_mode(
         mode=mode,
         filter_tags=normalized_filter_tags,
@@ -205,7 +266,11 @@ def run_rag_query(
         _insert_run_started(conn=conn, run_id=run_id, query=question, started_at=started_at)
 
     try:
-        retrieval_limit = max(limit, settings.summary_top_k) if summary_hint else limit
+        retrieval_limit = limit
+        if summary_hint:
+            retrieval_limit = max(limit, settings.summary_top_k)
+        elif compare_hint:
+            retrieval_limit = max(limit, min(settings.summary_top_k, 12))
         retrieved = retrieve_chunks(
             question,
             top_k=retrieval_limit,
@@ -246,6 +311,7 @@ def run_rag_query(
                     temperature=settings.temperature,
                     max_tokens=settings.summary_max_tokens if query_strategy == "document_summary" else settings.default_max_tokens,
                     prompt_path=settings.prompt_path,
+                    compare_prompt_path=settings.compare_prompt_path,
                     summary_prompt_path=settings.summary_prompt_path,
                     job_search_prompt_path=settings.job_search_prompt_path,
                     learning_prompt_path=settings.learning_prompt_path,
@@ -374,6 +440,7 @@ def _generate_validated_answer(
     temperature: float,
     max_tokens: int,
     prompt_path: Path,
+    compare_prompt_path: Path,
     summary_prompt_path: Path,
     job_search_prompt_path: Path,
     learning_prompt_path: Path,
@@ -381,11 +448,22 @@ def _generate_validated_answer(
     mode: str,
     query_strategy: str,
 ) -> tuple[dict[str, Any], int]:
-    allowed_pairs = {(item.doc_id, item.chunk_id) for item in retrieved}
-    context = _build_context(retrieved)
+    selected_chunks = _select_generation_chunks(
+        question=question,
+        retrieved=retrieved,
+        query_strategy=query_strategy,
+    )
+    allowed_pairs = {(item.doc_id, item.chunk_id) for item in selected_chunks}
+    context = _build_context(selected_chunks, query_strategy=query_strategy)
+    validation_requirements = _validation_requirements(
+        selected_chunks=selected_chunks,
+        query_strategy=query_strategy,
+    )
 
     if query_strategy == "document_summary":
         selected_primary_prompt = summary_prompt_path
+    elif query_strategy == "compare_synthesis":
+        selected_primary_prompt = compare_prompt_path
     elif mode == "job-search":
         selected_primary_prompt = job_search_prompt_path
     elif mode == "learning":
@@ -442,7 +520,13 @@ def _generate_validated_answer(
                 "is_retry": is_retry,
             },
         )
-        validation = validate_rag_output(raw_response, valid_citation_pairs=allowed_pairs)
+        validation = validate_rag_output(
+            raw_response,
+            valid_citation_pairs=allowed_pairs,
+            min_citation_count=validation_requirements["min_citation_count"],
+            min_distinct_doc_count=validation_requirements["min_distinct_doc_count"],
+            min_bullet_count=validation_requirements["min_bullet_count"],
+        )
         if validation.valid:
             break
 
@@ -450,6 +534,14 @@ def _generate_validated_answer(
         previous_errors = validation.errors
 
     if validation is None or not validation.valid or not validation.parsed_response:
+        if query_strategy == "compare_synthesis":
+            compare_fallback = _build_compare_fallback_response(
+                question=question,
+                selected_chunks=selected_chunks,
+                reason="; ".join(validation.errors if validation else ["unknown validation failure"]),
+            )
+            if compare_fallback is not None:
+                return compare_fallback, attempts_used
         error_suffix = "; ".join(validation.errors if validation else ["unknown validation failure"])
         response, _ = _build_unanswerable_response(
             question=question,
@@ -464,7 +556,7 @@ def _generate_validated_answer(
         "citations": parsed.get("citations", []),
         "confidence_level": parsed.get("confidence_level", "unspecified"),
         "assumptions": parsed.get("assumptions", []),
-        "sources": _source_rows(retrieved),
+        "sources": _source_rows(selected_chunks),
         "audit": {},
     }, attempts_used
 
@@ -499,6 +591,68 @@ def _build_unanswerable_response(
         },
         1,
     )
+
+
+def _build_compare_fallback_response(
+    *,
+    question: str,
+    selected_chunks: list[RetrievedChunk],
+    reason: str,
+) -> dict[str, Any] | None:
+    grouped = _group_chunks_by_doc_id(selected_chunks)
+    if len(grouped) < 2:
+        return None
+
+    ordered_doc_ids: list[str] = []
+    for chunk in selected_chunks:
+        if chunk.doc_id not in ordered_doc_ids:
+            ordered_doc_ids.append(chunk.doc_id)
+        if len(ordered_doc_ids) == 2:
+            break
+    if len(ordered_doc_ids) < 2:
+        return None
+
+    primary_chunks = grouped[ordered_doc_ids[0]]
+    secondary_chunks = grouped[ordered_doc_ids[1]]
+    primary = primary_chunks[0]
+    secondary = secondary_chunks[0]
+    additional = primary_chunks[1] if len(primary_chunks) > 1 else (secondary_chunks[1] if len(secondary_chunks) > 1 else None)
+
+    answer_lines = [
+        _compare_intro_sentence(question=question, primary=primary, secondary=secondary),
+        f"- {primary.title}: {_supporting_snippet(primary.text, question=question)}",
+        f"- {secondary.title}: {_supporting_snippet(secondary.text, question=question)}",
+    ]
+    if additional is not None:
+        answer_lines.append(
+            f"- Additional detail from {additional.title}: {_supporting_snippet(additional.text, question=question)}"
+        )
+    answer_lines.append(
+        f"- Practical tradeoff: use {primary.title} when you need guidance closest to { _topic_hint(primary.title) }, "
+        f"and use {secondary.title} when you need guidance closest to { _topic_hint(secondary.title) }."
+    )
+
+    citations = [
+        {"doc_id": primary.doc_id, "chunk_id": primary.chunk_id},
+        {"doc_id": secondary.doc_id, "chunk_id": secondary.chunk_id},
+    ]
+    if additional is not None and additional.doc_id not in {primary.doc_id, secondary.doc_id}:
+        citations.append({"doc_id": additional.doc_id, "chunk_id": additional.chunk_id})
+
+    return {
+        "answer": "\n".join(answer_lines),
+        "citations": citations,
+        "confidence_level": "low",
+        "assumptions": [
+            "Returned an extractive comparison fallback because the model could not produce a valid structured compare answer.",
+            f"Fallback reason: {reason}",
+        ],
+        "sources": _source_rows(_dedupe_chunks(primary_chunks + secondary_chunks)),
+        "audit": {
+            "fallback_used": True,
+            "fallback_reason": f"Compare synthesis fallback used after validation failure: {reason}",
+        },
+    }
 
 
 def _normalize_low_confidence_response(response: dict[str, Any]) -> str | None:
@@ -658,9 +812,233 @@ def _source_rows(retrieved: list[RetrievedChunk]) -> list[dict[str, Any]]:
     ]
 
 
-def _build_context(chunks: list[RetrievedChunk]) -> str:
+def _select_generation_chunks(
+    *,
+    question: str,
+    retrieved: list[RetrievedChunk],
+    query_strategy: str,
+) -> list[RetrievedChunk]:
+    if not retrieved:
+        return []
+
+    grouped = _group_chunks_by_doc_id(retrieved)
+    ranked_docs = _ranked_doc_ids(
+        question=question,
+        grouped=grouped,
+        query_strategy=query_strategy,
+    )
+
+    if query_strategy == "document_summary":
+        primary_doc_id = ranked_docs[0]
+        return _sample_document_chunks(
+            grouped[primary_doc_id],
+            max_chunks=DOCUMENT_SUMMARY_MAX_SELECTED_CHUNKS,
+        )
+
+    if query_strategy == "compare_synthesis":
+        target_doc_ids = ranked_docs[:COMPARE_MAX_SELECTED_DOCS]
+        if len(target_doc_ids) < 2 and len(grouped) >= 2:
+            target_doc_ids = list(grouped.keys())[:2]
+        per_doc_selected = [
+            _pick_evidence_chunks(
+                grouped[doc_id],
+                max_chunks=COMPARE_CHUNKS_PER_DOC,
+            )
+            for doc_id in target_doc_ids
+        ]
+        selected: list[RetrievedChunk] = []
+        max_depth = max((len(items) for items in per_doc_selected), default=0)
+        for depth in range(max_depth):
+            for items in per_doc_selected:
+                if depth < len(items):
+                    selected.append(items[depth])
+        return _dedupe_chunks(selected)
+
+    selected = []
+    for doc_id in ranked_docs[:GENERAL_QA_MAX_SELECTED_DOCS]:
+        selected.extend(
+            _pick_evidence_chunks(
+                grouped[doc_id],
+                max_chunks=GENERAL_QA_CHUNKS_PER_DOC,
+            )
+        )
+    return _dedupe_chunks(selected)
+
+
+def _group_chunks_by_doc_id(retrieved: list[RetrievedChunk]) -> dict[str, list[RetrievedChunk]]:
+    grouped: dict[str, list[RetrievedChunk]] = {}
+    for chunk in retrieved:
+        grouped.setdefault(chunk.doc_id, []).append(chunk)
+    for doc_id, chunks in grouped.items():
+        grouped[doc_id] = sorted(
+            chunks,
+            key=lambda item: (
+                item.chunk_index if item.chunk_index is not None else 999999,
+                -item.score,
+            ),
+        )
+    return grouped
+
+
+def _ranked_doc_ids(
+    *,
+    question: str,
+    grouped: dict[str, list[RetrievedChunk]],
+    query_strategy: str,
+) -> list[str]:
+    title_hints = [
+        " ".join(match.strip().split()).lower()
+        for match in QUOTED_TARGET_PATTERN.findall(question)
+        if match.strip()
+    ]
+    query_tokens = _ranking_query_tokens(question)
+
+    def _doc_rank(doc_id: str) -> tuple[float, float, float, float]:
+        chunks = grouped[doc_id]
+        title_bonus = 0.0
+        if title_hints:
+            for hint in title_hints:
+                for chunk in chunks:
+                    title = " ".join(chunk.title.lower().split())
+                    source = " ".join(chunk.source.lower().split())
+                    if hint and (hint in title or hint in source):
+                        title_bonus = max(title_bonus, 2.0)
+                        break
+        lexical_bonus = (
+            _title_source_query_overlap(chunks, query_tokens=query_tokens)
+            if query_strategy == "compare_synthesis"
+            else 0.0
+        )
+        best_title_match = max((chunk.title_match_score or 0.0) for chunk in chunks)
+        total_score = sum(chunk.score for chunk in chunks)
+        best_score = max(chunk.score for chunk in chunks)
+        coverage = float(len(chunks))
+        return (title_bonus + best_title_match + lexical_bonus, total_score, best_score, coverage)
+
+    return sorted(grouped, key=_doc_rank, reverse=True)
+
+
+def _ranking_query_tokens(question: str) -> set[str]:
+    return {
+        token
+        for token in re.findall(r"[a-z0-9]+", question.lower())
+        if token not in RANKING_STOPWORDS and len(token) > 2
+    }
+
+
+def _title_source_query_overlap(chunks: list[RetrievedChunk], *, query_tokens: set[str]) -> float:
+    if not query_tokens:
+        return 0.0
+    title_source_tokens: set[str] = set()
+    for chunk in chunks:
+        title_source_tokens.update(re.findall(r"[a-z0-9]+", chunk.title.lower()))
+        title_source_tokens.update(re.findall(r"[a-z0-9]+", chunk.source.lower()))
+    overlap = len(query_tokens.intersection(title_source_tokens))
+    return overlap / len(query_tokens)
+
+
+def _sample_document_chunks(chunks: list[RetrievedChunk], *, max_chunks: int) -> list[RetrievedChunk]:
+    ordered = sorted(
+        chunks,
+        key=lambda item: item.chunk_index if item.chunk_index is not None else 999999,
+    )
+    if len(ordered) <= max_chunks:
+        return ordered
+    if max_chunks <= 1:
+        return [ordered[0]]
+
+    chosen_indexes = {
+        round((len(ordered) - 1) * position / (max_chunks - 1))
+        for position in range(max_chunks)
+    }
+    selected = [ordered[index] for index in sorted(chosen_indexes)]
+    if len(selected) == max_chunks:
+        return selected
+
+    for chunk in ordered:
+        if chunk in selected:
+            continue
+        selected.append(chunk)
+        if len(selected) == max_chunks:
+            break
+    return sorted(
+        selected,
+        key=lambda item: item.chunk_index if item.chunk_index is not None else 999999,
+    )
+
+
+def _pick_evidence_chunks(chunks: list[RetrievedChunk], *, max_chunks: int) -> list[RetrievedChunk]:
+    ranked = sorted(
+        chunks,
+        key=lambda item: (
+            item.score,
+            item.title_match_score if item.title_match_score is not None else 0.0,
+            -(item.chunk_index if item.chunk_index is not None else 999999),
+        ),
+        reverse=True,
+    )
+    selected = ranked[:max_chunks]
+    return sorted(
+        selected,
+        key=lambda item: item.chunk_index if item.chunk_index is not None else 999999,
+    )
+
+
+def _dedupe_chunks(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
+    deduped: list[RetrievedChunk] = []
+    seen: set[tuple[str, str]] = set()
+    for chunk in chunks:
+        key = (chunk.doc_id, chunk.chunk_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(chunk)
+    return deduped
+
+
+def _context_budget(query_strategy: str) -> tuple[int, int]:
+    if query_strategy == "document_summary":
+        return DOCUMENT_SUMMARY_MAX_CHARS_PER_CHUNK, DOCUMENT_SUMMARY_MAX_CONTEXT_CHARS
+    if query_strategy == "compare_synthesis":
+        return COMPARE_MAX_CHARS_PER_CHUNK, COMPARE_MAX_CONTEXT_CHARS
+    return GENERAL_QA_MAX_CHARS_PER_CHUNK, GENERAL_QA_MAX_CONTEXT_CHARS
+
+
+def _validation_requirements(*, selected_chunks: list[RetrievedChunk], query_strategy: str) -> dict[str, int | None]:
+    distinct_docs = {item.doc_id for item in selected_chunks}
+    min_citation_count = None
+    min_distinct_doc_count = None
+    min_bullet_count = None
+
+    if query_strategy == "document_summary":
+        min_bullet_count = 4
+        if len(selected_chunks) >= 2:
+            min_citation_count = 2
+    elif query_strategy == "compare_synthesis":
+        min_bullet_count = 3
+        if len(selected_chunks) >= 2:
+            min_citation_count = 2
+        if len(distinct_docs) >= 2:
+            min_distinct_doc_count = 2
+
+    return {
+        "min_citation_count": min_citation_count,
+        "min_distinct_doc_count": min_distinct_doc_count,
+        "min_bullet_count": min_bullet_count,
+    }
+
+
+def _build_context(chunks: list[RetrievedChunk], *, query_strategy: str) -> str:
+    max_chars_per_chunk, max_context_chars = _context_budget(query_strategy)
     lines: list[str] = []
+    total_text_chars = 0
     for index, chunk in enumerate(chunks, start=1):
+        remaining = max_context_chars - total_text_chars
+        if remaining <= 0:
+            break
+        chunk_char_limit = min(max_chars_per_chunk, max(remaining, 200))
+        chunk_text = _truncate_context_text(chunk.text, chunk_char_limit)
+        total_text_chars += len(chunk_text)
         lines.append(f"[chunk {index}]")
         lines.append(f"doc_id: {chunk.doc_id}")
         lines.append(f"chunk_id: {chunk.chunk_id}")
@@ -670,9 +1048,83 @@ def _build_context(chunks: list[RetrievedChunk]) -> str:
         lines.append(f"tags: {', '.join(chunk.tags) if chunk.tags else '-'}")
         lines.append(f"score: {chunk.score:.6f}")
         lines.append("text:")
-        lines.append(chunk.text)
+        lines.append(chunk_text)
         lines.append("")
     return "\n".join(lines).strip()
+
+
+def _truncate_context_text(text: str, max_chars: int) -> str:
+    normalized = " ".join(text.split())
+    if len(normalized) <= max_chars:
+        return normalized
+    return normalized[: max_chars - 3].rstrip() + "..."
+
+
+def _supporting_snippet(text: str, *, question: str = "", max_chars: int = 180) -> str:
+    normalized = " ".join(text.split())
+    if not normalized:
+        return "No supporting excerpt was available in the retrieved chunk."
+    sentences = re.split(r"(?<=[.!?])\s+", normalized)
+    query_tokens = _ranking_query_tokens(question)
+    best_sentence = ""
+    best_score = float("-inf")
+    for sentence in sentences:
+        cleaned = sentence.strip()
+        if not cleaned:
+            continue
+        lowered = cleaned.lower()
+        sentence_tokens = set(re.findall(r"[a-z0-9]+", lowered))
+        overlap = len(query_tokens.intersection(sentence_tokens))
+        length_score = min(len(cleaned), 160) / 160
+        boilerplate_penalty = 3.0 if any(pattern in lowered for pattern in SNIPPET_BOILERPLATE_PATTERNS) else 0.0
+        score = (overlap * 2.5) + length_score - boilerplate_penalty
+        if len(cleaned) < 40:
+            score -= 1.5
+        if score > best_score:
+            best_score = score
+            best_sentence = cleaned
+
+    snippet = best_sentence or (sentences[0] if sentences else normalized)
+    if len(snippet) > max_chars:
+        return _truncate_context_text(snippet, max_chars)
+    return snippet
+
+
+def _compare_intro_sentence(*, question: str, primary: RetrievedChunk, secondary: RetrievedChunk) -> str:
+    lower_question = question.lower()
+    if "prompt engineering" in lower_question and "context engineering" in lower_question:
+        return (
+            "Prompt engineering is framed here as improving the instructions inside the prompt, "
+            "while context engineering is framed as shaping the broader information and tool setup around the model."
+        )
+    return (
+        f"The retrieved sources emphasize different parts of the question: {primary.title} and {secondary.title} "
+        "focus on related but distinct layers of the problem."
+    )
+
+
+def _topic_hint(title: str) -> str:
+    normalized_title = title.lower()
+    for phrase in (
+        "prompt engineering",
+        "context engineering",
+        "vector database",
+        "vector db",
+        "embeddings",
+        "embedding",
+        "latency",
+        "rag",
+    ):
+        if phrase in normalized_title:
+            return phrase
+    tokens = [
+        token
+        for token in re.findall(r"[a-z0-9]+", normalized_title)
+        if token not in RANKING_STOPWORDS and len(token) > 2
+    ]
+    if not tokens:
+        return "that source's focus"
+    return " ".join(tokens[:3])
 
 
 def _load_prompt(path: Path, *, fallback: str) -> str:
@@ -704,13 +1156,20 @@ def _infer_answer_style_instructions(*, query: str, mode: str, query_strategy: s
         return (
             "This is a named-document summary request. In the JSON `answer` string, give a 1-2 sentence overview "
             "followed by 5-8 newline-separated bullet points covering the document's main arguments, notable claims, "
-            "and practical takeaways."
+            "and practical takeaways. Each bullet must start with '- '."
+        )
+    if query_strategy == "compare_synthesis":
+        return (
+            "This is a cross-document comparison request. In the JSON `answer` string, lead with one concise "
+            "comparison sentence, then provide 4-6 newline-separated bullets covering concrete differences, "
+            "overlaps, examples, and practical tradeoffs grounded in at least two cited sources when available. "
+            "Each bullet must start with '- '."
         )
     if LIST_QUERY_PATTERN.search(normalized_query):
         return (
             "The user asked for a list. In the JSON `answer` string, return a newline-separated bullet list "
-            "with 4-8 bullets when the context supports it. Each bullet should add a distinct detail, not a "
-            "rephrased duplicate."
+            "with 4-8 bullets when the context supports it. Each bullet must start with '- ' and add a distinct "
+            "detail, not a rephrased duplicate."
         )
     if COMPARE_QUERY_PATTERN.search(normalized_query):
         return (
@@ -735,7 +1194,8 @@ def _infer_answer_style_instructions(*, query: str, mode: str, query_strategy: s
         )
     return (
         "Return a detailed answer that directly addresses the request. Prefer one short framing sentence followed "
-        "by 3-6 newline-separated bullets when the context supports multiple distinct points."
+        "by 3-6 newline-separated bullets when the context supports multiple distinct points. Each bullet must "
+        "start with '- '."
     )
 
 
@@ -865,6 +1325,8 @@ def _normalize_filter_tag_mode(filter_tag_mode: str | None) -> str:
 def _prompt_profile_name(mode: str, *, query_strategy: str = "general_qa") -> str:
     if query_strategy == "document_summary":
         return "workflow_02_document_summary"
+    if query_strategy == "compare_synthesis":
+        return "workflow_02_compare_synthesis"
     if mode == "job-search":
         return "job_search_coach"
     if mode == "learning":
@@ -873,9 +1335,11 @@ def _prompt_profile_name(mode: str, *, query_strategy: str = "general_qa") -> st
 
 
 def _query_strategy(*, question: str, retrieved: list[RetrievedChunk]) -> str:
-    if not _is_named_document_summary_query(question):
-        return "general_qa"
-    return "document_summary"
+    if _is_named_document_summary_query(question):
+        return "document_summary"
+    if _is_compare_query(question):
+        return "compare_synthesis"
+    return "general_qa"
 
 
 def _is_named_document_summary_query(question: str) -> bool:
@@ -885,6 +1349,13 @@ def _is_named_document_summary_query(question: str) -> bool:
     has_summary_intent = bool(SUMMARY_QUERY_PATTERN.search(normalized))
     has_document_reference = bool(DOCUMENT_REFERENCE_PATTERN.search(normalized) or QUOTED_TARGET_PATTERN.search(normalized))
     return has_summary_intent and has_document_reference
+
+
+def _is_compare_query(question: str) -> bool:
+    normalized = " ".join(question.strip().split())
+    if not normalized:
+        return False
+    return bool(COMPARE_QUERY_PATTERN.search(normalized))
 
 
 def _env_bool(name: str, default: bool) -> bool:

@@ -191,10 +191,281 @@ class Phase5FUnanswerableNormalizationTests(unittest.TestCase):
 
         self.assertEqual(strategy, "document_summary")
 
+    def test_query_strategy_detects_compare_queries(self) -> None:
+        strategy = rag_query._query_strategy(  # noqa: SLF001
+            question="How is prompt engineering different than context engineering? Give examples.",
+            retrieved=[],
+        )
+
+        self.assertEqual(strategy, "compare_synthesis")
+
+    def test_select_generation_chunks_for_compare_keeps_multiple_docs(self) -> None:
+        retrieved = [
+            rag_query.RetrievedChunk(
+                doc_id="doc-a",
+                chunk_id="chunk-a1",
+                title="Prompt Engineering Overview",
+                source="https://example.com/prompt",
+                text="prompt details",
+                score=0.95,
+                source_type="url",
+                ingestion_channel="bookmarklet",
+                group="reference",
+                tags=["article"],
+            ),
+            rag_query.RetrievedChunk(
+                doc_id="doc-a",
+                chunk_id="chunk-a2",
+                title="Prompt Engineering Overview",
+                source="https://example.com/prompt",
+                text="prompt examples",
+                score=0.91,
+                source_type="url",
+                ingestion_channel="bookmarklet",
+                group="reference",
+                tags=["article"],
+            ),
+            rag_query.RetrievedChunk(
+                doc_id="doc-b",
+                chunk_id="chunk-b1",
+                title="The New Skill in AI Is Not Prompting, It's Context Engineering",
+                source="https://philschmid.de/context-engineering",
+                text="context details",
+                score=0.93,
+                source_type="url",
+                ingestion_channel="bookmarklet",
+                group="reference",
+                tags=["article"],
+            ),
+            rag_query.RetrievedChunk(
+                doc_id="doc-b",
+                chunk_id="chunk-b2",
+                title="The New Skill in AI Is Not Prompting, It's Context Engineering",
+                source="https://philschmid.de/context-engineering",
+                text="context examples",
+                score=0.88,
+                source_type="url",
+                ingestion_channel="bookmarklet",
+                group="reference",
+                tags=["article"],
+            ),
+        ]
+
+        selected = rag_query._select_generation_chunks(  # noqa: SLF001
+            question="How is prompt engineering different than context engineering? Give examples.",
+            retrieved=retrieved,
+            query_strategy="compare_synthesis",
+        )
+
+        self.assertEqual({item.doc_id for item in selected}, {"doc-a", "doc-b"})
+
+    def test_ranked_doc_ids_for_compare_prefers_title_overlap_over_generic_doc(self) -> None:
+        grouped = rag_query._group_chunks_by_doc_id(  # noqa: SLF001
+            [
+                rag_query.RetrievedChunk(
+                    doc_id="generic",
+                    chunk_id="generic-1",
+                    title="GenAI Interview Questions",
+                    source="genai-interview-questions.pdf",
+                    text="prompt context examples",
+                    score=0.95,
+                    source_type="file",
+                    ingestion_channel="file",
+                    group="reference",
+                    tags=["job-search"],
+                ),
+                rag_query.RetrievedChunk(
+                    doc_id="prompt-doc",
+                    chunk_id="prompt-1",
+                    title="Claude Prompt Engineering Overview",
+                    source="https://platform.claude.com/docs/en/build-with-claude/prompt-engineering",
+                    text="prompt engineering",
+                    score=0.7,
+                    source_type="url",
+                    ingestion_channel="bookmarklet",
+                    group="reference",
+                    tags=["article"],
+                ),
+                rag_query.RetrievedChunk(
+                    doc_id="context-doc",
+                    chunk_id="context-1",
+                    title="The New Skill in AI is Not Prompting, It's Context Engineering",
+                    source="https://www.philschmid.de/context-engineering",
+                    text="context engineering",
+                    score=0.69,
+                    source_type="url",
+                    ingestion_channel="bookmarklet",
+                    group="reference",
+                    tags=["article"],
+                ),
+            ]
+        )
+
+        ranked = rag_query._ranked_doc_ids(  # noqa: SLF001
+            question="How is prompt engineering different than context engineering? Give examples.",
+            grouped=grouped,
+            query_strategy="compare_synthesis",
+        )
+
+        self.assertEqual(ranked[:2], ["prompt-doc", "context-doc"])
+
+    def test_select_generation_chunks_for_document_summary_stays_on_primary_doc(self) -> None:
+        retrieved = [
+            rag_query.RetrievedChunk(
+                doc_id="doc-primary",
+                chunk_id=f"chunk-{index}",
+                title="Vector Embeddings Guide",
+                source="vector-embeddings-guide.pdf",
+                text=f"chunk {index}",
+                score=1.0 - (index * 0.01),
+                source_type="file",
+                ingestion_channel="file",
+                group="reference",
+                tags=["learning"],
+                chunk_index=index,
+            )
+            for index in range(10)
+        ]
+        retrieved.append(
+            rag_query.RetrievedChunk(
+                doc_id="doc-other",
+                chunk_id="other-1",
+                title="Other Guide",
+                source="other.pdf",
+                text="other",
+                score=0.5,
+                source_type="file",
+                ingestion_channel="file",
+                group="reference",
+                tags=["learning"],
+                chunk_index=0,
+            )
+        )
+
+        selected = rag_query._select_generation_chunks(  # noqa: SLF001
+            question='Summarize the document "Vector Embeddings Guide".',
+            retrieved=retrieved,
+            query_strategy="document_summary",
+        )
+
+        self.assertTrue(selected)
+        self.assertTrue(all(item.doc_id == "doc-primary" for item in selected))
+        self.assertLessEqual(len(selected), rag_query.DOCUMENT_SUMMARY_MAX_SELECTED_CHUNKS)
+
+    def test_build_context_truncates_large_chunk_text(self) -> None:
+        chunks = [
+            rag_query.RetrievedChunk(
+                doc_id="doc-1",
+                chunk_id="chunk-1",
+                title="Large Doc",
+                source="large.pdf",
+                text="word " * 2000,
+                score=0.9,
+                source_type="file",
+                ingestion_channel="file",
+                group="reference",
+                tags=["learning"],
+                chunk_index=0,
+            )
+        ]
+
+        context = rag_query._build_context(  # noqa: SLF001
+            chunks,
+            query_strategy="general_qa",
+        )
+
+        self.assertLess(len(context), 8000)
+
+    def test_validation_requirements_for_compare_require_multi_doc_support(self) -> None:
+        requirements = rag_query._validation_requirements(  # noqa: SLF001
+            selected_chunks=[
+                rag_query.RetrievedChunk(
+                    doc_id="doc-1",
+                    chunk_id="chunk-1",
+                    title="Doc 1",
+                    source="doc1.pdf",
+                    text="a",
+                    score=0.9,
+                    source_type="file",
+                    ingestion_channel="file",
+                    group="reference",
+                    tags=[],
+                ),
+                rag_query.RetrievedChunk(
+                    doc_id="doc-2",
+                    chunk_id="chunk-2",
+                    title="Doc 2",
+                    source="doc2.pdf",
+                    text="b",
+                    score=0.8,
+                    source_type="file",
+                    ingestion_channel="file",
+                    group="reference",
+                    tags=[],
+                ),
+            ],
+            query_strategy="compare_synthesis",
+        )
+
+        self.assertEqual(requirements["min_citation_count"], 2)
+        self.assertEqual(requirements["min_distinct_doc_count"], 2)
+        self.assertEqual(requirements["min_bullet_count"], 3)
+
+    def test_build_compare_fallback_response_returns_extract_from_two_docs(self) -> None:
+        response = rag_query._build_compare_fallback_response(  # noqa: SLF001
+            question="How is prompt engineering different than context engineering? Give examples.",
+            selected_chunks=[
+                rag_query.RetrievedChunk(
+                    doc_id="doc-context",
+                    chunk_id="chunk-context",
+                    title="The New Skill in AI is Not Prompting, It's Context Engineering",
+                    source="https://philschmid.de/context-engineering",
+                    text="Context engineering is about providing the right information and tools at the right time.",
+                    score=0.9,
+                    source_type="url",
+                    ingestion_channel="bookmarklet",
+                    group="reference",
+                    tags=["article"],
+                ),
+                rag_query.RetrievedChunk(
+                    doc_id="doc-prompt",
+                    chunk_id="chunk-prompt",
+                    title="Claude Prompt Engineering Overview",
+                    source="https://platform.claude.com/docs/prompt-engineering",
+                    text="Prompt engineering focuses on writing clearer instructions and examples inside the prompt.",
+                    score=0.8,
+                    source_type="url",
+                    ingestion_channel="bookmarklet",
+                    group="reference",
+                    tags=["article"],
+                ),
+            ],
+            reason="validation failed",
+        )
+
+        self.assertIsNotNone(response)
+        self.assertIn("prompt engineering", response["answer"].lower())
+        self.assertIn("context engineering", response["answer"].lower())
+        self.assertEqual(len(response["citations"]), 2)
+
+    def test_supporting_snippet_skips_boilerplate_when_query_terms_match_later_sentence(self) -> None:
+        snippet = rag_query._supporting_snippet(  # noqa: SLF001
+            "Thursday AM free if that works for you? Sent an invite, lmk if it works. Context engineering is about providing the right information and tools at the right time.",
+            question="How is context engineering different than prompt engineering?",
+        )
+
+        self.assertIn("Context engineering", snippet)
+
     def test_prompt_profile_name_prefers_document_summary_strategy(self) -> None:
         self.assertEqual(
             rag_query._prompt_profile_name("default", query_strategy="document_summary"),  # noqa: SLF001
             "workflow_02_document_summary",
+        )
+
+    def test_prompt_profile_name_prefers_compare_strategy(self) -> None:
+        self.assertEqual(
+            rag_query._prompt_profile_name("default", query_strategy="compare_synthesis"),  # noqa: SLF001
+            "workflow_02_compare_synthesis",
         )
 
 

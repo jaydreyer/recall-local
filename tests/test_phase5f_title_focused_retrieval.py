@@ -28,6 +28,20 @@ class Phase5FTitleFocusedRetrievalTests(unittest.TestCase):
 
         self.assertEqual(focused, title_hints[0])
 
+    def test_focused_retrieval_query_combines_multiple_titles(self) -> None:
+        title_hints = [
+            "Vector Embeddings Guide",
+            "LLM Embeddings Vector DB Comparison Guide",
+        ]
+
+        focused = retrieval._focused_retrieval_query(  # noqa: SLF001
+            'Compare the "Vector Embeddings Guide" with the "LLM Embeddings Vector DB Comparison Guide".',
+            title_hints=title_hints,
+        )
+
+        self.assertIn(title_hints[0], focused)
+        self.assertIn(title_hints[1], focused)
+
     def test_title_match_score_prefers_exact_title_match(self) -> None:
         exact = retrieval.RetrievedChunk(
             doc_id="doc-1",
@@ -251,6 +265,59 @@ class Phase5FTitleFocusedRetrievalTests(unittest.TestCase):
         load_mock.assert_called_once()
         self.assertTrue(resolved)
         self.assertTrue(all(item.doc_id == "doc-exact" for item in resolved))
+
+    def test_lookup_documents_by_title_hints_returns_multiple_docs(self) -> None:
+        loaded_chunks = {
+            "doc-a": [
+                retrieval.RetrievedChunk(
+                    doc_id="doc-a",
+                    chunk_id="chunk-a-0",
+                    chunk_index=0,
+                    title="Vector Embeddings Guide",
+                    source="vector-embeddings-guide.pdf",
+                    text="first",
+                    score=1.0,
+                    source_type="file",
+                    ingestion_channel="file",
+                    group="reference",
+                    tags=["learning"],
+                )
+            ],
+            "doc-b": [
+                retrieval.RetrievedChunk(
+                    doc_id="doc-b",
+                    chunk_id="chunk-b-0",
+                    chunk_index=0,
+                    title="LLM Embeddings Vector DB Comparison Guide",
+                    source="llm-embeddings-vectordb-guide.pdf",
+                    text="second",
+                    score=1.0,
+                    source_type="file",
+                    ingestion_channel="file",
+                    group="reference",
+                    tags=["learning"],
+                )
+            ],
+        }
+
+        with patch(
+            "scripts.phase1.retrieval._find_best_doc_id_by_title_hints",
+            side_effect=["doc-a", "doc-b"],
+        ), patch(
+            "scripts.phase1.retrieval._load_chunks_for_doc_id",
+            side_effect=lambda **kwargs: loaded_chunks[kwargs["doc_id"]],
+        ):
+            resolved = retrieval._lookup_documents_by_title_hints(  # noqa: SLF001
+                qdrant=SimpleNamespace(),
+                collection="recall_docs",
+                title_hints=["Vector Embeddings Guide", "LLM Embeddings Vector DB Comparison Guide"],
+                filter_tags=["learning"],
+                filter_tag_mode="all",
+                filter_group=None,
+                limit=8,
+            )
+
+        self.assertEqual({item.doc_id for item in resolved}, {"doc-a", "doc-b"})
 
     def test_has_strong_title_match_requires_high_score(self) -> None:
         weak = [

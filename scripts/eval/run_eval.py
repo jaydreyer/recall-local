@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sqlite3
 import sys
 import time
@@ -43,9 +44,13 @@ class EvalSettings:
 
 @dataclass
 class EvalCase:
+    case_id: str
+    category: str
     question: str
     expected_doc_id: str | None
     expected_answer: str | None
+    expected_title_contains: list[str]
+    expected_source_contains: list[str]
     max_latency_ms: int | None
     expect_unanswerable: bool
     mode: str | None
@@ -54,6 +59,10 @@ class EvalCase:
     required_terms: list[str]
     required_source_tags: list[str]
     required_source_tags_any_of: list[list[str]]
+    min_bullet_count: int | None
+    min_citation_count: int | None
+    min_distinct_doc_count: int | None
+    min_answer_chars: int | None
     semantic_similarity_min: float | None
     retrieval_mode: str | None
     hybrid_alpha: float | None
@@ -64,16 +73,30 @@ class EvalCase:
 @dataclass
 class CaseResult:
     eval_id: str
+    case_id: str
+    category: str
     question: str
     expected_doc_id: str | None
     expect_unanswerable: bool
     actual_doc_id: str | None
+    actual_title: str | None
+    actual_source: str | None
     citation_valid: bool
     unanswerable_ok: bool | None
     required_terms_ok: bool | None
     source_tags_ok: bool | None
+    title_match_ok: bool | None
+    source_match_ok: bool | None
+    bullet_count_ok: bool | None
+    citation_count_ok: bool | None
+    distinct_doc_count_ok: bool | None
+    answer_length_ok: bool | None
     semantic_similarity: float | None
     semantic_similarity_ok: bool | None
+    citation_count: int
+    distinct_doc_count: int
+    bullet_count: int
+    answer_chars: int
     latency_ms: int
     passed: bool
     notes: str
@@ -224,6 +247,10 @@ def load_cases(path: Path) -> list[EvalCase]:
     for index, item in enumerate(data):
         if not isinstance(item, dict):
             raise ValueError(f"Case at index {index} must be a JSON object.")
+        case_id_raw = item.get("case_id")
+        case_id = str(case_id_raw).strip() if case_id_raw else f"case-{index + 1:02d}"
+        category_raw = item.get("category")
+        category = str(category_raw).strip() if category_raw else "general"
         question = str(item.get("question", "")).strip()
         if not question:
             raise ValueError(f"Case at index {index} is missing question.")
@@ -231,6 +258,8 @@ def load_cases(path: Path) -> list[EvalCase]:
         expected_doc_id = str(expected_doc_id_raw).strip() if expected_doc_id_raw else None
         expected_answer_raw = item.get("expected_answer")
         expected_answer = str(expected_answer_raw).strip() if expected_answer_raw else None
+        expected_title_contains = _normalize_string_list(item.get("expected_title_contains"))
+        expected_source_contains = _normalize_string_list(item.get("expected_source_contains"))
         max_latency_raw = item.get("max_latency_ms")
         max_latency_ms = int(max_latency_raw) if max_latency_raw is not None else None
         expect_unanswerable = bool(item.get("expect_unanswerable", False))
@@ -241,6 +270,16 @@ def load_cases(path: Path) -> list[EvalCase]:
         required_terms = _normalize_string_list(item.get("required_terms"))
         required_source_tags = _normalize_string_list(item.get("required_source_tags"))
         required_source_tags_any_of = _normalize_source_tag_groups(item.get("required_source_tags_any_of"))
+        min_bullet_count_raw = item.get("min_bullet_count")
+        min_bullet_count = int(min_bullet_count_raw) if min_bullet_count_raw is not None else None
+        min_citation_count_raw = item.get("min_citation_count")
+        min_citation_count = int(min_citation_count_raw) if min_citation_count_raw is not None else None
+        min_distinct_doc_count_raw = item.get("min_distinct_doc_count")
+        min_distinct_doc_count = (
+            int(min_distinct_doc_count_raw) if min_distinct_doc_count_raw is not None else None
+        )
+        min_answer_chars_raw = item.get("min_answer_chars")
+        min_answer_chars = int(min_answer_chars_raw) if min_answer_chars_raw is not None else None
         semantic_similarity_min_raw = item.get("semantic_similarity_min")
         semantic_similarity_min = (
             float(semantic_similarity_min_raw)
@@ -260,9 +299,13 @@ def load_cases(path: Path) -> list[EvalCase]:
         reranker_weight = float(reranker_weight_raw) if reranker_weight_raw is not None else None
         cases.append(
             EvalCase(
+                case_id=case_id,
+                category=category,
                 question=question,
                 expected_doc_id=expected_doc_id,
                 expected_answer=expected_answer,
+                expected_title_contains=expected_title_contains,
+                expected_source_contains=expected_source_contains,
                 max_latency_ms=max_latency_ms,
                 expect_unanswerable=expect_unanswerable,
                 mode=mode,
@@ -271,6 +314,10 @@ def load_cases(path: Path) -> list[EvalCase]:
                 required_terms=required_terms,
                 required_source_tags=required_source_tags,
                 required_source_tags_any_of=required_source_tags_any_of,
+                min_bullet_count=min_bullet_count,
+                min_citation_count=min_citation_count,
+                min_distinct_doc_count=min_distinct_doc_count,
+                min_answer_chars=min_answer_chars,
                 semantic_similarity_min=semantic_similarity_min,
                 retrieval_mode=retrieval_mode,
                 hybrid_alpha=hybrid_alpha,
@@ -334,6 +381,18 @@ def run_case(
             source_tags_ok,
             semantic_similarity,
             semantic_similarity_ok,
+            actual_title,
+            actual_source,
+            title_match_ok,
+            source_match_ok,
+            bullet_count_ok,
+            citation_count_ok,
+            distinct_doc_count_ok,
+            answer_length_ok,
+            citation_count,
+            distinct_doc_count,
+            bullet_count,
+            answer_chars,
             notes,
         ) = _evaluate_payload(
             case=case,
@@ -349,25 +408,51 @@ def run_case(
         passed = False
         citation_valid = False
         actual_doc_id = None
+        actual_title = None
+        actual_source = None
         unanswerable_ok = None
         required_terms_ok = None
         source_tags_ok = None
+        title_match_ok = None
+        source_match_ok = None
+        bullet_count_ok = None
+        citation_count_ok = None
+        distinct_doc_count_ok = None
+        answer_length_ok = None
         semantic_similarity = None
         semantic_similarity_ok = None
+        citation_count = 0
+        distinct_doc_count = 0
+        bullet_count = 0
+        answer_chars = 0
         notes = f"Execution error: {exc}"
 
     return CaseResult(
         eval_id=eval_id,
+        case_id=case.case_id,
+        category=case.category,
         question=case.question,
         expected_doc_id=case.expected_doc_id,
         expect_unanswerable=case.expect_unanswerable,
         actual_doc_id=actual_doc_id,
+        actual_title=actual_title,
+        actual_source=actual_source,
         citation_valid=citation_valid,
         unanswerable_ok=unanswerable_ok,
         required_terms_ok=required_terms_ok,
         source_tags_ok=source_tags_ok,
+        title_match_ok=title_match_ok,
+        source_match_ok=source_match_ok,
+        bullet_count_ok=bullet_count_ok,
+        citation_count_ok=citation_count_ok,
+        distinct_doc_count_ok=distinct_doc_count_ok,
+        answer_length_ok=answer_length_ok,
         semantic_similarity=semantic_similarity,
         semantic_similarity_ok=semantic_similarity_ok,
+        citation_count=citation_count,
+        distinct_doc_count=distinct_doc_count,
+        bullet_count=bullet_count,
+        answer_chars=answer_chars,
         latency_ms=latency_ms,
         passed=passed,
         notes=notes,
@@ -467,17 +552,39 @@ def _evaluate_payload(
     semantic_score_enabled: bool,
     semantic_min_score: float | None,
     enforce_semantic_score: bool,
-) -> tuple[bool, bool, str | None, bool | None, bool | None, bool | None, float | None, bool | None, str]:
+) -> tuple[
+    bool,
+    bool,
+    str | None,
+    bool | None,
+    bool | None,
+    bool | None,
+    float | None,
+    bool | None,
+    str | None,
+    str | None,
+    bool | None,
+    bool | None,
+    bool | None,
+    bool | None,
+    bool | None,
+    bool | None,
+    int,
+    int,
+    int,
+    int,
+    str,
+]:
     answer = str(payload.get("answer", "")).strip()
     confidence_level = str(payload.get("confidence_level", "")).strip().lower()
     citations = payload.get("citations")
     sources = payload.get("sources")
     if not isinstance(citations, list):
-        return False, False, None, None, None, None, None, None, "Response missing citations array"
+        return False, False, None, None, None, None, None, None, None, None, None, None, None, None, None, None, 0, 0, 0, len(answer), "Response missing citations array"
     if not isinstance(sources, list):
-        return False, False, None, None, None, None, None, None, "Response missing sources array"
+        return False, False, None, None, None, None, None, None, None, None, None, None, None, None, None, None, 0, 0, 0, len(answer), "Response missing sources array"
     if not answer:
-        return False, False, None, None, None, None, None, None, "Response missing answer text"
+        return False, False, None, None, None, None, None, None, None, None, None, None, None, None, None, None, 0, 0, 0, 0, "Response missing answer text"
 
     valid_pairs = {
         (str(source.get("doc_id", "")).strip(), str(source.get("chunk_id", "")).strip())
@@ -488,18 +595,27 @@ def _evaluate_payload(
     citation_pairs: list[tuple[str, str]] = []
     for citation in citations:
         if not isinstance(citation, dict):
-            return False, False, None, None, None, None, None, None, "Citation entry is not an object"
+            return False, False, None, None, None, None, None, None, None, None, None, None, None, None, None, None, 0, 0, 0, len(answer), "Citation entry is not an object"
         doc_id = str(citation.get("doc_id", "")).strip()
         chunk_id = str(citation.get("chunk_id", "")).strip()
         if not doc_id or not chunk_id:
-            return False, False, None, None, None, None, None, None, "Citation missing doc_id or chunk_id"
+            return False, False, None, None, None, None, None, None, None, None, None, None, None, None, None, None, 0, 0, 0, len(answer), "Citation missing doc_id or chunk_id"
         citation_pairs.append((doc_id, chunk_id))
 
     invalid_pairs = [pair for pair in citation_pairs if pair not in valid_pairs]
     citation_valid = not invalid_pairs and (bool(citation_pairs) or case.expect_unanswerable)
 
     actual_doc_id = citation_pairs[0][0] if citation_pairs else None
+    cited_sources = _sources_for_tag_validation(sources=sources, citation_pairs=citation_pairs)
+    actual_title = _first_source_value(cited_sources, key="title")
+    actual_source = _first_source_value(cited_sources, key="source")
     expected_ok = case.expected_doc_id is None or case.expected_doc_id == actual_doc_id
+    title_match_ok = _strings_present_in_sources(sources=cited_sources, key="title", expected=case.expected_title_contains)
+    source_match_ok = _strings_present_in_sources(sources=cited_sources, key="source", expected=case.expected_source_contains)
+    citation_count = len(citation_pairs)
+    distinct_doc_count = len({doc_id for doc_id, _ in citation_pairs})
+    bullet_count = _count_bullets(answer)
+    answer_chars = len(answer)
 
     max_latency = case.max_latency_ms
     if max_latency is None:
@@ -512,6 +628,10 @@ def _evaluate_payload(
     source_tags_ok: bool | None = None
     semantic_similarity: float | None = None
     semantic_similarity_ok: bool | None = None
+    bullet_count_ok: bool | None = None
+    citation_count_ok: bool | None = None
+    distinct_doc_count_ok: bool | None = None
+    answer_length_ok: bool | None = None
     if not citations and not case.expect_unanswerable:
         notes.append("Response returned zero citations")
     if not citation_valid:
@@ -528,6 +648,10 @@ def _evaluate_payload(
     else:
         if not expected_ok:
             notes.append(f"Expected doc_id {case.expected_doc_id}, got {actual_doc_id}")
+        if title_match_ok is False:
+            notes.append(f"Cited titles did not include expected text: {case.expected_title_contains}")
+        if source_match_ok is False:
+            notes.append(f"Cited sources did not include expected text: {case.expected_source_contains}")
 
     if case.required_terms:
         normalized_answer = answer.lower()
@@ -557,6 +681,32 @@ def _evaluate_payload(
                 f"Sources did not satisfy any required tag group: {case.required_source_tags_any_of}"
             )
 
+    if case.min_bullet_count is not None:
+        bullet_count_ok = bullet_count >= case.min_bullet_count
+        if not bullet_count_ok:
+            notes.append(f"Answer had {bullet_count} bullets, expected at least {case.min_bullet_count}")
+
+    if case.min_citation_count is not None:
+        citation_count_ok = citation_count >= case.min_citation_count
+        if not citation_count_ok:
+            notes.append(
+                f"Answer cited {citation_count} chunks, expected at least {case.min_citation_count}"
+            )
+
+    if case.min_distinct_doc_count is not None:
+        distinct_doc_count_ok = distinct_doc_count >= case.min_distinct_doc_count
+        if not distinct_doc_count_ok:
+            notes.append(
+                f"Answer used {distinct_doc_count} distinct docs, expected at least {case.min_distinct_doc_count}"
+            )
+
+    if case.min_answer_chars is not None:
+        answer_length_ok = answer_chars >= case.min_answer_chars
+        if not answer_length_ok:
+            notes.append(
+                f"Answer length {answer_chars} chars below minimum {case.min_answer_chars}"
+            )
+
     if semantic_score_enabled and case.expected_answer:
         threshold = (
             case.semantic_similarity_min
@@ -581,9 +731,21 @@ def _evaluate_payload(
         passed = citation_valid and bool(unanswerable_ok) and latency_ok
     else:
         passed = citation_valid and expected_ok and latency_ok
+    if title_match_ok is False:
+        passed = False
+    if source_match_ok is False:
+        passed = False
     if required_terms_ok is False:
         passed = False
     if source_tags_ok is False:
+        passed = False
+    if bullet_count_ok is False:
+        passed = False
+    if citation_count_ok is False:
+        passed = False
+    if distinct_doc_count_ok is False:
+        passed = False
+    if answer_length_ok is False:
         passed = False
     if enforce_semantic_score and semantic_similarity_ok is False:
         passed = False
@@ -596,6 +758,18 @@ def _evaluate_payload(
         source_tags_ok,
         semantic_similarity,
         semantic_similarity_ok,
+        actual_title,
+        actual_source,
+        title_match_ok,
+        source_match_ok,
+        bullet_count_ok,
+        citation_count_ok,
+        distinct_doc_count_ok,
+        answer_length_ok,
+        citation_count,
+        distinct_doc_count,
+        bullet_count,
+        answer_chars,
         "; ".join(notes) if notes else "ok",
     )
 
@@ -670,6 +844,38 @@ def _sources_for_tag_validation(*, sources: list[Any], citation_pairs: list[tupl
         if doc_id and chunk_id and (doc_id, chunk_id) in citation_set:
             cited_sources.append(source)
     return cited_sources if cited_sources else normalized_sources
+
+
+def _first_source_value(sources: list[Any], *, key: str) -> str | None:
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        value = str(source.get(key, "")).strip()
+        if value:
+            return value
+    return None
+
+
+def _strings_present_in_sources(*, sources: list[Any], key: str, expected: list[str]) -> bool | None:
+    if not expected:
+        return None
+    haystack = " ".join(
+        str(source.get(key, "")).strip().lower()
+        for source in sources
+        if isinstance(source, dict)
+    )
+    return all(token.lower() in haystack for token in expected)
+
+
+def _count_bullets(answer: str) -> int:
+    count = 0
+    for line in answer.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if re.match(r"^(?:[-*•]\s+|\d+\.\s+)", stripped):
+            count += 1
+    return count
 
 
 def _semantic_similarity(answer: str, expected_answer: str) -> float:
@@ -824,18 +1030,48 @@ def write_markdown_artifact(*, artifact_path: Path, results: list[CaseResult], r
         f"- Unanswerable Cases: `{unanswerable_passed}/{unanswerable_total}`",
         f"- Generated: `{_now_iso()}`",
         "",
-        "| # | Type | Result | Latency (ms) | Citation Valid | Unanswerable OK | Terms OK | Source Tags OK | Semantic Score | Semantic OK | Expected Doc | Actual Doc | Question | Notes |",
-        "|---|---|---|---:|---|---|---|---|---:|---|---|---|---|---|",
+        "## Category Summary",
+        "",
     ]
+
+    categories = sorted({row.category for row in results})
+    for category in categories:
+        category_rows = [row for row in results if row.category == category]
+        category_passed = sum(1 for row in category_rows if row.passed)
+        avg_latency = int(sum(row.latency_ms for row in category_rows) / max(1, len(category_rows)))
+        lines.append(f"- `{category}`: `{category_passed}/{len(category_rows)}` passed, avg latency `{avg_latency}ms`")
+
+    lines.extend(
+        [
+            "",
+            "| # | Category | Case ID | Type | Result | Latency (ms) | Citations | Distinct Docs | Bullets | Citation Valid | Title Match | Source Match | Unanswerable OK | Terms OK | Source Tags OK | Semantic Score | Semantic OK | Expected Doc | Actual Doc | Actual Title | Question | Notes |",
+            "|---|---|---|---|---|---:|---:|---:|---:|---|---|---|---|---|---|---:|---|---|---|---|---|---|",
+        ]
+    )
 
     for index, row in enumerate(results, start=1):
         lines.append(
-            "| {index} | {case_type} | {result} | {latency} | {citation_valid} | {unanswerable_ok} | {required_terms_ok} | {source_tags_ok} | {semantic_similarity} | {semantic_ok} | {expected} | {actual} | {question} | {notes} |".format(
+            "| {index} | {category} | {case_id} | {case_type} | {result} | {latency} | {citation_count} | {distinct_doc_count} | {bullet_count} | {citation_valid} | {title_match_ok} | {source_match_ok} | {unanswerable_ok} | {required_terms_ok} | {source_tags_ok} | {semantic_similarity} | {semantic_ok} | {expected} | {actual} | {actual_title} | {question} | {notes} |".format(
                 index=index,
+                category=_table_escape(row.category),
+                case_id=_table_escape(row.case_id),
                 case_type="unanswerable" if row.expect_unanswerable else "answerable",
                 result="PASS" if row.passed else "FAIL",
                 latency=row.latency_ms,
+                citation_count=row.citation_count,
+                distinct_doc_count=row.distinct_doc_count,
+                bullet_count=row.bullet_count,
                 citation_valid="yes" if row.citation_valid else "no",
+                title_match_ok=(
+                    "n/a"
+                    if row.title_match_ok is None
+                    else ("yes" if row.title_match_ok else "no")
+                ),
+                source_match_ok=(
+                    "n/a"
+                    if row.source_match_ok is None
+                    else ("yes" if row.source_match_ok else "no")
+                ),
                 unanswerable_ok=(
                     "n/a"
                     if row.unanswerable_ok is None
@@ -863,6 +1099,7 @@ def write_markdown_artifact(*, artifact_path: Path, results: list[CaseResult], r
                 ),
                 expected=(row.expected_doc_id or "-"),
                 actual=(row.actual_doc_id or "-"),
+                actual_title=_table_escape(row.actual_title or "-"),
                 question=_table_escape(row.question),
                 notes=_table_escape(row.notes),
             )

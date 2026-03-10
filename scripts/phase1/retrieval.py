@@ -218,7 +218,19 @@ def retrieve_chunks(
         )
 
     if title_hints:
-        if chunks and _has_strong_title_match(chunks):
+        if len(title_hints) > 1:
+            looked_up = _lookup_documents_by_title_hints(
+                qdrant=qdrant,
+                collection=settings.qdrant_collection,
+                title_hints=title_hints,
+                filter_tags=normalized_tags,
+                filter_tag_mode=normalized_tag_mode,
+                filter_group=normalized_group,
+                limit=limit,
+            )
+            if looked_up:
+                chunks = looked_up
+        elif chunks and _has_strong_title_match(chunks):
             chunks = _expand_title_matched_document(
                 qdrant=qdrant,
                 collection=settings.qdrant_collection,
@@ -390,7 +402,7 @@ def _extract_title_hints(query: str) -> list[str]:
 
 def _focused_retrieval_query(query: str, *, title_hints: list[str]) -> str:
     if title_hints:
-        return title_hints[0]
+        return " ".join(title_hints)
     return query
 
 
@@ -511,6 +523,65 @@ def _lookup_document_by_title_hints(
         item.title_match_score = _title_match_score(item=item, title_hints=title_hints)
         item.score = 1.0 + (item.title_match_score or 0.0)
     return expanded
+
+
+def _lookup_documents_by_title_hints(
+    *,
+    qdrant: Any,
+    collection: str,
+    title_hints: list[str],
+    filter_tags: list[str],
+    filter_tag_mode: str,
+    filter_group: str | None,
+    limit: int,
+) -> list[RetrievedChunk]:
+    if not title_hints:
+        return []
+
+    per_doc_limit = max(limit, 8)
+    merged: list[RetrievedChunk] = []
+    seen_doc_ids: set[str] = set()
+
+    for index, hint in enumerate(title_hints):
+        candidate_doc_id = _find_best_doc_id_by_title_hints(
+            qdrant=qdrant,
+            collection=collection,
+            title_hints=[hint],
+            filter_tags=filter_tags,
+            filter_tag_mode=filter_tag_mode,
+            filter_group=filter_group,
+        )
+        if not candidate_doc_id or candidate_doc_id in seen_doc_ids:
+            continue
+
+        seen_doc_ids.add(candidate_doc_id)
+        expanded = _load_chunks_for_doc_id(
+            qdrant=qdrant,
+            collection=collection,
+            doc_id=candidate_doc_id,
+            filter_tags=filter_tags,
+            filter_tag_mode=filter_tag_mode,
+            filter_group=filter_group,
+            limit=per_doc_limit,
+        )
+        if not expanded:
+            continue
+
+        doc_boost = max(0.0, 0.2 - (index * 0.05))
+        for item in expanded:
+            item.title_match_score = _title_match_score(item=item, title_hints=[hint])
+            item.score = 1.0 + (item.title_match_score or 0.0) + doc_boost
+        merged.extend(expanded)
+
+    return sorted(
+        merged,
+        key=lambda item: (
+            item.score,
+            item.title_match_score if item.title_match_score is not None else 0.0,
+            -(item.chunk_index if item.chunk_index is not None else 999999),
+        ),
+        reverse=True,
+    )
 
 
 def _find_best_doc_id_by_title_hints(
