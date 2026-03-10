@@ -107,6 +107,36 @@ class Phase5FUnanswerableNormalizationTests(unittest.TestCase):
         self.assertEqual(response["answer"], rag_query.UNANSWERABLE_ANSWER)
         self.assertEqual(response["confidence_level"], "low")
 
+    def test_infer_answer_style_for_bulleted_request(self) -> None:
+        instructions = rag_query._infer_answer_style_instructions(  # noqa: SLF001
+            query="Give me a bulleted list of what context engineering is all about.",
+            mode="default",
+        )
+
+        self.assertIn("bullet", instructions.lower())
+        self.assertIn("4-8", instructions)
+
+    def test_infer_answer_style_for_comparison_request(self) -> None:
+        instructions = rag_query._infer_answer_style_instructions(  # noqa: SLF001
+            query="How is context engineering different than prompt engineering?",
+            mode="default",
+        )
+
+        self.assertIn("comparison", instructions.lower())
+        self.assertIn("differences", instructions.lower())
+
+    def test_render_prompt_includes_answer_style_instructions(self) -> None:
+        rendered = rag_query._render_prompt(  # noqa: SLF001
+            template="Query={{QUERY}}\nStyle={{ANSWER_STYLE_INSTRUCTIONS}}",
+            query="test",
+            context="ctx",
+            previous_response="",
+            validation_errors=[],
+            answer_style_instructions="Use bullets.",
+        )
+
+        self.assertIn("Style=Use bullets.", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()

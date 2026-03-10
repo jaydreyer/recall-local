@@ -21,13 +21,31 @@ from scripts.phase1.ingestion_pipeline import IngestResult
 
 @contextmanager
 def build_client(env_updates: dict[str, str]) -> Iterator[TestClient]:
-    with patch.dict(os.environ, env_updates, clear=False):
+    merged_env = {"RECALL_PRELOAD_OLLAMA_MODELS": "false"}
+    merged_env.update(env_updates)
+    with patch.dict(os.environ, merged_env, clear=False):
         app = ingest_bridge_api.create_app()
         with TestClient(app) as client:
             yield client
 
 
 class BridgeApiContractTests(unittest.TestCase):
+    def test_startup_preloads_required_ollama_models(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+            "RECALL_PRELOAD_OLLAMA_MODELS": "true",
+            "RECALL_LLM_PROVIDER": "ollama",
+            "OLLAMA_MODEL": "qwen2.5:7b-instruct",
+            "OLLAMA_EMBED_MODEL": "nomic-embed-text",
+        }
+        with patch("scripts.phase1.ingest_bridge_api._ensure_required_ollama_models") as preload_mock:
+            with build_client(env):
+                pass
+
+        preload_mock.assert_called_once_with()
+
     def test_auth_rejects_missing_or_invalid_key_and_allows_valid_key(self) -> None:
         env = {
             "RECALL_API_KEY": "phase5-secret",

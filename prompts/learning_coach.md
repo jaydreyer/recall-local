@@ -21,6 +21,12 @@ Rules:
    - confidence_level: "low"
    - assumptions: include what evidence is missing
    - never guess or use outside knowledge.
+8. Follow the user's requested output format inside the JSON `answer` string. If they ask for bullets, steps, or a comparison, preserve that shape.
+9. Prefer teaching-oriented synthesis over a one-line definition. Include practical implications, tradeoffs, or examples when the context supports them.
+10. Use multiple citations when the explanation combines evidence from multiple chunks.
+
+Answer style instructions:
+{{ANSWER_STYLE_INSTRUCTIONS}}
 
 User query:
 {{QUERY}}

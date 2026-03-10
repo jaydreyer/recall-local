@@ -15,11 +15,13 @@ import threading
 import time
 import uuid
 from collections import deque
+from contextlib import asynccontextmanager
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional
 
+import httpx
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, File, Form, Query, Request, UploadFile
@@ -82,6 +84,7 @@ DEFAULT_CORS_ORIGINS = "*"
 CANONICAL_GROUP_ENUM = list(CANONICAL_GROUPS)
 PHASE6_JOB_STATUSES = {"new", "evaluated", "applied", "dismissed", "expired", "error"}
 PHASE6_JOB_SOURCES = {"jobspy", "adzuna", "serpapi", "career_page", "chrome_extension"}
+DEFAULT_OLLAMA_PULL_TIMEOUT_SECONDS = 900.0
 
 
 class InMemoryRateLimiter:
@@ -1353,6 +1356,12 @@ def create_app() -> FastAPI:
         max_requests=rate_limit_max_requests,
     )
 
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        if _env_flag("RECALL_PRELOAD_OLLAMA_MODELS", default=True):
+            _ensure_required_ollama_models()
+        yield
+
     app = FastAPI(
         title=API_NAME,
         version=API_MAJOR_VERSION,
@@ -1368,6 +1377,7 @@ def create_app() -> FastAPI:
             {"url": server_local, "description": f"{API_NAME} local"},
             {"url": server_ai_lab, "description": f"{API_NAME} ai-lab"},
         ],
+        lifespan=lifespan,
         openapi_tags=[
             {"name": "Health", "description": "Service liveness endpoints."},
             {"name": "Ingestions", "description": "Create ingestion operations from supported channels."},
@@ -2848,6 +2858,91 @@ def create_app() -> FastAPI:
     app.state.rate_limit_window_seconds = rate_limit_window_seconds
     app.state.rate_limit_max_requests = rate_limit_max_requests
     return app
+
+
+def _required_ollama_models() -> list[str]:
+    required: list[str] = []
+
+    embed_model = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text").strip() or "nomic-embed-text"
+    required.append(embed_model)
+
+    provider = os.getenv("RECALL_LLM_PROVIDER", "ollama").strip().lower()
+    if provider == "ollama":
+        generation_model = os.getenv("OLLAMA_MODEL", "qwen2.5:7b-instruct").strip() or "qwen2.5:7b-instruct"
+        required.append(generation_model)
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for model in required:
+        if not model or model in seen:
+            continue
+        seen.add(model)
+        deduped.append(model)
+    return deduped
+
+
+def _ensure_required_ollama_models() -> None:
+    host = os.getenv("OLLAMA_HOST", "http://localhost:11434").strip() or "http://localhost:11434"
+    timeout_seconds = _read_positive_float_env("RECALL_OLLAMA_PULL_TIMEOUT_SECONDS", DEFAULT_OLLAMA_PULL_TIMEOUT_SECONDS)
+    required_models = _required_ollama_models()
+
+    if not required_models:
+        return
+
+    installed_models = _ollama_installed_models(host=host, timeout_seconds=30.0)
+    missing_models = [model for model in required_models if model not in installed_models]
+    if not missing_models:
+        print(f"Ollama model preflight: all required models present ({', '.join(required_models)}).")
+        return
+
+    print(f"Ollama model preflight: pulling missing models: {', '.join(missing_models)}")
+    for model in missing_models:
+        _ollama_pull_model(host=host, model=model, timeout_seconds=timeout_seconds)
+    print("Ollama model preflight: required models ready.")
+
+
+def _ollama_installed_models(*, host: str, timeout_seconds: float) -> set[str]:
+    response = httpx.get(f"{host.rstrip('/')}/api/tags", timeout=timeout_seconds)
+    response.raise_for_status()
+    payload = response.json()
+    models = payload.get("models", [])
+    installed: set[str] = set()
+    if isinstance(models, list):
+        for item in models:
+            if not isinstance(item, dict):
+                continue
+            for key in ("name", "model"):
+                value = str(item.get(key, "")).strip()
+                if value:
+                    installed.add(value)
+    return installed
+
+
+def _ollama_pull_model(*, host: str, model: str, timeout_seconds: float) -> None:
+    response = httpx.post(
+        f"{host.rstrip('/')}/api/pull",
+        json={"name": model, "stream": False},
+        timeout=timeout_seconds,
+    )
+    response.raise_for_status()
+
+
+def _read_positive_float_env(name: str, default: float) -> float:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def _env_flag(name: str, *, default: bool) -> bool:
+    raw = os.getenv(name, "").strip().lower()
+    if not raw:
+        return default
+    return raw in {"1", "true", "yes", "on"}
 
 
 def _db_path() -> Path:

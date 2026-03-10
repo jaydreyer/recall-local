@@ -27,6 +27,11 @@ Rules:
    - Prefer phrasing that connects evidence to action, e.g., "For this role/interview, Jay should emphasize...".
 9. Avoid generic one-line answers. Give concrete guidance with a clear recommendation and rationale.
 10. If the question is about target companies or prioritization, explicitly include the words "company", "priority", and "fit" in the answer text.
+11. Follow the user's requested output format inside the JSON `answer` string. If they ask for bullets or a checklist, return newline-separated bullets with coaching guidance in each item.
+12. When possible, synthesize across multiple retrieved chunks instead of leaning on a single citation.
+
+Answer style instructions:
+{{ANSWER_STYLE_INSTRUCTIONS}}
 
 User query:
 {{QUERY}}

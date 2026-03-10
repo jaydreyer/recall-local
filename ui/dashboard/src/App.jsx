@@ -1199,6 +1199,11 @@ function QueryPanel({ request, groupOptions }) {
       const payload = {
         query: question,
         mode,
+        top_k: 8,
+        max_retries: 2,
+        retrieval_mode: "hybrid",
+        enable_reranker: true,
+        reranker_weight: 0.4,
         filter_tags: effectiveTagFilters,
         filter_tag_mode: filterTagMode,
       };

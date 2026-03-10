@@ -60,6 +60,9 @@ UUID_PATTERN = re.compile(
     flags=re.IGNORECASE,
 )
 HEX_IDENTIFIER_PATTERN = re.compile(r"^[a-f0-9]{16,}$", flags=re.IGNORECASE)
+LIST_QUERY_PATTERN = re.compile(r"\b(list|bullet(?:ed)?|bullet-point|key points?|top \d+)\b", flags=re.IGNORECASE)
+COMPARE_QUERY_PATTERN = re.compile(r"\b(compare|comparison|different|difference|versus|vs\.?)\b", flags=re.IGNORECASE)
+STEPS_QUERY_PATTERN = re.compile(r"\b(how to|steps?|process|plan|improve|fix|make this better)\b", flags=re.IGNORECASE)
 
 
 @dataclass
@@ -375,6 +378,7 @@ def _generate_validated_answer(
     previous_errors: list[str] = []
     validation: ValidationResult | None = None
     attempts_used = 0
+    answer_style_instructions = _infer_answer_style_instructions(query=question, mode=mode)
 
     for attempt in range(max_retries + 1):
         attempts_used = attempt + 1
@@ -386,6 +390,7 @@ def _generate_validated_answer(
             context=context,
             previous_response=previous_response,
             validation_errors=previous_errors,
+            answer_style_instructions=answer_style_instructions,
         )
 
         raw_response = llm_client.generate(
@@ -644,12 +649,49 @@ def _render_prompt(
     context: str,
     previous_response: str,
     validation_errors: list[str],
+    answer_style_instructions: str,
 ) -> str:
     rendered = template.replace("{{QUERY}}", query)
     rendered = rendered.replace("{{CONTEXT}}", context)
     rendered = rendered.replace("{{PREVIOUS_RESPONSE}}", previous_response or "(none)")
     rendered = rendered.replace("{{VALIDATION_ERRORS}}", "\n".join(validation_errors) or "(none)")
+    rendered = rendered.replace("{{ANSWER_STYLE_INSTRUCTIONS}}", answer_style_instructions)
     return rendered
+
+
+def _infer_answer_style_instructions(*, query: str, mode: str) -> str:
+    normalized_query = " ".join(query.strip().split())
+    if LIST_QUERY_PATTERN.search(normalized_query):
+        return (
+            "The user asked for a list. In the JSON `answer` string, return a newline-separated bullet list "
+            "with 4-8 bullets when the context supports it. Each bullet should add a distinct detail, not a "
+            "rephrased duplicate."
+        )
+    if COMPARE_QUERY_PATTERN.search(normalized_query):
+        return (
+            "The user asked for a comparison. In the JSON `answer` string, lead with one concise comparison "
+            "sentence, then use 3-6 newline-separated bullets covering concrete differences, overlaps, and "
+            "practical implications grounded in the retrieved context."
+        )
+    if STEPS_QUERY_PATTERN.search(normalized_query):
+        return (
+            "The user is asking for improvement guidance or steps. In the JSON `answer` string, provide a "
+            "short recommendation summary followed by 3-6 newline-separated action bullets ordered by impact."
+        )
+    if mode == "job-search":
+        return (
+            "Return a practical coaching answer with one short opening sentence followed by 3-5 newline-separated "
+            "bullets tying evidence to interview or career actions."
+        )
+    if mode == "learning":
+        return (
+            "Return a teaching-oriented answer with one short framing sentence followed by 3-6 newline-separated "
+            "bullets that explain the concept, tradeoffs, and practical implications."
+        )
+    return (
+        "Return a detailed answer that directly addresses the request. Prefer one short framing sentence followed "
+        "by 3-6 newline-separated bullets when the context supports multiple distinct points."
+    )
 
 
 def _write_artifact(*, settings: RagSettings, run_id: str, payload: dict[str, Any]) -> str:
@@ -711,7 +753,7 @@ def _active_model_name(provider: str) -> str:
         return os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     if normalized == "gemini":
         return os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-    return os.getenv("OLLAMA_MODEL", "llama3.2:3b")
+    return os.getenv("OLLAMA_MODEL", "qwen2.5:7b-instruct")
 
 
 def _normalize_mode(mode: str | None) -> str:

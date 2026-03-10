@@ -95,7 +95,7 @@ Last updated: 2026-03-07
   - `phi3:mini`
   - `mistral:7b`
   - `llama3.2:3b`
-- `.env.example` default model: `llama3.2:3b`
+- `.env.example` default model: `qwen2.5:7b-instruct`
 
 ## Cloud Providers
 

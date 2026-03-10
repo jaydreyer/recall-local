@@ -128,7 +128,7 @@ def embed(text: str, trace_metadata: dict[str, Any] | None = None) -> List[float
 
 def _ollama_generate(prompt: str, system: str, temperature: float) -> str:
     host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-    model = os.getenv("OLLAMA_MODEL", "llama3:8b")
+    model = os.getenv("OLLAMA_MODEL", "qwen2.5:7b-instruct")
     retries = _int_env("RECALL_GENERATE_RETRIES", default=3, minimum=1)
     backoff_seconds = _float_env("RECALL_GENERATE_BACKOFF_SECONDS", default=1.5, minimum=0.0)
     timeout_seconds = _float_env("RECALL_OLLAMA_GENERATE_TIMEOUT_SECONDS", default=180.0, minimum=30.0)
@@ -347,7 +347,7 @@ def _active_generation_model(provider: str) -> str:
         return os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     if normalized == "gemini":
         return os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-    return os.getenv("OLLAMA_MODEL", "llama3.2:3b")
+    return os.getenv("OLLAMA_MODEL", "qwen2.5:7b-instruct")
 
 
 def _sanitize_embed_text(text: str) -> str:

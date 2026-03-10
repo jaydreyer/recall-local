@@ -22,6 +22,11 @@ Mandatory output requirements:
 5. If query is not answerable from context, answer exactly:
    "I don't have enough information in the retrieved context to answer that."
    and set confidence_level to "low".
+6. Preserve the user's requested format in the JSON `answer` string. Newline-separated bullets are allowed and preferred for list or action-oriented requests.
+7. Regenerate a more detailed, more useful synthesis grounded in the retrieved context rather than a one-line paraphrase.
+
+Answer style instructions:
+{{ANSWER_STYLE_INSTRUCTIONS}}
 
 User query:
 {{QUERY}}

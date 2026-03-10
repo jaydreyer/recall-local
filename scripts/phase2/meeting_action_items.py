@@ -550,7 +550,7 @@ def _active_model_name(provider: str) -> str:
         return os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     if normalized == "gemini":
         return os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-    return os.getenv("OLLAMA_MODEL", "llama3.2:3b")
+    return os.getenv("OLLAMA_MODEL", "qwen2.5:7b-instruct")
 
 
 def _require_module(module_name: str, install_hint: str):
