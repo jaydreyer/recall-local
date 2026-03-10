@@ -49,7 +49,7 @@ def generate(
     error_text: str | None = None
     try:
         if PROVIDER == "ollama":
-            response_text = _ollama_generate(prompt, system, temperature)
+            response_text = _ollama_generate(prompt, system, temperature, max_tokens)
         elif PROVIDER == "anthropic":
             response_text = _anthropic_generate(prompt, system, temperature, max_tokens)
         elif PROVIDER == "openai":
@@ -126,18 +126,24 @@ def embed(text: str, trace_metadata: dict[str, Any] | None = None) -> List[float
         )
 
 
-def _ollama_generate(prompt: str, system: str, temperature: float) -> str:
+def _ollama_generate(prompt: str, system: str, temperature: float, max_tokens: int) -> str:
     host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
     model = os.getenv("OLLAMA_MODEL", "qwen2.5:7b-instruct")
     retries = _int_env("RECALL_GENERATE_RETRIES", default=3, minimum=1)
     backoff_seconds = _float_env("RECALL_GENERATE_BACKOFF_SECONDS", default=1.5, minimum=0.0)
     timeout_seconds = _float_env("RECALL_OLLAMA_GENERATE_TIMEOUT_SECONDS", default=180.0, minimum=30.0)
+    context_window = _int_env("RECALL_OLLAMA_NUM_CTX", default=8192, minimum=2048)
+    max_output_tokens = max(1, max_tokens)
 
     payload = {
         "model": model,
         "prompt": prompt,
         "stream": False,
-        "options": {"temperature": temperature},
+        "options": {
+            "temperature": temperature,
+            "num_ctx": context_window,
+            "num_predict": max_output_tokens,
+        },
     }
     if system:
         payload["system"] = system

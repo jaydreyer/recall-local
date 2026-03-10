@@ -137,6 +137,66 @@ class Phase5FUnanswerableNormalizationTests(unittest.TestCase):
 
         self.assertIn("Style=Use bullets.", rendered)
 
+    def test_named_document_summary_query_is_detected(self) -> None:
+        self.assertTrue(
+            rag_query._is_named_document_summary_query(  # noqa: SLF001
+                'Summarize the article "The New Skill in AI Is Not Prompting, It\'s Context Engineering" for me.'
+            )
+        )
+
+    def test_query_strategy_prefers_document_summary_for_dominant_doc(self) -> None:
+        retrieved = [
+            rag_query.RetrievedChunk(
+                doc_id="doc-1",
+                chunk_id="chunk-1",
+                title="The New Skill in AI Is Not Prompting, It's Context Engineering",
+                source="https://philschmid.de/context-engineering",
+                text="a",
+                score=0.9,
+                source_type="url",
+                ingestion_channel="bookmarklet",
+                group="reference",
+                tags=["article"],
+            ),
+            rag_query.RetrievedChunk(
+                doc_id="doc-1",
+                chunk_id="chunk-2",
+                title="The New Skill in AI Is Not Prompting, It's Context Engineering",
+                source="https://philschmid.de/context-engineering",
+                text="b",
+                score=0.8,
+                source_type="url",
+                ingestion_channel="bookmarklet",
+                group="reference",
+                tags=["article"],
+            ),
+            rag_query.RetrievedChunk(
+                doc_id="doc-2",
+                chunk_id="chunk-9",
+                title="Prompt Engineering Overview",
+                source="https://example.com/prompting",
+                text="c",
+                score=0.4,
+                source_type="url",
+                ingestion_channel="bookmarklet",
+                group="reference",
+                tags=["article"],
+            ),
+        ]
+
+        strategy = rag_query._query_strategy(  # noqa: SLF001
+            question='Summarize the article "The New Skill in AI Is Not Prompting, It\'s Context Engineering" for me.',
+            retrieved=retrieved,
+        )
+
+        self.assertEqual(strategy, "document_summary")
+
+    def test_prompt_profile_name_prefers_document_summary_strategy(self) -> None:
+        self.assertEqual(
+            rag_query._prompt_profile_name("default", query_strategy="document_summary"),  # noqa: SLF001
+            "workflow_02_document_summary",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

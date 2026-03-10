@@ -10,6 +10,27 @@ Do not assume ai-lab has current code until sync is complete and spot-checked.
 
 After syncing, run at least one quick file-content check on `ai-lab` (for example with `rg` on newly added route/function names) before troubleshooting runtime errors.
 
+## SSH Access To ai-lab
+
+Use the `ai-lab` SSH host alias. It is expected to resolve with this identity:
+
+- host: `ai-lab`
+- user: `jaydreyer`
+- hostname: `192.168.68.93`
+- identity file: `~/.ssh/codex_ai_lab`
+
+Quick connectivity check:
+
+```bash
+ssh ai-lab 'hostname && pwd'
+```
+
+If the alias is unavailable for any reason, use:
+
+```bash
+ssh -i ~/.ssh/codex_ai_lab -o IdentitiesOnly=yes jaydreyer@192.168.68.93 'hostname && pwd'
+```
+
 ## Docker Safety Rules (Mandatory)
 
 The live ai-lab stack is defined only by:
@@ -50,6 +71,24 @@ cd /home/jaydreyer/recall-local/docker
 ```
 
 Do not proceed with n8n, Ollama, or Qdrant troubleshooting unless this validation passes.
+
+## Ollama Model Invariant
+
+The live ai-lab stack must explicitly keep these model settings aligned in `/home/jaydreyer/recall-local/docker/.env`:
+
+- `RECALL_LLM_PROVIDER=ollama`
+- `OLLAMA_MODEL=qwen2.5:7b-instruct`
+- `OLLAMA_EMBED_MODEL=nomic-embed-text`
+
+Do not rely on code defaults for the live stack. Keep the `.env` values explicit.
+
+After any change that touches Ollama, the bridge, or `docker/.env`, verify both models are installed in the live Ollama volume:
+
+```bash
+docker exec -i ollama ollama list
+```
+
+`/home/jaydreyer/recall-local/docker/validate-stack.sh` is expected to fail if either configured model is missing.
 
 ## Newsletter Workflow Safety
 

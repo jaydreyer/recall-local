@@ -63,6 +63,9 @@ HEX_IDENTIFIER_PATTERN = re.compile(r"^[a-f0-9]{16,}$", flags=re.IGNORECASE)
 LIST_QUERY_PATTERN = re.compile(r"\b(list|bullet(?:ed)?|bullet-point|key points?|top \d+)\b", flags=re.IGNORECASE)
 COMPARE_QUERY_PATTERN = re.compile(r"\b(compare|comparison|different|difference|versus|vs\.?)\b", flags=re.IGNORECASE)
 STEPS_QUERY_PATTERN = re.compile(r"\b(how to|steps?|process|plan|improve|fix|make this better)\b", flags=re.IGNORECASE)
+SUMMARY_QUERY_PATTERN = re.compile(r"\b(summarize|summary|highlights|key takeaways|recap|overview)\b", flags=re.IGNORECASE)
+DOCUMENT_REFERENCE_PATTERN = re.compile(r"\b(article|post|blog post|essay|paper|write-?up|document)\b", flags=re.IGNORECASE)
+QUOTED_TARGET_PATTERN = re.compile(r'["“”](.+?)["“”]')
 
 
 @dataclass
@@ -70,13 +73,17 @@ class RagSettings:
     db_path: Path
     artifacts_dir: Path
     prompt_path: Path
+    summary_prompt_path: Path
     retry_prompt_path: Path
     job_search_prompt_path: Path
     learning_prompt_path: Path
     top_k: int
+    summary_top_k: int
     min_score: float
     max_retries: int
     temperature: float
+    summary_max_tokens: int
+    default_max_tokens: int
 
 
 def load_settings() -> RagSettings:
@@ -84,13 +91,22 @@ def load_settings() -> RagSettings:
     load_dotenv(ROOT / "docker" / ".env.example")
 
     top_k = int(os.getenv("RECALL_RAG_TOP_K", "5"))
+    summary_top_k = int(os.getenv("RECALL_RAG_SUMMARY_TOP_K", "20"))
     min_score = float(os.getenv("RECALL_RAG_MIN_SCORE", "0.2"))
     max_retries = int(os.getenv("RECALL_RAG_MAX_RETRIES", "1"))
     temperature = float(os.getenv("RECALL_RAG_TEMPERATURE", "0.2"))
+    summary_max_tokens = int(os.getenv("RECALL_RAG_SUMMARY_MAX_TOKENS", "768"))
+    default_max_tokens = int(os.getenv("RECALL_RAG_MAX_TOKENS", "384"))
     if top_k <= 0:
         raise ValueError("RECALL_RAG_TOP_K must be greater than 0")
+    if summary_top_k <= 0:
+        raise ValueError("RECALL_RAG_SUMMARY_TOP_K must be greater than 0")
     if max_retries < 0:
         raise ValueError("RECALL_RAG_MAX_RETRIES cannot be negative")
+    if summary_max_tokens <= 0:
+        raise ValueError("RECALL_RAG_SUMMARY_MAX_TOKENS must be greater than 0")
+    if default_max_tokens <= 0:
+        raise ValueError("RECALL_RAG_MAX_TOKENS must be greater than 0")
 
     artifacts_root = _safe_dir_from_env(
         env_var="DATA_ARTIFACTS",
@@ -104,13 +120,17 @@ def load_settings() -> RagSettings:
         db_path=db_path,
         artifacts_dir=artifacts_root / "rag",
         prompt_path=ROOT / "prompts" / "workflow_02_rag_answer.md",
+        summary_prompt_path=ROOT / "prompts" / "workflow_02_document_summary.md",
         retry_prompt_path=ROOT / "prompts" / "workflow_02_rag_answer_retry.md",
         job_search_prompt_path=ROOT / "prompts" / "job_search_coach.md",
         learning_prompt_path=ROOT / "prompts" / "learning_coach.md",
         top_k=top_k,
+        summary_top_k=summary_top_k,
         min_score=min_score,
         max_retries=max_retries,
         temperature=temperature,
+        summary_max_tokens=summary_max_tokens,
+        default_max_tokens=default_max_tokens,
     )
 
 
@@ -159,6 +179,7 @@ def run_rag_query(
     normalized_filter_tags = _normalize_filter_tags(filter_tags)
     normalized_filter_tag_mode = _normalize_filter_tag_mode(filter_tag_mode)
     normalized_filter_group = _normalize_filter_group(filter_group)
+    summary_hint = _is_named_document_summary_query(query)
     active_mode = _resolve_mode(
         mode=mode,
         filter_tags=normalized_filter_tags,
@@ -184,9 +205,10 @@ def run_rag_query(
         _insert_run_started(conn=conn, run_id=run_id, query=question, started_at=started_at)
 
     try:
+        retrieval_limit = max(limit, settings.summary_top_k) if summary_hint else limit
         retrieved = retrieve_chunks(
             question,
-            top_k=limit,
+            top_k=retrieval_limit,
             min_score=threshold,
             filter_tags=normalized_filter_tags,
             filter_tag_mode=normalized_filter_tag_mode,
@@ -201,7 +223,7 @@ def run_rag_query(
             # Retry once with relaxed threshold to avoid hard failures on sparse / niche queries.
             retrieved = retrieve_chunks(
                 question,
-                top_k=limit,
+                top_k=retrieval_limit,
                 min_score=-1.0,
                 filter_tags=normalized_filter_tags,
                 filter_tag_mode=normalized_filter_tag_mode,
@@ -216,16 +238,20 @@ def run_rag_query(
 
         if fallback_reason is None:
             try:
+                query_strategy = _query_strategy(question=question, retrieved=retrieved)
                 response, attempts_used = _generate_validated_answer(
                     question=question,
                     retrieved=retrieved,
                     max_retries=retries,
                     temperature=settings.temperature,
+                    max_tokens=settings.summary_max_tokens if query_strategy == "document_summary" else settings.default_max_tokens,
                     prompt_path=settings.prompt_path,
+                    summary_prompt_path=settings.summary_prompt_path,
                     job_search_prompt_path=settings.job_search_prompt_path,
                     learning_prompt_path=settings.learning_prompt_path,
                     retry_prompt_path=settings.retry_prompt_path,
                     mode=active_mode,
+                    query_strategy=query_strategy,
                 )
             except Exception as exc:  # noqa: BLE001
                 fallback_reason = f"Validation/generation fallback: {exc}"
@@ -282,7 +308,9 @@ def run_rag_query(
         response["audit"]["filter_tag_mode"] = normalized_filter_tag_mode
         response["audit"]["filter_group"] = normalized_filter_group
         response["audit"]["mode"] = active_mode
-        response["audit"]["prompt_profile"] = _prompt_profile_name(active_mode)
+        query_strategy = _query_strategy(question=question, retrieved=retrieved)
+        response["audit"]["query_strategy"] = query_strategy
+        response["audit"]["prompt_profile"] = _prompt_profile_name(active_mode, query_strategy=query_strategy)
         response["audit"]["retrieval_mode"] = retrieval_mode or os.getenv("RECALL_RAG_RETRIEVAL_MODE", "vector")
         response["audit"]["hybrid_alpha"] = (
             float(hybrid_alpha)
@@ -344,16 +372,21 @@ def _generate_validated_answer(
     retrieved: list[RetrievedChunk],
     max_retries: int,
     temperature: float,
+    max_tokens: int,
     prompt_path: Path,
+    summary_prompt_path: Path,
     job_search_prompt_path: Path,
     learning_prompt_path: Path,
     retry_prompt_path: Path,
     mode: str,
+    query_strategy: str,
 ) -> tuple[dict[str, Any], int]:
     allowed_pairs = {(item.doc_id, item.chunk_id) for item in retrieved}
     context = _build_context(retrieved)
 
-    if mode == "job-search":
+    if query_strategy == "document_summary":
+        selected_primary_prompt = summary_prompt_path
+    elif mode == "job-search":
         selected_primary_prompt = job_search_prompt_path
     elif mode == "learning":
         selected_primary_prompt = learning_prompt_path
@@ -378,7 +411,11 @@ def _generate_validated_answer(
     previous_errors: list[str] = []
     validation: ValidationResult | None = None
     attempts_used = 0
-    answer_style_instructions = _infer_answer_style_instructions(query=question, mode=mode)
+    answer_style_instructions = _infer_answer_style_instructions(
+        query=question,
+        mode=mode,
+        query_strategy=query_strategy,
+    )
 
     for attempt in range(max_retries + 1):
         attempts_used = attempt + 1
@@ -396,10 +433,12 @@ def _generate_validated_answer(
         raw_response = llm_client.generate(
             prompt=prompt,
             temperature=0.1 if is_retry else temperature,
+            max_tokens=max_tokens,
             trace_metadata={
                 "workflow": "workflow_02_rag_query",
                 "mode": mode,
-                "prompt_profile": _prompt_profile_name(mode),
+                "query_strategy": query_strategy,
+                "prompt_profile": _prompt_profile_name(mode, query_strategy=query_strategy),
                 "is_retry": is_retry,
             },
         )
@@ -659,8 +698,14 @@ def _render_prompt(
     return rendered
 
 
-def _infer_answer_style_instructions(*, query: str, mode: str) -> str:
+def _infer_answer_style_instructions(*, query: str, mode: str, query_strategy: str = "general_qa") -> str:
     normalized_query = " ".join(query.strip().split())
+    if query_strategy == "document_summary":
+        return (
+            "This is a named-document summary request. In the JSON `answer` string, give a 1-2 sentence overview "
+            "followed by 5-8 newline-separated bullet points covering the document's main arguments, notable claims, "
+            "and practical takeaways."
+        )
     if LIST_QUERY_PATTERN.search(normalized_query):
         return (
             "The user asked for a list. In the JSON `answer` string, return a newline-separated bullet list "
@@ -817,12 +862,29 @@ def _normalize_filter_tag_mode(filter_tag_mode: str | None) -> str:
     raise ValueError(f"Unsupported filter_tag_mode: {filter_tag_mode}")
 
 
-def _prompt_profile_name(mode: str) -> str:
+def _prompt_profile_name(mode: str, *, query_strategy: str = "general_qa") -> str:
+    if query_strategy == "document_summary":
+        return "workflow_02_document_summary"
     if mode == "job-search":
         return "job_search_coach"
     if mode == "learning":
         return "learning_coach"
     return "workflow_02_default"
+
+
+def _query_strategy(*, question: str, retrieved: list[RetrievedChunk]) -> str:
+    if not _is_named_document_summary_query(question):
+        return "general_qa"
+    return "document_summary"
+
+
+def _is_named_document_summary_query(question: str) -> bool:
+    normalized = " ".join(question.strip().split())
+    if not normalized:
+        return False
+    has_summary_intent = bool(SUMMARY_QUERY_PATTERN.search(normalized))
+    has_document_reference = bool(DOCUMENT_REFERENCE_PATTERN.search(normalized) or QUOTED_TARGET_PATTERN.search(normalized))
+    return has_summary_intent and has_document_reference
 
 
 def _env_bool(name: str, default: bool) -> bool:

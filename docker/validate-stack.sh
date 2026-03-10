@@ -5,6 +5,7 @@ EXPECTED_PROJECT="recall"
 EXPECTED_NETWORK="recall_backend"
 EXPECTED_QDRANT_VOLUME="docker_qdrant-storage"
 EXPECTED_OLLAMA_VOLUME="docker_ollama-models"
+STACK_ENV_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.env"
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -15,6 +16,20 @@ require_cmd() {
 
 require_cmd docker
 require_cmd jq
+
+read_stack_env() {
+  local key="$1"
+  local fallback="${2:-}"
+  if [[ -f "$STACK_ENV_FILE" ]]; then
+    local value
+    value="$(grep -E "^${key}=" "$STACK_ENV_FILE" | tail -n 1 | cut -d= -f2- || true)"
+    if [[ -n "$value" ]]; then
+      printf '%s\n' "$value"
+      return 0
+    fi
+  fi
+  printf '%s\n' "$fallback"
+}
 
 check_container_exists() {
   local name="$1"
@@ -64,6 +79,32 @@ assert_mount_name() {
     }
 }
 
+assert_ollama_model_present() {
+  local model="$1"
+  [[ -n "$model" ]] || return 0
+  local installed
+  installed="$(docker exec -i ollama ollama list | awk 'NR>1 {print $1}')"
+  if printf '%s\n' "$installed" | grep -Fx "$model" >/dev/null; then
+    return 0
+  fi
+
+  if [[ "$model" != *:* ]] && printf '%s\n' "$installed" | grep -Fx "${model}:latest" >/dev/null; then
+    return 0
+  fi
+
+  if [[ "$model" == *:latest ]]; then
+    local base_model="${model%:latest}"
+    if printf '%s\n' "$installed" | grep -Fx "$base_model" >/dev/null; then
+      return 0
+    fi
+  fi
+
+  {
+    echo "ollama is missing required model: $model" >&2
+    exit 1
+  }
+}
+
 echo "Checking container presence..."
 for c in n8n ollama qdrant recall-ingest-bridge; do
   check_container_exists "$c"
@@ -91,5 +132,12 @@ docker exec -i n8n node -e "require('http').get('http://ollama:11434/api/tags',r
 
 echo "Checking n8n -> qdrant HTTP..."
 docker exec -i n8n node -e "require('http').get('http://qdrant:6333/healthz',res=>{process.exit(res.statusCode===200?0:1)}).on('error',()=>process.exit(1))"
+
+EXPECTED_OLLAMA_MODEL="$(read_stack_env OLLAMA_MODEL qwen2.5:7b-instruct)"
+EXPECTED_OLLAMA_EMBED_MODEL="$(read_stack_env OLLAMA_EMBED_MODEL nomic-embed-text)"
+
+echo "Checking required Ollama models..."
+assert_ollama_model_present "$EXPECTED_OLLAMA_MODEL"
+assert_ollama_model_present "$EXPECTED_OLLAMA_EMBED_MODEL"
 
 echo "Validation passed."
