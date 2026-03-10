@@ -539,7 +539,7 @@ def _lookup_documents_by_title_hints(
         return []
 
     per_doc_limit = max(limit, 8)
-    merged: list[RetrievedChunk] = []
+    per_doc_chunks: list[list[RetrievedChunk]] = []
     seen_doc_ids: set[str] = set()
 
     for index, hint in enumerate(title_hints):
@@ -571,17 +571,24 @@ def _lookup_documents_by_title_hints(
         for item in expanded:
             item.title_match_score = _title_match_score(item=item, title_hints=[hint])
             item.score = 1.0 + (item.title_match_score or 0.0) + doc_boost
-        merged.extend(expanded)
+        per_doc_chunks.append(
+            sorted(
+                expanded,
+                key=lambda item: item.chunk_index if item.chunk_index is not None else 999999,
+            )
+        )
 
-    return sorted(
-        merged,
-        key=lambda item: (
-            item.score,
-            item.title_match_score if item.title_match_score is not None else 0.0,
-            -(item.chunk_index if item.chunk_index is not None else 999999),
-        ),
-        reverse=True,
-    )
+    return _interleave_ranked_chunks(per_doc_chunks)
+
+
+def _interleave_ranked_chunks(per_doc_chunks: list[list[RetrievedChunk]]) -> list[RetrievedChunk]:
+    merged: list[RetrievedChunk] = []
+    max_depth = max((len(items) for items in per_doc_chunks), default=0)
+    for depth in range(max_depth):
+        for items in per_doc_chunks:
+            if depth < len(items):
+                merged.append(items[depth])
+    return merged
 
 
 def _find_best_doc_id_by_title_hints(

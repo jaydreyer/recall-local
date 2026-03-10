@@ -281,7 +281,20 @@ class Phase5FTitleFocusedRetrievalTests(unittest.TestCase):
                     ingestion_channel="file",
                     group="reference",
                     tags=["learning"],
-                )
+                ),
+                retrieval.RetrievedChunk(
+                    doc_id="doc-a",
+                    chunk_id="chunk-a-1",
+                    chunk_index=1,
+                    title="Vector Embeddings Guide",
+                    source="vector-embeddings-guide.pdf",
+                    text="second",
+                    score=1.0,
+                    source_type="file",
+                    ingestion_channel="file",
+                    group="reference",
+                    tags=["learning"],
+                ),
             ],
             "doc-b": [
                 retrieval.RetrievedChunk(
@@ -291,6 +304,19 @@ class Phase5FTitleFocusedRetrievalTests(unittest.TestCase):
                     title="LLM Embeddings Vector DB Comparison Guide",
                     source="llm-embeddings-vectordb-guide.pdf",
                     text="second",
+                    score=1.0,
+                    source_type="file",
+                    ingestion_channel="file",
+                    group="reference",
+                    tags=["learning"],
+                ),
+                retrieval.RetrievedChunk(
+                    doc_id="doc-b",
+                    chunk_id="chunk-b-1",
+                    chunk_index=1,
+                    title="LLM Embeddings Vector DB Comparison Guide",
+                    source="llm-embeddings-vectordb-guide.pdf",
+                    text="fourth",
                     score=1.0,
                     source_type="file",
                     ingestion_channel="file",
@@ -318,6 +344,10 @@ class Phase5FTitleFocusedRetrievalTests(unittest.TestCase):
             )
 
         self.assertEqual({item.doc_id for item in resolved}, {"doc-a", "doc-b"})
+        self.assertEqual(
+            [item.doc_id for item in resolved[:4]],
+            ["doc-a", "doc-b", "doc-a", "doc-b"],
+        )
 
     def test_has_strong_title_match_requires_high_score(self) -> None:
         weak = [

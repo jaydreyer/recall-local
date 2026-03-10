@@ -66,6 +66,7 @@ STEPS_QUERY_PATTERN = re.compile(r"\b(how to|steps?|process|plan|improve|fix|mak
 SUMMARY_QUERY_PATTERN = re.compile(r"\b(summarize|summary|highlights|key takeaways|recap|overview)\b", flags=re.IGNORECASE)
 DOCUMENT_REFERENCE_PATTERN = re.compile(r"\b(article|post|blog post|essay|paper|write-?up|document)\b", flags=re.IGNORECASE)
 QUOTED_TARGET_PATTERN = re.compile(r'["“”](.+?)["“”]')
+SYNTHESIS_CONNECTOR_PATTERN = re.compile(r"\b(and|plus|along with)\b", flags=re.IGNORECASE)
 RANKING_STOPWORDS = {
     "a",
     "an",
@@ -131,6 +132,7 @@ class RagSettings:
     artifacts_dir: Path
     prompt_path: Path
     compare_prompt_path: Path
+    synthesis_prompt_path: Path
     summary_prompt_path: Path
     retry_prompt_path: Path
     job_search_prompt_path: Path
@@ -179,6 +181,7 @@ def load_settings() -> RagSettings:
         artifacts_dir=artifacts_root / "rag",
         prompt_path=ROOT / "prompts" / "workflow_02_rag_answer.md",
         compare_prompt_path=ROOT / "prompts" / "workflow_02_compare_synthesis.md",
+        synthesis_prompt_path=ROOT / "prompts" / "workflow_02_multi_document_synthesis.md",
         summary_prompt_path=ROOT / "prompts" / "workflow_02_document_summary.md",
         retry_prompt_path=ROOT / "prompts" / "workflow_02_rag_answer_retry.md",
         job_search_prompt_path=ROOT / "prompts" / "job_search_coach.md",
@@ -269,10 +272,11 @@ def run_rag_query(
         retrieval_limit = limit
         if summary_hint:
             retrieval_limit = max(limit, settings.summary_top_k)
-        elif compare_hint:
+        elif compare_hint or query_strategy_hint == "multi_document_synthesis":
             retrieval_limit = max(limit, min(settings.summary_top_k, 12))
-        retrieved = retrieve_chunks(
-            question,
+        retrieved = _retrieve_for_query_strategy(
+            question=question,
+            query_strategy=query_strategy_hint,
             top_k=retrieval_limit,
             min_score=threshold,
             filter_tags=normalized_filter_tags,
@@ -286,8 +290,9 @@ def run_rag_query(
         fallback_reason: str | None = None
         if not retrieved:
             # Retry once with relaxed threshold to avoid hard failures on sparse / niche queries.
-            retrieved = retrieve_chunks(
-                question,
+            retrieved = _retrieve_for_query_strategy(
+                question=question,
+                query_strategy=query_strategy_hint,
                 top_k=retrieval_limit,
                 min_score=-1.0,
                 filter_tags=normalized_filter_tags,
@@ -312,6 +317,7 @@ def run_rag_query(
                     max_tokens=settings.summary_max_tokens if query_strategy == "document_summary" else settings.default_max_tokens,
                     prompt_path=settings.prompt_path,
                     compare_prompt_path=settings.compare_prompt_path,
+                    synthesis_prompt_path=settings.synthesis_prompt_path,
                     summary_prompt_path=settings.summary_prompt_path,
                     job_search_prompt_path=settings.job_search_prompt_path,
                     learning_prompt_path=settings.learning_prompt_path,
@@ -441,6 +447,7 @@ def _generate_validated_answer(
     max_tokens: int,
     prompt_path: Path,
     compare_prompt_path: Path,
+    synthesis_prompt_path: Path,
     summary_prompt_path: Path,
     job_search_prompt_path: Path,
     learning_prompt_path: Path,
@@ -464,6 +471,8 @@ def _generate_validated_answer(
         selected_primary_prompt = summary_prompt_path
     elif query_strategy == "compare_synthesis":
         selected_primary_prompt = compare_prompt_path
+    elif query_strategy == "multi_document_synthesis":
+        selected_primary_prompt = synthesis_prompt_path
     elif mode == "job-search":
         selected_primary_prompt = job_search_prompt_path
     elif mode == "learning":
@@ -534,7 +543,15 @@ def _generate_validated_answer(
         previous_errors = validation.errors
 
     if validation is None or not validation.valid or not validation.parsed_response:
-        if query_strategy == "compare_synthesis":
+        if query_strategy == "document_summary":
+            summary_fallback = _build_document_summary_fallback_response(
+                question=question,
+                selected_chunks=selected_chunks,
+                reason="; ".join(validation.errors if validation else ["unknown validation failure"]),
+            )
+            if summary_fallback is not None:
+                return summary_fallback, attempts_used
+        if query_strategy in {"compare_synthesis", "multi_document_synthesis"}:
             compare_fallback = _build_compare_fallback_response(
                 question=question,
                 selected_chunks=selected_chunks,
@@ -651,6 +668,45 @@ def _build_compare_fallback_response(
         "audit": {
             "fallback_used": True,
             "fallback_reason": f"Compare synthesis fallback used after validation failure: {reason}",
+        },
+    }
+
+
+def _build_document_summary_fallback_response(
+    *,
+    question: str,
+    selected_chunks: list[RetrievedChunk],
+    reason: str,
+) -> dict[str, Any] | None:
+    if not selected_chunks:
+        return None
+
+    primary_doc_id = selected_chunks[0].doc_id
+    primary_chunks = [chunk for chunk in selected_chunks if chunk.doc_id == primary_doc_id]
+    if not primary_chunks:
+        return None
+
+    title = primary_chunks[0].title
+    answer_lines = [
+        _document_summary_intro(title=title, question=question),
+    ]
+    citations: list[dict[str, str]] = []
+    for chunk in primary_chunks[:4]:
+        answer_lines.append(f"- {_supporting_snippet(chunk.text, question=question)}")
+        citations.append({"doc_id": chunk.doc_id, "chunk_id": chunk.chunk_id})
+
+    return {
+        "answer": "\n".join(answer_lines),
+        "citations": citations,
+        "confidence_level": "low",
+        "assumptions": [
+            "Returned an extractive summary fallback because the model could not produce a valid structured summary.",
+            f"Fallback reason: {reason}",
+        ],
+        "sources": _source_rows(primary_chunks),
+        "audit": {
+            "fallback_used": True,
+            "fallback_reason": f"Document summary fallback used after validation failure: {reason}",
         },
     }
 
@@ -812,6 +868,154 @@ def _source_rows(retrieved: list[RetrievedChunk]) -> list[dict[str, Any]]:
     ]
 
 
+def _retrieve_for_query_strategy(
+    *,
+    question: str,
+    query_strategy: str,
+    top_k: int,
+    min_score: float,
+    filter_tags: list[str],
+    filter_tag_mode: str,
+    filter_group: str | None,
+    retrieval_mode: str | None,
+    hybrid_alpha: float | None,
+    enable_reranker: bool | None,
+    reranker_weight: float | None,
+) -> list[RetrievedChunk]:
+    if query_strategy != "multi_document_synthesis":
+        return retrieve_chunks(
+            question,
+            top_k=top_k,
+            min_score=min_score,
+            filter_tags=filter_tags,
+            filter_tag_mode=filter_tag_mode,
+            filter_group=filter_group,
+            retrieval_mode=retrieval_mode,
+            hybrid_alpha=hybrid_alpha,
+            enable_reranker=enable_reranker,
+            reranker_weight=reranker_weight,
+        )
+
+    merged: list[RetrievedChunk] = []
+    per_query_results: list[list[RetrievedChunk]] = []
+    for subquery in _synthesis_subqueries(question):
+        subquery_chunks = retrieve_chunks(
+                subquery,
+                top_k=max(24, top_k * 4),
+                min_score=min(min_score, 0.05),
+                filter_tags=filter_tags,
+                filter_tag_mode=filter_tag_mode,
+                filter_group=filter_group,
+                retrieval_mode=retrieval_mode,
+                hybrid_alpha=hybrid_alpha,
+                enable_reranker=enable_reranker,
+                reranker_weight=reranker_weight,
+            )
+        per_query_results.append(
+            _prioritize_chunks_for_subquery(subquery_chunks, query=subquery)
+        )
+    per_query_results.append(
+        retrieve_chunks(
+            question,
+            top_k=top_k,
+            min_score=min_score,
+            filter_tags=filter_tags,
+            filter_tag_mode=filter_tag_mode,
+            filter_group=filter_group,
+            retrieval_mode=retrieval_mode,
+            hybrid_alpha=hybrid_alpha,
+            enable_reranker=enable_reranker,
+            reranker_weight=reranker_weight,
+        )
+    )
+    merged = _interleave_retrieved_query_results(per_query_results)
+    return _dedupe_retrieved_chunks_preserve_order(merged)[:top_k]
+
+
+def _synthesis_subqueries(question: str) -> list[str]:
+    normalized = " ".join(question.strip().split())
+    if not normalized:
+        return []
+
+    parts = re.split(r",\s*|\band\b", normalized, flags=re.IGNORECASE)
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        candidate = part.strip(" ,.?")
+        if len(candidate.split()) < 4:
+            continue
+        normalized_candidate = candidate.lower()
+        if normalized_candidate in seen:
+            continue
+        seen.add(normalized_candidate)
+        cleaned.append(candidate)
+    return cleaned or [normalized]
+
+
+def _merge_retrieved_chunks(chunks: list[RetrievedChunk], *, limit: int) -> list[RetrievedChunk]:
+    best_by_key: dict[tuple[str, str], RetrievedChunk] = {}
+    for chunk in chunks:
+        key = (chunk.doc_id, chunk.chunk_id)
+        existing = best_by_key.get(key)
+        if existing is None or chunk.score > existing.score:
+            best_by_key[key] = chunk
+    merged = sorted(
+        best_by_key.values(),
+        key=lambda item: (
+            item.score,
+            item.title_match_score if item.title_match_score is not None else 0.0,
+            -(item.chunk_index if item.chunk_index is not None else 999999),
+        ),
+        reverse=True,
+    )
+    return merged[:limit]
+
+
+def _interleave_retrieved_query_results(per_query_results: list[list[RetrievedChunk]]) -> list[RetrievedChunk]:
+    merged: list[RetrievedChunk] = []
+    max_depth = max((len(items) for items in per_query_results), default=0)
+    for depth in range(max_depth):
+        for items in per_query_results:
+            if depth < len(items):
+                merged.append(items[depth])
+    return merged
+
+
+def _dedupe_retrieved_chunks_preserve_order(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
+    deduped: list[RetrievedChunk] = []
+    seen: set[tuple[str, str]] = set()
+    for chunk in chunks:
+        key = (chunk.doc_id, chunk.chunk_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(chunk)
+    return deduped
+
+
+def _prioritize_chunks_for_subquery(chunks: list[RetrievedChunk], *, query: str) -> list[RetrievedChunk]:
+    query_tokens = _ranking_query_tokens(query)
+    return sorted(
+        chunks,
+        key=lambda item: (
+            _chunk_title_source_overlap(item, query_tokens=query_tokens),
+            item.score,
+            item.title_match_score if item.title_match_score is not None else 0.0,
+        ),
+        reverse=True,
+    )
+
+
+def _chunk_title_source_overlap(chunk: RetrievedChunk, *, query_tokens: set[str]) -> float:
+    if not query_tokens:
+        return 0.0
+    title_source_tokens = set(re.findall(r"[a-z0-9]+", chunk.title.lower()))
+    title_source_tokens.update(re.findall(r"[a-z0-9]+", chunk.source.lower()))
+    for tag in chunk.tags:
+        title_source_tokens.update(re.findall(r"[a-z0-9]+", tag.lower()))
+    return len(query_tokens.intersection(title_source_tokens)) / len(query_tokens)
+
+
 def _select_generation_chunks(
     *,
     question: str,
@@ -835,7 +1039,7 @@ def _select_generation_chunks(
             max_chunks=DOCUMENT_SUMMARY_MAX_SELECTED_CHUNKS,
         )
 
-    if query_strategy == "compare_synthesis":
+    if query_strategy in {"compare_synthesis", "multi_document_synthesis"}:
         target_doc_ids = ranked_docs[:COMPARE_MAX_SELECTED_DOCS]
         if len(target_doc_ids) < 2 and len(grouped) >= 2:
             target_doc_ids = list(grouped.keys())[:2]
@@ -906,7 +1110,7 @@ def _ranked_doc_ids(
                         break
         lexical_bonus = (
             _title_source_query_overlap(chunks, query_tokens=query_tokens)
-            if query_strategy == "compare_synthesis"
+            if query_strategy in {"compare_synthesis", "multi_document_synthesis"}
             else 0.0
         )
         best_title_match = max((chunk.title_match_score or 0.0) for chunk in chunks)
@@ -1014,7 +1218,7 @@ def _validation_requirements(*, selected_chunks: list[RetrievedChunk], query_str
         min_bullet_count = 4
         if len(selected_chunks) >= 2:
             min_citation_count = 2
-    elif query_strategy == "compare_synthesis":
+    elif query_strategy in {"compare_synthesis", "multi_document_synthesis"}:
         min_bullet_count = 3
         if len(selected_chunks) >= 2:
             min_citation_count = 2
@@ -1103,6 +1307,15 @@ def _compare_intro_sentence(*, question: str, primary: RetrievedChunk, secondary
     )
 
 
+def _document_summary_intro(*, title: str, question: str) -> str:
+    normalized_title = title.lower()
+    if "rag" in normalized_title:
+        return f"{title} outlines decision points for RAG system design, retrieval choices, and tradeoffs."
+    if "embedding" in normalized_title:
+        return f"{title} summarizes the main concepts, practical steps, and tradeoffs highlighted in the retrieved document."
+    return f"{title} is summarized below using highlights grounded in the retrieved document."
+
+
 def _topic_hint(title: str) -> str:
     normalized_title = title.lower()
     for phrase in (
@@ -1164,6 +1377,12 @@ def _infer_answer_style_instructions(*, query: str, mode: str, query_strategy: s
             "comparison sentence, then provide 4-6 newline-separated bullets covering concrete differences, "
             "overlaps, examples, and practical tradeoffs grounded in at least two cited sources when available. "
             "Each bullet must start with '- '."
+        )
+    if query_strategy == "multi_document_synthesis":
+        return (
+            "This is a multi-document synthesis request. In the JSON `answer` string, lead with one short framing "
+            "sentence, then provide 4-6 newline-separated bullets covering recommendations, tradeoffs, or takeaways "
+            "grounded in at least two cited sources when available. Each bullet must start with '- '."
         )
     if LIST_QUERY_PATTERN.search(normalized_query):
         return (
@@ -1327,6 +1546,8 @@ def _prompt_profile_name(mode: str, *, query_strategy: str = "general_qa") -> st
         return "workflow_02_document_summary"
     if query_strategy == "compare_synthesis":
         return "workflow_02_compare_synthesis"
+    if query_strategy == "multi_document_synthesis":
+        return "workflow_02_multi_document_synthesis"
     if mode == "job-search":
         return "job_search_coach"
     if mode == "learning":
@@ -1339,6 +1560,8 @@ def _query_strategy(*, question: str, retrieved: list[RetrievedChunk]) -> str:
         return "document_summary"
     if _is_compare_query(question):
         return "compare_synthesis"
+    if _is_multi_document_synthesis_query(question):
+        return "multi_document_synthesis"
     return "general_qa"
 
 
@@ -1356,6 +1579,21 @@ def _is_compare_query(question: str) -> bool:
     if not normalized:
         return False
     return bool(COMPARE_QUERY_PATTERN.search(normalized))
+
+
+def _is_multi_document_synthesis_query(question: str) -> bool:
+    normalized = " ".join(question.strip().split())
+    if not normalized:
+        return False
+    if _is_named_document_summary_query(question) or _is_compare_query(question):
+        return False
+    if not SYNTHESIS_CONNECTOR_PATTERN.search(normalized):
+        return False
+    lowered = normalized.lower()
+    return any(
+        marker in lowered
+        for marker in ("tradeoff", "tradeoffs", "practical", "ways", "implications", "expect")
+    )
 
 
 def _env_bool(name: str, default: bool) -> bool:

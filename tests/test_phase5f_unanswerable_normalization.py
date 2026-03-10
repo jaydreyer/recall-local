@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 from scripts.phase1 import rag_query
 
@@ -199,6 +200,14 @@ class Phase5FUnanswerableNormalizationTests(unittest.TestCase):
 
         self.assertEqual(strategy, "compare_synthesis")
 
+    def test_query_strategy_detects_multi_document_synthesis_queries(self) -> None:
+        strategy = rag_query._query_strategy(  # noqa: SLF001
+            question="What are practical ways to reduce latency in multi-agent systems, and what tradeoffs should I expect in RAG design?",
+            retrieved=[],
+        )
+
+        self.assertEqual(strategy, "multi_document_synthesis")
+
     def test_select_generation_chunks_for_compare_keeps_multiple_docs(self) -> None:
         retrieved = [
             rag_query.RetrievedChunk(
@@ -308,6 +317,102 @@ class Phase5FUnanswerableNormalizationTests(unittest.TestCase):
         )
 
         self.assertEqual(ranked[:2], ["prompt-doc", "context-doc"])
+
+    def test_synthesis_subqueries_split_multi_clause_question(self) -> None:
+        subqueries = rag_query._synthesis_subqueries(  # noqa: SLF001
+            "What are practical ways to reduce latency in multi-agent systems, and what tradeoffs should I expect in RAG design?"
+        )
+
+        self.assertEqual(
+            subqueries,
+            [
+                "What are practical ways to reduce latency in multi-agent systems",
+                "what tradeoffs should I expect in RAG design",
+            ],
+        )
+
+    def test_retrieve_for_query_strategy_interleaves_synthesis_subqueries(self) -> None:
+        latency_chunk = rag_query.RetrievedChunk(
+            doc_id="doc-latency",
+            chunk_id="chunk-latency",
+            title="Handling Latency in Multi-Agentic Systems",
+            source="latency.pdf",
+            text="latency",
+            score=0.9,
+            source_type="file",
+            ingestion_channel="file",
+            group="reference",
+            tags=["learning"],
+        )
+        rag_chunk = rag_query.RetrievedChunk(
+            doc_id="doc-rag",
+            chunk_id="chunk-rag",
+            title="Advanced RAG Decision Flow Chart",
+            source="rag.pdf",
+            text="rag",
+            score=0.1,
+            source_type="file",
+            ingestion_channel="file",
+            group="reference",
+            tags=["learning"],
+        )
+
+        with patch(
+            "scripts.phase1.rag_query.retrieve_chunks",
+            side_effect=[
+                [latency_chunk],
+                [rag_chunk],
+                [latency_chunk],
+            ],
+        ):
+            merged = rag_query._retrieve_for_query_strategy(  # noqa: SLF001
+                question="What are practical ways to reduce latency in multi-agent systems, and what tradeoffs should I expect in RAG design?",
+                query_strategy="multi_document_synthesis",
+                top_k=8,
+                min_score=0.2,
+                filter_tags=["learning", "genai-docs"],
+                filter_tag_mode="all",
+                filter_group=None,
+                retrieval_mode="hybrid",
+                hybrid_alpha=None,
+                enable_reranker=True,
+                reranker_weight=0.65,
+            )
+
+        self.assertEqual([item.doc_id for item in merged[:2]], ["doc-latency", "doc-rag"])
+
+    def test_prioritize_chunks_for_subquery_prefers_title_overlap(self) -> None:
+        prioritized = rag_query._prioritize_chunks_for_subquery(  # noqa: SLF001
+            [
+                rag_query.RetrievedChunk(
+                    doc_id="doc-generic",
+                    chunk_id="chunk-generic",
+                    title="AI Patterns",
+                    source="patterns.pdf",
+                    text="generic",
+                    score=0.3,
+                    source_type="file",
+                    ingestion_channel="file",
+                    group="reference",
+                    tags=["learning"],
+                ),
+                rag_query.RetrievedChunk(
+                    doc_id="doc-rag",
+                    chunk_id="chunk-rag",
+                    title="Advanced RAG Decision Flow Chart",
+                    source="rag-flow.pdf",
+                    text="rag",
+                    score=0.1,
+                    source_type="file",
+                    ingestion_channel="file",
+                    group="reference",
+                    tags=["learning"],
+                ),
+            ],
+            query="what tradeoffs should I expect in RAG design",
+        )
+
+        self.assertEqual(prioritized[0].doc_id, "doc-rag")
 
     def test_select_generation_chunks_for_document_summary_stays_on_primary_doc(self) -> None:
         retrieved = [
@@ -456,6 +561,43 @@ class Phase5FUnanswerableNormalizationTests(unittest.TestCase):
 
         self.assertIn("Context engineering", snippet)
 
+    def test_build_document_summary_fallback_response_returns_bullets(self) -> None:
+        response = rag_query._build_document_summary_fallback_response(  # noqa: SLF001
+            question='Summarize the document "Advanced RAG Decision Flow Chart" and tell me the key decision points as bullets.',
+            selected_chunks=[
+                rag_query.RetrievedChunk(
+                    doc_id="doc-rag",
+                    chunk_id="chunk-1",
+                    title="Advanced RAG Decision Flow Chart",
+                    source="rag-flow.pdf",
+                    text="RAG systems should choose retrieval depth based on data quality and answer requirements.",
+                    score=0.9,
+                    source_type="file",
+                    ingestion_channel="file",
+                    group="reference",
+                    tags=["learning", "rag", "system-design"],
+                ),
+                rag_query.RetrievedChunk(
+                    doc_id="doc-rag",
+                    chunk_id="chunk-2",
+                    title="Advanced RAG Decision Flow Chart",
+                    source="rag-flow.pdf",
+                    text="Decision points include whether retrieval is needed, how much context to send, and how to reduce noise.",
+                    score=0.8,
+                    source_type="file",
+                    ingestion_channel="file",
+                    group="reference",
+                    tags=["learning", "rag", "system-design"],
+                ),
+            ],
+            reason="validation failed",
+        )
+
+        self.assertIsNotNone(response)
+        self.assertIn("RAG", response["answer"])
+        self.assertIn("\n-", response["answer"])
+        self.assertGreaterEqual(len(response["citations"]), 2)
+
     def test_prompt_profile_name_prefers_document_summary_strategy(self) -> None:
         self.assertEqual(
             rag_query._prompt_profile_name("default", query_strategy="document_summary"),  # noqa: SLF001
@@ -466,6 +608,12 @@ class Phase5FUnanswerableNormalizationTests(unittest.TestCase):
         self.assertEqual(
             rag_query._prompt_profile_name("default", query_strategy="compare_synthesis"),  # noqa: SLF001
             "workflow_02_compare_synthesis",
+        )
+
+    def test_prompt_profile_name_prefers_multi_document_synthesis_strategy(self) -> None:
+        self.assertEqual(
+            rag_query._prompt_profile_name("default", query_strategy="multi_document_synthesis"),  # noqa: SLF001
+            "workflow_02_multi_document_synthesis",
         )
 
 
