@@ -70,6 +70,14 @@ EXPLANATION_QUERY_PATTERN = re.compile(
     r"\b(benefits?|advantages?|what are|what is|why|examples?|tradeoffs?|pros and cons|use cases?)\b",
     flags=re.IGNORECASE,
 )
+SENSITIVE_SECRET_QUERY_PATTERN = re.compile(
+    r"\b(api key|apikey|password|secret|token|credential|private key|access key|client secret)\b",
+    flags=re.IGNORECASE,
+)
+EXACT_SECRET_QUERY_PATTERN = re.compile(
+    r"\b(exact|currently configured|configured|production|private|current)\b",
+    flags=re.IGNORECASE,
+)
 SUMMARY_QUERY_PATTERN = re.compile(r"\b(summarize|summary|highlights|key takeaways|recap|overview)\b", flags=re.IGNORECASE)
 DOCUMENT_REFERENCE_PATTERN = re.compile(r"\b(article|post|blog post|essay|paper|write-?up|document)\b", flags=re.IGNORECASE)
 QUOTED_TARGET_PATTERN = re.compile(r'["“”](.+?)["“”]')
@@ -360,6 +368,10 @@ def run_rag_query(
         consistency_reason = _normalize_unanswerable_consistency(response)
         if consistency_reason is not None:
             postprocess_reasons.append(consistency_reason)
+
+        sensitive_reason = _normalize_sensitive_query_response(question=question, response=response)
+        if sensitive_reason is not None:
+            postprocess_reasons.append(sensitive_reason)
 
         normalization_reason = _normalize_low_confidence_response(response)
         if normalization_reason is not None:
@@ -855,6 +867,28 @@ def _normalize_unanswerable_consistency(response: dict[str, Any]) -> str | None:
         reasons.append("Unanswerable phrasing forced confidence_level=low.")
 
     return "; ".join(reasons) if reasons else None
+
+
+def _normalize_sensitive_query_response(*, question: str, response: dict[str, Any]) -> str | None:
+    if not _is_sensitive_secret_query(question):
+        return None
+    answer = str(response.get("answer", "")).strip()
+    if _has_unanswerable_phrase(answer):
+        if str(response.get("confidence_level", "")).strip().lower() != "low":
+            response["confidence_level"] = "low"
+            return "Sensitive query forced confidence_level=low."
+        return None
+
+    response["answer"] = UNANSWERABLE_ANSWER
+    response["confidence_level"] = "low"
+    assumptions = response.get("assumptions")
+    if not isinstance(assumptions, list):
+        assumptions = []
+        response["assumptions"] = assumptions
+    note = "Sensitive secret-seeking query was normalized to explicit abstention."
+    if note not in assumptions:
+        assumptions.append(note)
+    return note
 
 
 def _looks_like_internal_identifier_answer(*, answer: str, response: dict[str, Any]) -> bool:
@@ -1825,9 +1859,25 @@ def _is_explanatory_query(question: str) -> bool:
     normalized = " ".join(question.strip().split())
     if not normalized:
         return False
-    if _is_named_document_summary_query(question) or _is_compare_query(question) or _is_multi_document_synthesis_query(question):
+    if (
+        _is_named_document_summary_query(question)
+        or _is_compare_query(question)
+        or _is_multi_document_synthesis_query(question)
+        or _is_sensitive_secret_query(question)
+    ):
         return False
     return bool(EXPLANATION_QUERY_PATTERN.search(normalized) or STEPS_QUERY_PATTERN.search(normalized) or LIST_QUERY_PATTERN.search(normalized))
+
+
+def _is_sensitive_secret_query(question: str) -> bool:
+    normalized = " ".join(question.strip().split())
+    if not normalized:
+        return False
+    lowered = normalized.lower()
+    has_secret_target = bool(SENSITIVE_SECRET_QUERY_PATTERN.search(lowered))
+    if not has_secret_target:
+        return False
+    return bool(EXACT_SECRET_QUERY_PATTERN.search(lowered))
 
 
 def _env_bool(name: str, default: bool) -> bool:

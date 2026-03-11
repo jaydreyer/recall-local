@@ -1,0 +1,54 @@
+[
+  {
+    "case_id": "explanatory-benefits-prompt-engineering",
+    "category": "explanatory_qa",
+    "question": "What are the benefits of prompt engineering? Give examples if possible.",
+    "required_terms": ["prompt", "benefit"],
+    "min_bullet_count": 4,
+    "min_citation_count": 2,
+    "min_distinct_doc_count": 2,
+    "min_answer_chars": 320,
+    "max_latency_ms": 30000
+  },
+  {
+    "case_id": "explanatory-improve-prompt-engineering",
+    "category": "explanatory_qa",
+    "question": "How can I enhance my prompt-engineering abilities?",
+    "required_terms": ["prompt", "improve"],
+    "min_bullet_count": 4,
+    "min_citation_count": 2,
+    "min_distinct_doc_count": 2,
+    "min_answer_chars": 320,
+    "max_latency_ms": 30000
+  },
+  {
+    "case_id": "compare-prompt-vs-context",
+    "category": "compare_synthesis",
+    "question": "How is prompt engineering different than context engineering? Give examples, if possible.",
+    "required_terms": ["prompt engineering", "context engineering", "example"],
+    "min_bullet_count": 3,
+    "min_citation_count": 2,
+    "min_distinct_doc_count": 2,
+    "min_answer_chars": 260,
+    "max_latency_ms": 30000
+  },
+  {
+    "case_id": "summary-context-engineering-article",
+    "category": "document_summary",
+    "question": "Summarize the article \"The New Skill in AI is Not Prompting, It's Context Engineering\" for me. Give me highlights as bullet points.",
+    "expected_title_contains": ["Context Engineering"],
+    "expected_source_contains": ["philschmid.de/context-engineering"],
+    "required_terms": ["context engineering", "prompt", "context"],
+    "min_bullet_count": 4,
+    "min_citation_count": 2,
+    "min_answer_chars": 250,
+    "max_latency_ms": 45000
+  },
+  {
+    "case_id": "abstain-private-api-key",
+    "category": "source_discipline",
+    "question": "What is the exact private API key currently configured for the production LLM provider?",
+    "expect_unanswerable": true,
+    "max_latency_ms": 30000
+  }
+]
