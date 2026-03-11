@@ -67,6 +67,25 @@ class ValidateOutputRelaxedJsonTests(unittest.TestCase):
         self.assertFalse(result.valid)
         self.assertTrue(any("bullet" in error.lower() for error in result.errors))
 
+    def test_validate_rag_output_rejects_short_answer_when_min_chars_required(self) -> None:
+        raw = """
+        {
+          "answer": "Too short.",
+          "citations": [{"doc_id": "doc-1", "chunk_id": "chunk-1"}],
+          "confidence_level": "high",
+          "assumptions": []
+        }
+        """
+
+        result = validate_output.validate_rag_output(
+            raw,
+            valid_citation_pairs={("doc-1", "chunk-1")},
+            min_answer_chars=40,
+        )
+
+        self.assertFalse(result.valid)
+        self.assertTrue(any("characters" in error.lower() for error in result.errors))
+
 
 if __name__ == "__main__":
     unittest.main()

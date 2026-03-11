@@ -6,6 +6,9 @@ from __future__ import annotations
 import json
 import math
 import re
+import os
+import time
+import hashlib
 from collections import Counter
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
@@ -26,6 +29,8 @@ SCORE_TO_SEVERITY = {
 }
 
 SIMILARITY_THRESHOLD = 0.85
+_GAP_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_EMBED_CACHE: dict[str, list[float] | None] = {}
 
 
 def aggregate_gaps(jobs: list[dict[str, Any]]) -> dict[str, Any]:
@@ -35,6 +40,12 @@ def aggregate_gaps(jobs: list[dict[str, Any]]) -> dict[str, Any]:
         if str(job.get("status", "")).strip().lower() == "evaluated"
         and int(_coerce_int(job.get("fit_score"), default=-1)) > 0
     ]
+    cache_key = _evaluated_jobs_cache_key(evaluated)
+    cache_ttl_seconds = _cache_ttl_seconds()
+    if cache_ttl_seconds > 0:
+        cached = _GAP_CACHE.get(cache_key)
+        if cached and cached[0] > time.time():
+            return dict(cached[1])
 
     gap_instances = _collect_gap_instances(evaluated)
     merged = merge_similar_gaps(gap_instances)
@@ -67,7 +78,7 @@ def aggregate_gaps(jobs: list[dict[str, Any]]) -> dict[str, Any]:
         for item in aggregated[:10]
     ]
 
-    return {
+    payload = {
         "total_jobs_analyzed": len(evaluated),
         "aggregated_gaps": aggregated,
         "generated_at": _now_iso(),
@@ -78,20 +89,27 @@ def aggregate_gaps(jobs: list[dict[str, Any]]) -> dict[str, Any]:
         "top_matching_skills": top_matching_skills,
         "recommended_focus": [item["gap"] for item in aggregated[:3]],
     }
+    if cache_ttl_seconds > 0:
+        _GAP_CACHE[cache_key] = (time.time() + cache_ttl_seconds, dict(payload))
+    return payload
+
+
+def invalidate_gap_cache() -> None:
+    _GAP_CACHE.clear()
 
 
 def merge_similar_gaps(gaps: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if not gaps:
         return []
 
-    embed_cache: dict[str, list[float] | None] = {}
+    use_embeddings = _should_use_embeddings(gaps)
     clusters: list[dict[str, Any]] = []
 
     for item in gaps:
         gap_text = str(item.get("gap") or "").strip()
         if not gap_text:
             continue
-        embedding = _get_gap_embedding(gap_text, cache=embed_cache)
+        embedding = _get_gap_embedding(gap_text) if use_embeddings else None
 
         best_index = -1
         best_score = 0.0
@@ -153,6 +171,48 @@ def _collect_gap_instances(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 continue
             rows.append(parsed)
     return rows
+
+
+def _cache_ttl_seconds() -> float:
+    try:
+        return max(float(os.getenv("RECALL_PHASE6_GAP_CACHE_SECONDS", "300")), 0.0)
+    except (TypeError, ValueError):
+        return 300.0
+
+
+def _should_use_embeddings(gaps: list[dict[str, Any]]) -> bool:
+    try:
+        limit = int(os.getenv("RECALL_PHASE6_GAP_EMBED_LIMIT", "24"))
+    except (TypeError, ValueError):
+        limit = 24
+    if limit <= 0:
+        return False
+    unique_gap_count = len(
+        {
+            str(item.get("gap") or "").strip().lower()
+            for item in gaps
+            if str(item.get("gap") or "").strip()
+        }
+    )
+    return unique_gap_count <= limit
+
+
+def _evaluated_jobs_cache_key(jobs: list[dict[str, Any]]) -> str:
+    digest = hashlib.sha256()
+    for job in sorted(jobs, key=lambda item: str(item.get("jobId") or item.get("job_id") or "")):
+        digest.update(str(job.get("jobId") or job.get("job_id") or "").encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(str(job.get("status") or "").encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(str(job.get("fit_score") or "").encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(str(job.get("evaluated_at") or "").encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(json.dumps(job.get("gaps") or [], sort_keys=True, ensure_ascii=True).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(json.dumps(job.get("matching_skills") or [], sort_keys=True, ensure_ascii=True).encode("utf-8"))
+        digest.update(b"\n")
+    return digest.hexdigest()
 
 
 def _parse_gap_item(item: Any) -> dict[str, Any] | None:
@@ -297,12 +357,12 @@ def _extract_skills(value: Any) -> list[str]:
     return rows
 
 
-def _get_gap_embedding(text: str, *, cache: dict[str, list[float] | None]) -> list[float] | None:
+def _get_gap_embedding(text: str) -> list[float] | None:
     normalized = text.strip().lower()
     if not normalized:
         return None
-    if normalized in cache:
-        return cache[normalized]
+    if normalized in _EMBED_CACHE:
+        return _EMBED_CACHE[normalized]
 
     try:
         vector = llm_client.embed(
@@ -311,10 +371,10 @@ def _get_gap_embedding(text: str, *, cache: dict[str, list[float] | None]) -> li
                 "operation": "phase6_gap_embedding",
             },
         )
-        cache[normalized] = vector
+        _EMBED_CACHE[normalized] = vector
         return vector
     except Exception:  # noqa: BLE001
-        cache[normalized] = None
+        _EMBED_CACHE[normalized] = None
         return None
 
 

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -11,6 +12,7 @@ from scripts.phase1.ingestion_pipeline import qdrant_client_from_env
 
 COLLECTION_JOBS = "recall_jobs"
 DEFAULT_STATUS_FILTER = "evaluated"
+_JOBS_SCROLL_CACHE: dict[tuple[bool, str], tuple[float, list[dict[str, Any]]]] = {}
 
 
 def _parse_int(value: Any, default: int = 0) -> int:
@@ -95,6 +97,13 @@ def _normalize_job(record: Any) -> dict[str, Any]:
 
 
 def _scroll_jobs(*, with_vectors: bool = False, collection_name: str = COLLECTION_JOBS) -> list[dict[str, Any]]:
+    cache_ttl_seconds = _parse_float(os.getenv("RECALL_PHASE6_JOBS_CACHE_SECONDS"), default=15.0)
+    cache_key = (with_vectors, collection_name)
+    if cache_ttl_seconds > 0:
+        cached = _JOBS_SCROLL_CACHE.get(cache_key)
+        if cached and cached[0] > time.time():
+            return [dict(item) for item in cached[1]]
+
     client = qdrant_client_from_env(os.getenv("QDRANT_HOST", "http://localhost:6333"))
     points: list[Any] = []
     offset: Any = None
@@ -127,7 +136,14 @@ def _scroll_jobs(*, with_vectors: bool = False, collection_name: str = COLLECTIO
         if key in deduped and deduped[key].get("fit_score", 0) >= job.get("fit_score", 0):
             continue
         deduped[key] = job
-    return list(deduped.values())
+    rows = list(deduped.values())
+    if cache_ttl_seconds > 0:
+        _JOBS_SCROLL_CACHE[cache_key] = (time.time() + cache_ttl_seconds, [dict(item) for item in rows])
+    return rows
+
+
+def invalidate_jobs_cache() -> None:
+    _JOBS_SCROLL_CACHE.clear()
 
 
 def list_jobs(
@@ -142,6 +158,7 @@ def list_jobs(
     order: str = "desc",
     limit: int = 50,
     offset: int = 0,
+    include_details: bool = True,
 ) -> dict[str, Any]:
     records = _scroll_jobs(with_vectors=False)
 
@@ -183,7 +200,7 @@ def list_jobs(
         "total": total,
         "limit": limit,
         "offset": offset,
-        "items": [_sanitize_job(item) for item in page],
+        "items": [_sanitize_job(item, include_details=include_details) for item in page],
     }
 
 
@@ -250,6 +267,7 @@ def update_job(*, job_id: str, status: str | None, applied: bool | None, dismiss
         collection_name=COLLECTION_JOBS,
         points=[_point_for_update(models_module=models, job=current)],
     )
+    invalidate_jobs_cache()
     refreshed = get_job(job_id)
     return refreshed
 
@@ -291,6 +309,7 @@ def update_company_tier(*, company_id: str, tier: int) -> int:
     for start in range(0, len(points), 128):
         client.upsert(collection_name=COLLECTION_JOBS, points=points[start : start + 128])
 
+    invalidate_jobs_cache()
     return updated
 
 
@@ -356,11 +375,14 @@ def job_stats() -> dict[str, Any]:
     }
 
 
-def _sanitize_job(item: dict[str, Any]) -> dict[str, Any]:
+def _sanitize_job(item: dict[str, Any], *, include_details: bool = True) -> dict[str, Any]:
     sanitized = dict(item)
     sanitized.pop("_qdrant_id", None)
     sanitized.pop("_vector", None)
     sanitized.pop("_payload", None)
+    if not include_details:
+        sanitized.pop("description", None)
+        sanitized.pop("observation", None)
     return sanitized
 
 

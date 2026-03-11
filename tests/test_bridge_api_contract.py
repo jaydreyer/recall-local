@@ -639,6 +639,23 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(response.json()["workflow"], "workflow_06a_jobs")
         self.assertIsNone(mocked.call_args.kwargs["status"])
 
+    def test_phase6_jobs_endpoint_accepts_summary_view(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        with patch("scripts.phase1.ingest_bridge_api.phase6_list_jobs", return_value={"total": 0, "limit": 50, "offset": 0, "items": []}) as mocked:
+            with build_client(env) as client:
+                response = client.get("/v1/jobs?view=summary&limit=5")
+                invalid = client.get("/v1/jobs?view=compactest&limit=5")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["workflow"], "workflow_06a_jobs")
+        self.assertFalse(mocked.call_args.kwargs["include_details"])
+        self.assertEqual(invalid.status_code, 400)
+        self.assertEqual(invalid.json()["error"]["code"], "validation_failed")
+
     def test_phase6_llm_settings_patch_persists(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             db_path = os.path.join(temp_dir, "recall.db")
@@ -775,6 +792,25 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(mock_save.call_args.kwargs["company_id"], "airbnb")
         self.assertEqual(mock_save.call_args.kwargs["patch"]["tier"], 2)
         self.assertEqual(mock_tier.call_args.kwargs["company_id"], "airbnb")
+
+    def test_phase6_companies_endpoint_accepts_limit_and_include_jobs_false(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        with (
+            patch("scripts.phase1.ingest_bridge_api.phase6_all_jobs", return_value=[]),
+            patch("scripts.phase1.ingest_bridge_api.phase6_list_company_profiles", return_value=[{"company_id": "airbnb"}]) as mocked,
+        ):
+            with build_client(env) as client:
+                response = client.get("/v1/companies?limit=25&include_jobs=false")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["workflow"], "workflow_06a_companies")
+        self.assertEqual(response.json()["count"], 1)
+        self.assertEqual(mocked.call_args.kwargs["limit"], 25)
+        self.assertFalse(mocked.call_args.kwargs["include_jobs"])
 
     def test_phase6_cover_letter_draft_endpoint_returns_generated_draft(self) -> None:
         env = {

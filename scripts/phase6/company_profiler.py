@@ -171,9 +171,14 @@ def upsert_tracked_company_config(*, company_id: str | None = None, patch: dict[
     }
 
 
-def _jobs_for_company(company_name: str, jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    target = company_name.strip().lower()
-    return [job for job in jobs if str(job.get("company", "")).strip().lower() == target]
+def _group_jobs_by_company(jobs: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for job in jobs:
+        key = str(job.get("company", "")).strip().lower()
+        if not key:
+            continue
+        grouped.setdefault(key, []).append(job)
+    return grouped
 
 
 def _extract_skill_name(item: Any) -> str:
@@ -292,16 +297,17 @@ def _default_description(
 def _hydrate_profile(
     *,
     company_name: str,
-    jobs: list[dict[str, Any]],
+    company_jobs: list[dict[str, Any]],
     config: dict[str, Any],
     persisted: dict[str, Any] | None,
+    include_jobs: bool = True,
 ) -> dict[str, Any]:
     company_id = slugify_company(company_name)
     persisted = persisted or {}
     persisted_metadata = persisted.get("metadata") if isinstance(persisted.get("metadata"), dict) else {}
 
     company_jobs = sorted(
-        _jobs_for_company(company_name, jobs),
+        company_jobs,
         key=lambda item: (_score_value(item), str(item.get("discovered_at") or "")),
         reverse=True,
     )
@@ -372,16 +378,17 @@ def _hydrate_profile(
             "highest_fit_score": metadata.get("highest_fit_score"),
             "jobs_by_status": dict(jobs_by_status),
         },
-        "jobs": company_jobs,
+        "jobs": company_jobs if include_jobs else [],
         "metadata": metadata,
         "updated_at": str(persisted.get("updated_at") or _now_iso()),
     }
 
 
-def build_company_profiles(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def build_company_profiles(jobs: list[dict[str, Any]], *, include_jobs: bool = True, limit: int | None = None) -> list[dict[str, Any]]:
     configured = list_tracked_company_configs()
     by_config = {slugify_company(str(item.get("name", ""))): item for item in configured}
     persisted = _load_persisted_profiles()
+    grouped_jobs = _group_jobs_by_company(jobs)
 
     company_names = {str(job.get("company", "")).strip() for job in jobs if str(job.get("company", "")).strip()}
     for name in list(by_config.values()):
@@ -401,9 +408,10 @@ def build_company_profiles(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
         profiles.append(
             _hydrate_profile(
                 company_name=company_name,
-                jobs=jobs,
+                company_jobs=grouped_jobs.get(company_name.strip().lower(), []),
                 config=by_config.get(company_id, {}),
                 persisted=persisted.get(company_id),
+                include_jobs=include_jobs,
             )
         )
 
@@ -415,16 +423,18 @@ def build_company_profiles(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
         )
     )
 
+    if limit is not None and limit > 0:
+        return profiles[:limit]
     return profiles
 
 
-def list_company_profiles(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return build_company_profiles(jobs)
+def list_company_profiles(jobs: list[dict[str, Any]], *, include_jobs: bool = True, limit: int | None = None) -> list[dict[str, Any]]:
+    return build_company_profiles(jobs, include_jobs=include_jobs, limit=limit)
 
 
 def get_company_profile(company_id: str, jobs: list[dict[str, Any]]) -> dict[str, Any] | None:
     target = slugify_company(company_id)
-    for profile in build_company_profiles(jobs):
+    for profile in build_company_profiles(jobs, include_jobs=True):
         if profile["company_id"] == target:
             return profile
     return None

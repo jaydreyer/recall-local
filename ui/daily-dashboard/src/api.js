@@ -62,7 +62,22 @@ function buildJobQuery(filters) {
   if (filters.company_tier) {
     params.set('company_tier', String(filters.company_tier))
   }
+  if (filters.view) {
+    params.set('view', String(filters.view))
+  }
   return `/v1/jobs?${params.toString()}`
+}
+
+function buildCompaniesQuery(options = {}) {
+  const params = new URLSearchParams()
+  if (typeof options.limit === 'number' && Number.isFinite(options.limit) && options.limit > 0) {
+    params.set('limit', String(options.limit))
+  }
+  if (typeof options.include_jobs === 'boolean') {
+    params.set('include_jobs', options.include_jobs ? 'true' : 'false')
+  }
+  const query = params.toString()
+  return query ? `/v1/companies?${query}` : '/v1/companies'
 }
 
 export function getBridgeConfig() {
@@ -96,8 +111,8 @@ export function fetchJobGaps() {
   return getJson('/v1/job-gaps')
 }
 
-export function fetchCompanies() {
-  return getJson('/v1/companies')
+export function fetchCompanies(options = {}) {
+  return getJson(buildCompaniesQuery(options))
 }
 
 export function fetchCompany(companyId) {

@@ -31,6 +31,7 @@ def validate_rag_output(
     min_citation_count: int | None = None,
     min_distinct_doc_count: int | None = None,
     min_bullet_count: int | None = None,
+    min_answer_chars: int | None = None,
 ) -> ValidationResult:
     errors: list[str] = []
 
@@ -96,6 +97,12 @@ def validate_rag_output(
         if bullet_count < min_bullet_count:
             errors.append(
                 f"Field 'answer' must contain at least {min_bullet_count} bullet lines."
+            )
+    if min_answer_chars is not None:
+        answer_length = len(str(parsed.get("answer", "")).strip())
+        if answer_length < min_answer_chars:
+            errors.append(
+                f"Field 'answer' must contain at least {min_answer_chars} characters."
             )
     return ValidationResult(valid=not errors, errors=errors, parsed_response=parsed)
 

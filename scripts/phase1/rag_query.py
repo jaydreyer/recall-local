@@ -63,6 +63,10 @@ HEX_IDENTIFIER_PATTERN = re.compile(r"^[a-f0-9]{16,}$", flags=re.IGNORECASE)
 LIST_QUERY_PATTERN = re.compile(r"\b(list|bullet(?:ed)?|bullet-point|key points?|top \d+)\b", flags=re.IGNORECASE)
 COMPARE_QUERY_PATTERN = re.compile(r"\b(compare|comparison|different|difference|versus|vs\.?)\b", flags=re.IGNORECASE)
 STEPS_QUERY_PATTERN = re.compile(r"\b(how to|steps?|process|plan|improve|fix|make this better)\b", flags=re.IGNORECASE)
+EXPLANATION_QUERY_PATTERN = re.compile(
+    r"\b(benefits?|advantages?|what are|what is|why|examples?|tradeoffs?|pros and cons|use cases?)\b",
+    flags=re.IGNORECASE,
+)
 SUMMARY_QUERY_PATTERN = re.compile(r"\b(summarize|summary|highlights|key takeaways|recap|overview)\b", flags=re.IGNORECASE)
 DOCUMENT_REFERENCE_PATTERN = re.compile(r"\b(article|post|blog post|essay|paper|write-?up|document)\b", flags=re.IGNORECASE)
 QUOTED_TARGET_PATTERN = re.compile(r'["“”](.+?)["“”]')
@@ -465,6 +469,8 @@ def _generate_validated_answer(
     validation_requirements = _validation_requirements(
         selected_chunks=selected_chunks,
         query_strategy=query_strategy,
+        query=question,
+        mode=mode,
     )
 
     if query_strategy == "document_summary":
@@ -535,6 +541,7 @@ def _generate_validated_answer(
             min_citation_count=validation_requirements["min_citation_count"],
             min_distinct_doc_count=validation_requirements["min_distinct_doc_count"],
             min_bullet_count=validation_requirements["min_bullet_count"],
+            min_answer_chars=validation_requirements["min_answer_chars"],
         )
         if validation.valid:
             break
@@ -559,6 +566,14 @@ def _generate_validated_answer(
             )
             if compare_fallback is not None:
                 return compare_fallback, attempts_used
+        general_fallback = _build_general_qa_fallback_response(
+            question=question,
+            selected_chunks=selected_chunks,
+            reason="; ".join(validation.errors if validation else ["unknown validation failure"]),
+            mode=mode,
+        )
+        if general_fallback is not None:
+            return general_fallback, attempts_used
         error_suffix = "; ".join(validation.errors if validation else ["unknown validation failure"])
         response, _ = _build_unanswerable_response(
             question=question,
@@ -707,6 +722,50 @@ def _build_document_summary_fallback_response(
         "audit": {
             "fallback_used": True,
             "fallback_reason": f"Document summary fallback used after validation failure: {reason}",
+        },
+    }
+
+
+def _build_general_qa_fallback_response(
+    *,
+    question: str,
+    selected_chunks: list[RetrievedChunk],
+    reason: str,
+    mode: str,
+) -> dict[str, Any] | None:
+    if not selected_chunks:
+        return None
+    if not _requires_structured_general_answer(query=question, mode=mode):
+        return None
+
+    answer_lines = [_general_qa_intro(question=question)]
+    citations: list[dict[str, str]] = []
+    seen_pairs: set[tuple[str, str]] = set()
+
+    for chunk in selected_chunks[:4]:
+        pair = (chunk.doc_id, chunk.chunk_id)
+        if pair in seen_pairs:
+            continue
+        seen_pairs.add(pair)
+        label = chunk.title or chunk.source
+        answer_lines.append(f"- {label}: {_supporting_snippet(chunk.text, question=question)}")
+        citations.append({"doc_id": chunk.doc_id, "chunk_id": chunk.chunk_id})
+
+    if len(answer_lines) < 4:
+        return None
+
+    return {
+        "answer": "\n".join(answer_lines),
+        "citations": citations,
+        "confidence_level": "low",
+        "assumptions": [
+            "Returned an extractive general-answer fallback because the model could not produce a valid structured answer.",
+            f"Fallback reason: {reason}",
+        ],
+        "sources": _source_rows(selected_chunks),
+        "audit": {
+            "fallback_used": True,
+            "fallback_reason": f"General QA fallback used after validation failure: {reason}",
         },
     }
 
@@ -1208,27 +1267,42 @@ def _context_budget(query_strategy: str) -> tuple[int, int]:
     return GENERAL_QA_MAX_CHARS_PER_CHUNK, GENERAL_QA_MAX_CONTEXT_CHARS
 
 
-def _validation_requirements(*, selected_chunks: list[RetrievedChunk], query_strategy: str) -> dict[str, int | None]:
+def _validation_requirements(
+    *,
+    selected_chunks: list[RetrievedChunk],
+    query_strategy: str,
+    query: str,
+    mode: str,
+) -> dict[str, int | None]:
     distinct_docs = {item.doc_id for item in selected_chunks}
     min_citation_count = None
     min_distinct_doc_count = None
     min_bullet_count = None
+    min_answer_chars = None
 
     if query_strategy == "document_summary":
         min_bullet_count = 4
+        min_answer_chars = 320
         if len(selected_chunks) >= 2:
             min_citation_count = 2
     elif query_strategy in {"compare_synthesis", "multi_document_synthesis"}:
         min_bullet_count = 3
+        min_answer_chars = 260
         if len(selected_chunks) >= 2:
             min_citation_count = 2
         if len(distinct_docs) >= 2:
             min_distinct_doc_count = 2
+    elif _requires_structured_general_answer(query=query, mode=mode):
+        min_bullet_count = 3
+        min_answer_chars = 220
+        if len(selected_chunks) >= 2:
+            min_citation_count = 2
 
     return {
         "min_citation_count": min_citation_count,
         "min_distinct_doc_count": min_distinct_doc_count,
         "min_bullet_count": min_bullet_count,
+        "min_answer_chars": min_answer_chars,
     }
 
 
@@ -1273,7 +1347,7 @@ def _supporting_snippet(text: str, *, question: str = "", max_chars: int = 180) 
     best_sentence = ""
     best_score = float("-inf")
     for sentence in sentences:
-        cleaned = sentence.strip()
+        cleaned = _clean_snippet_sentence(sentence)
         if not cleaned:
             continue
         lowered = cleaned.lower()
@@ -1288,10 +1362,19 @@ def _supporting_snippet(text: str, *, question: str = "", max_chars: int = 180) 
             best_score = score
             best_sentence = cleaned
 
-    snippet = best_sentence or (sentences[0] if sentences else normalized)
+    snippet = best_sentence or (_clean_snippet_sentence(sentences[0]) if sentences else normalized)
     if len(snippet) > max_chars:
         return _truncate_context_text(snippet, max_chars)
     return snippet
+
+
+def _clean_snippet_sentence(sentence: str) -> str:
+    cleaned = " ".join(str(sentence).split()).strip()
+    if not cleaned:
+        return ""
+    cleaned = re.sub(r"^[A-Z][A-Za-z0-9 &/|,'().-]{0,80}:\s+(?:Q\d+:?\s*)?(?:A:\s*)?", "", cleaned)
+    cleaned = re.sub(r"^(?:Q\d+:?\s*)?(?:A:\s*)", "", cleaned)
+    return cleaned.strip(" -:\t")
 
 
 def _compare_intro_sentence(*, question: str, primary: RetrievedChunk, secondary: RetrievedChunk) -> str:
@@ -1314,6 +1397,15 @@ def _document_summary_intro(*, title: str, question: str) -> str:
     if "embedding" in normalized_title:
         return f"{title} summarizes the main concepts, practical steps, and tradeoffs highlighted in the retrieved document."
     return f"{title} is summarized below using highlights grounded in the retrieved document."
+
+
+def _general_qa_intro(*, question: str) -> str:
+    lower_question = question.lower()
+    if "benefit" in lower_question or "advantage" in lower_question:
+        return "The retrieved context points to several practical benefits that make prompt engineering useful in day-to-day model interactions."
+    if "improve" in lower_question or "enhance" in lower_question or "how to" in lower_question:
+        return "The retrieved context suggests a few concrete ways to improve results, especially around structure, context, and iteration."
+    return "The retrieved context supports the following concrete takeaways."
 
 
 def _topic_hint(title: str) -> str:
@@ -1386,9 +1478,9 @@ def _infer_answer_style_instructions(*, query: str, mode: str, query_strategy: s
         )
     if LIST_QUERY_PATTERN.search(normalized_query):
         return (
-            "The user asked for a list. In the JSON `answer` string, return a newline-separated bullet list "
-            "with 4-8 bullets when the context supports it. Each bullet must start with '- ' and add a distinct "
-            "detail, not a rephrased duplicate."
+            "The user asked for a list. In the JSON `answer` string, lead with one concise framing sentence, then "
+            "return a newline-separated bullet list with 5-8 bullets when the context supports it. Each bullet must "
+            "start with '- ', add a distinct detail, and include concrete supporting context or an example when available."
         )
     if COMPARE_QUERY_PATTERN.search(normalized_query):
         return (
@@ -1399,7 +1491,14 @@ def _infer_answer_style_instructions(*, query: str, mode: str, query_strategy: s
     if STEPS_QUERY_PATTERN.search(normalized_query):
         return (
             "The user is asking for improvement guidance or steps. In the JSON `answer` string, provide a "
-            "short recommendation summary followed by 3-6 newline-separated action bullets ordered by impact."
+            "short recommendation summary followed by 4-6 newline-separated action bullets ordered by impact. "
+            "Make each bullet specific and practical, not generic advice."
+        )
+    if EXPLANATION_QUERY_PATTERN.search(normalized_query):
+        return (
+            "The user is asking for an explanatory answer. In the JSON `answer` string, give a 1-2 sentence overview "
+            "followed by 4-6 newline-separated bullets that cover the main idea, why it matters, concrete benefits or "
+            "tradeoffs, and at least one example when the retrieved context supports it. Each bullet must start with '- '."
         )
     if mode == "job-search":
         return (
@@ -1412,10 +1511,23 @@ def _infer_answer_style_instructions(*, query: str, mode: str, query_strategy: s
             "bullets that explain the concept, tradeoffs, and practical implications."
         )
     return (
-        "Return a detailed answer that directly addresses the request. Prefer one short framing sentence followed "
-        "by 3-6 newline-separated bullets when the context supports multiple distinct points. Each bullet must "
-        "start with '- '."
+        "Return a detailed answer that directly addresses the request. Use a 1-2 sentence overview followed "
+        "by 4-6 newline-separated bullets when the context supports multiple distinct points. Each bullet must "
+        "start with '- ' and add a concrete detail, implication, or example instead of rephrasing the same idea."
     )
+
+
+def _requires_structured_general_answer(*, query: str, mode: str) -> bool:
+    normalized_query = " ".join(query.strip().split())
+    if not normalized_query:
+        return False
+    if LIST_QUERY_PATTERN.search(normalized_query):
+        return True
+    if STEPS_QUERY_PATTERN.search(normalized_query):
+        return True
+    if EXPLANATION_QUERY_PATTERN.search(normalized_query):
+        return True
+    return mode in {"job-search", "learning"}
 
 
 def _write_artifact(*, settings: RagSettings, run_id: str, payload: dict[str, Any]) -> str:

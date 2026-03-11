@@ -1918,6 +1918,7 @@ def create_app() -> FastAPI:
         order: str = Query("desc", description="Sort order: asc, desc."),
         limit: int = Query(50, ge=1, le=200, description="Page size."),
         offset: int = Query(0, ge=0, description="Pagination offset."),
+        view: str = Query("full", description="Response payload shape: full, summary."),
     ) -> JSONResponse:
         request_id = _request_id()
         control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
@@ -1964,6 +1965,16 @@ def create_app() -> FastAPI:
                 details=[{"field": "order", "issue": "allowed values: asc, desc"}],
             )
 
+        normalized_view = str(view).strip().lower()
+        if normalized_view not in {"full", "summary"}:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message=f"Invalid view: {view}",
+                request_id=request_id,
+                details=[{"field": "view", "issue": "allowed values: full, summary"}],
+            )
+
         try:
             payload = phase6_list_jobs(
                 status=None if normalized_status == "all" else normalized_status,
@@ -1976,6 +1987,7 @@ def create_app() -> FastAPI:
                 order=normalized_order,
                 limit=limit,
                 offset=offset,
+                include_details=normalized_view != "summary",
             )
         except Exception as exc:  # noqa: BLE001
             return _error_response(
@@ -2461,13 +2473,17 @@ def create_app() -> FastAPI:
             **RATE_LIMIT_ERROR_RESPONSE,
         },
     )
-    async def get_companies(request: Request) -> JSONResponse:
+    async def get_companies(
+        request: Request,
+        limit: Optional[int] = Query(None, ge=1, le=500, description="Optional maximum number of company summaries."),
+        include_jobs: bool = Query(True, description="Include embedded job arrays in each company list item."),
+    ) -> JSONResponse:
         request_id = _request_id()
         control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
         if control_error is not None:
             return control_error
 
-        profiles = phase6_list_company_profiles(phase6_all_jobs())
+        profiles = phase6_list_company_profiles(phase6_all_jobs(), include_jobs=include_jobs, limit=limit)
         return _json_response(200, {"workflow": "workflow_06a_companies", "count": len(profiles), "items": profiles})
 
     @app.get(

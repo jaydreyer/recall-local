@@ -3,11 +3,13 @@ import { startTransition, useEffect, useMemo, useState } from 'react'
 import {
   createCoverLetterDraft,
   createJobEvaluationRun,
+  fetchJob,
   fetchJobGaps,
   fetchJobStats,
   fetchJobs,
   updateJob,
 } from '../api'
+import { readCachedJson, writeCachedJson } from '../lib/cache'
 
 const DEFAULT_FILTERS = {
   status: 'all',
@@ -16,8 +18,11 @@ const DEFAULT_FILTERS = {
   companyTier: '',
   sort: 'fit_score',
   order: 'desc',
-  limit: 150,
+  limit: 60,
 }
+
+const JOBS_CACHE_KEY = 'daily-dashboard-jobs-snapshot-v1'
+const GAPS_CACHE_KEY = 'daily-dashboard-gap-snapshot-v1'
 
 function resolveScoreRange(scoreRange) {
   switch (scoreRange) {
@@ -41,6 +46,7 @@ function buildFilters(filters) {
     sort: filters.sort,
     order: filters.order,
     limit: filters.limit,
+    view: 'summary',
     ...scoreBounds,
   }
 }
@@ -49,21 +55,39 @@ function patchJobs(list, updated) {
   return list.map((job) => (job.jobId === updated.jobId ? { ...job, ...updated } : job))
 }
 
-export function useJobs() {
+function persistJobsSnapshot({ jobs, stats, lastLoadedAt, selectedJobId }) {
+  writeCachedJson(JOBS_CACHE_KEY, {
+    jobs,
+    stats,
+    lastLoadedAt,
+    selectedJobId,
+  })
+}
+
+function persistGapSnapshot({ gaps, lastLoadedAt }) {
+  writeCachedJson(GAPS_CACHE_KEY, {
+    gaps,
+    lastLoadedAt,
+  })
+}
+
+export function useJobs({ loadGaps = false } = {}) {
+  const cachedJobsState = readCachedJson(JOBS_CACHE_KEY, {})
+  const cachedGapsState = readCachedJson(GAPS_CACHE_KEY, {})
   const [filters, setFilters] = useState(DEFAULT_FILTERS)
-  const [jobs, setJobs] = useState([])
-  const [stats, setStats] = useState(null)
-  const [gaps, setGaps] = useState(null)
-  const [selectedJobId, setSelectedJobId] = useState(null)
+  const [jobs, setJobs] = useState(Array.isArray(cachedJobsState.jobs) ? cachedJobsState.jobs : [])
+  const [stats, setStats] = useState(cachedJobsState.stats || null)
+  const [gaps, setGaps] = useState(cachedGapsState.gaps || null)
+  const [selectedJobId, setSelectedJobId] = useState(cachedJobsState.selectedJobId || null)
   const [selectedJob, setSelectedJob] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!(Array.isArray(cachedJobsState.jobs) && cachedJobsState.jobs.length > 0))
   const [error, setError] = useState('')
-  const [lastLoadedAt, setLastLoadedAt] = useState('')
+  const [lastLoadedAt, setLastLoadedAt] = useState(String(cachedJobsState.lastLoadedAt || ''))
   const [detailLoading, setDetailLoading] = useState(false)
   const [actionJobId, setActionJobId] = useState('')
-  const [gapsLoading, setGapsLoading] = useState(true)
+  const [gapsLoading, setGapsLoading] = useState(false)
   const [gapsError, setGapsError] = useState('')
-  const [gapsLoadedAt, setGapsLoadedAt] = useState('')
+  const [gapsLoadedAt, setGapsLoadedAt] = useState(String(cachedGapsState.lastLoadedAt || ''))
   const [coverLetterState, setCoverLetterState] = useState({
     jobId: '',
     loading: false,
@@ -81,7 +105,6 @@ export function useJobs() {
     }
     const match = items.find((job) => job.jobId === jobId) || null
     setSelectedJob(match)
-    setDetailLoading(false)
   }
 
   function selectJob(jobId) {
@@ -93,22 +116,53 @@ export function useJobs() {
     setLoading(true)
     setError('')
     try {
-      const [statsPayload, jobsPayload] = await Promise.all([fetchJobStats(), fetchJobs(apiFilters)])
-      setStats(statsPayload)
+      const jobsPayload = await fetchJobs(apiFilters)
       const items = Array.isArray(jobsPayload.items) ? jobsPayload.items : []
+      const refreshedAt = new Date().toISOString()
+      let nextSelectedJobId = selectedJobId
+
       setJobs(items)
-      setLastLoadedAt(new Date().toISOString())
-      if (!selectedJobId && items.length > 0) {
-        setSelectedJobId(items[0].jobId)
-        setSelectedJob(items[0])
-      } else if (selectedJobId && items.length > 0 && !items.some((item) => item.jobId === selectedJobId)) {
-        setSelectedJobId(items[0].jobId)
-        setSelectedJob(items[0])
-      } else if (selectedJobId) {
-        syncSelectedJob(selectedJobId, items)
+      setLastLoadedAt(refreshedAt)
+
+      if (!nextSelectedJobId && items.length > 0) {
+        nextSelectedJobId = items[0].jobId
+        setSelectedJobId(nextSelectedJobId)
+      } else if (nextSelectedJobId && items.length > 0 && !items.some((item) => item.jobId === nextSelectedJobId)) {
+        nextSelectedJobId = items[0].jobId
+        setSelectedJobId(nextSelectedJobId)
       }
+
+      if (nextSelectedJobId) {
+        syncSelectedJob(nextSelectedJobId, items)
+      }
+
+      persistJobsSnapshot({
+        jobs: items,
+        stats,
+        lastLoadedAt: refreshedAt,
+        selectedJobId: nextSelectedJobId,
+      })
+
+      fetchJobStats()
+        .then((statsPayload) => {
+          setStats(statsPayload)
+          persistJobsSnapshot({
+            jobs: items,
+            stats: statsPayload,
+            lastLoadedAt: refreshedAt,
+            selectedJobId: nextSelectedJobId,
+          })
+        })
+        .catch(() => {
+          // Keep the board usable even if stats lag or fail.
+        })
     } catch (loadError) {
-      setError(loadError.message || 'Unable to load jobs.')
+      const message = loadError.message || 'Unable to load jobs.'
+      if (jobs.length > 0 || stats) {
+        setError(`Showing last cached board snapshot. Live refresh failed: ${message}`)
+      } else {
+        setError(message)
+      }
     } finally {
       setLoading(false)
     }
@@ -119,10 +173,17 @@ export function useJobs() {
     setGapsError('')
     try {
       const payload = await fetchJobGaps()
+      const refreshedAt = new Date().toISOString()
       setGaps(payload)
-      setGapsLoadedAt(new Date().toISOString())
+      setGapsLoadedAt(refreshedAt)
+      persistGapSnapshot({ gaps: payload, lastLoadedAt: refreshedAt })
     } catch (loadError) {
-      setGapsError(loadError.message || 'Unable to load skill gaps.')
+      const message = loadError.message || 'Unable to load skill gaps.'
+      if (gaps) {
+        setGapsError(`Showing last cached learning radar. Live refresh failed: ${message}`)
+      } else {
+        setGapsError(message)
+      }
     } finally {
       setGapsLoading(false)
     }
@@ -133,15 +194,54 @@ export function useJobs() {
   }, [apiFilters])
 
   useEffect(() => {
-    loadGapData()
-  }, [])
+    if (loadGaps) {
+      loadGapData()
+    }
+  }, [loadGaps])
 
   useEffect(() => {
     syncSelectedJob(selectedJobId)
   }, [jobs, selectedJobId])
 
+  useEffect(() => {
+    const jobId = String(selectedJobId || '').trim()
+    const summaryJob = jobs.find((job) => job.jobId === jobId) || null
+    if (!jobId || !summaryJob) {
+      return
+    }
+
+    let cancelled = false
+    setSelectedJob(summaryJob)
+    setDetailLoading(true)
+
+    fetchJob(jobId)
+      .then((payload) => {
+        if (!cancelled) {
+          setSelectedJob(payload || summaryJob)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSelectedJob(summaryJob)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setDetailLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [jobs, selectedJobId])
+
   async function refresh() {
-    await Promise.all([loadJobsData(), loadGapData()])
+    const tasks = [loadJobsData()]
+    if (loadGaps) {
+      tasks.push(loadGapData())
+    }
+    await Promise.all(tasks)
   }
 
   async function mutateJob(jobId, patch) {
@@ -216,6 +316,7 @@ export function useJobs() {
     setSelectedJobId: selectJob,
     setFilter: updateFilter,
     refresh,
+    loadGapData,
     markApplied: (jobId) => mutateJob(jobId, { applied: true }),
     dismissJob: (jobId) => mutateJob(jobId, { dismissed: true }),
     saveNotes: (jobId, notes) => mutateJob(jobId, { notes }),

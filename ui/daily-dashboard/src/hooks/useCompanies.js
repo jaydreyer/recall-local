@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 
 import { createCompany, fetchCompanies, fetchCompany, refreshCompanyProfile, updateCompany } from '../api'
+import { readCachedJson, writeCachedJson } from '../lib/cache'
+
+const COMPANIES_CACHE_KEY = 'daily-dashboard-companies-snapshot-v1'
 
 function preferredCompany(items) {
   return [...items].sort((left, right) => {
@@ -25,17 +28,26 @@ function preferredCompany(items) {
   })[0]
 }
 
-export function useCompanies() {
-  const [companies, setCompanies] = useState([])
-  const [selectedCompanyId, setSelectedCompanyId] = useState('')
+function persistCompanySnapshot({ companies, selectedCompanyId, lastLoadedAt }) {
+  writeCachedJson(COMPANIES_CACHE_KEY, {
+    companies,
+    selectedCompanyId,
+    lastLoadedAt,
+  })
+}
+
+export function useCompanies({ enabled = false } = {}) {
+  const cachedState = readCachedJson(COMPANIES_CACHE_KEY, {})
+  const [companies, setCompanies] = useState(Array.isArray(cachedState.companies) ? cachedState.companies : [])
+  const [selectedCompanyId, setSelectedCompanyId] = useState(cachedState.selectedCompanyId || '')
   const [selectedCompany, setSelectedCompany] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(enabled && !(Array.isArray(cachedState.companies) && cachedState.companies.length > 0))
   const [detailLoading, setDetailLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [savingCompanyId, setSavingCompanyId] = useState('')
   const [error, setError] = useState('')
-  const [lastLoadedAt, setLastLoadedAt] = useState('')
+  const [lastLoadedAt, setLastLoadedAt] = useState(String(cachedState.lastLoadedAt || ''))
   const [detailError, setDetailError] = useState('')
   const [saveError, setSaveError] = useState('')
 
@@ -44,28 +56,45 @@ export function useCompanies() {
     setError('')
     setSaveError('')
     try {
-      const payload = await fetchCompanies()
+      const payload = await fetchCompanies({ include_jobs: false, limit: 300 })
       const items = Array.isArray(payload.items) ? payload.items : []
+      const refreshedAt = new Date().toISOString()
+      let nextSelectedCompanyId = selectedCompanyId
+
       setCompanies(items)
-      setLastLoadedAt(new Date().toISOString())
-      if (items.length > 0 && (!selectedCompanyId || !items.some((item) => item.company_id === selectedCompanyId))) {
+      setLastLoadedAt(refreshedAt)
+
+      if (items.length > 0 && (!nextSelectedCompanyId || !items.some((item) => item.company_id === nextSelectedCompanyId))) {
         const preferred = preferredCompany(items)
         if (preferred) {
-          setSelectedCompanyId(preferred.company_id)
+          nextSelectedCompanyId = preferred.company_id
+          setSelectedCompanyId(nextSelectedCompanyId)
         }
-      } else if (!selectedCompanyId) {
+      } else if (!nextSelectedCompanyId && items.length > 0) {
         const preferred = items.find((item) => item.job_count > 0) || items[0]
-        setSelectedCompanyId(preferred.company_id)
+        nextSelectedCompanyId = preferred.company_id
+        setSelectedCompanyId(nextSelectedCompanyId)
       }
+
+      persistCompanySnapshot({
+        companies: items,
+        selectedCompanyId: nextSelectedCompanyId,
+        lastLoadedAt: refreshedAt,
+      })
     } catch (loadError) {
-      setError(loadError.message || 'Unable to load companies.')
+      const message = loadError.message || 'Unable to load companies.'
+      if (companies.length > 0) {
+        setError(`Showing cached watchlist. Live refresh failed: ${message}`)
+      } else {
+        setError(message)
+      }
     } finally {
       setLoading(false)
     }
   }
 
   async function loadCompany(companyId) {
-    if (!companyId) {
+    if (!companyId || !enabled) {
       setSelectedCompany(null)
       return
     }
@@ -83,12 +112,16 @@ export function useCompanies() {
   }
 
   useEffect(() => {
-    loadCompanies()
-  }, [])
+    if (enabled) {
+      loadCompanies()
+    }
+  }, [enabled])
 
   useEffect(() => {
-    loadCompany(selectedCompanyId)
-  }, [selectedCompanyId])
+    if (enabled) {
+      loadCompany(selectedCompanyId)
+    }
+  }, [enabled, selectedCompanyId])
 
   async function refreshSelectedCompany() {
     if (!selectedCompanyId) {

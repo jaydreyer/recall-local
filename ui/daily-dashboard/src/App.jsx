@@ -12,6 +12,7 @@ import { useJobs } from './hooks/useJobs'
 import { useSettings } from './hooks/useSettings'
 
 const TAB_KEYS = ['Jobs', 'Companies', 'Skill Gaps']
+const ACTIVE_TAB_STORAGE_KEY = 'daily-dashboard-active-tab-v1'
 
 function companionAppUrl(port) {
   if (typeof window === 'undefined') {
@@ -54,20 +55,32 @@ function formatRefreshLabel(value) {
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('Jobs')
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window === 'undefined') {
+      return 'Jobs'
+    }
+    const stored = String(window.localStorage.getItem(ACTIVE_TAB_STORAGE_KEY) || '').trim()
+    return TAB_KEYS.includes(stored) ? stored : 'Jobs'
+  })
   const [now, setNow] = useState(new Date())
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [addCompanyOpen, setAddCompanyOpen] = useState(false)
 
-  const jobsState = useJobs()
-  const companiesState = useCompanies()
-  const settingsState = useSettings()
+  const jobsState = useJobs({ loadGaps: activeTab === 'Skill Gaps' })
+  const companiesState = useCompanies({ enabled: activeTab === 'Companies' })
+  const settingsState = useSettings({ enabled: settingsOpen })
   const recallLocalUrl = companionAppUrl(8170)
 
   useEffect(() => {
     const timerId = window.setInterval(() => setNow(new Date()), 1000)
     return () => window.clearInterval(timerId)
   }, [])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, activeTab)
+    }
+  }, [activeTab])
 
   return (
     <div className="page-shell">

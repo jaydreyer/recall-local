@@ -115,7 +115,7 @@ class Phase5FUnanswerableNormalizationTests(unittest.TestCase):
         )
 
         self.assertIn("bullet", instructions.lower())
-        self.assertIn("4-8", instructions)
+        self.assertIn("5-8", instructions)
 
     def test_infer_answer_style_for_comparison_request(self) -> None:
         instructions = rag_query._infer_answer_style_instructions(  # noqa: SLF001
@@ -125,6 +125,15 @@ class Phase5FUnanswerableNormalizationTests(unittest.TestCase):
 
         self.assertIn("comparison", instructions.lower())
         self.assertIn("differences", instructions.lower())
+
+    def test_infer_answer_style_for_explanatory_request(self) -> None:
+        instructions = rag_query._infer_answer_style_instructions(  # noqa: SLF001
+            query="What are the benefits of prompt engineering?",
+            mode="default",
+        )
+
+        self.assertIn("overview", instructions.lower())
+        self.assertIn("benefits", instructions.lower())
 
     def test_render_prompt_includes_answer_style_instructions(self) -> None:
         rendered = rag_query._render_prompt(  # noqa: SLF001
@@ -510,11 +519,51 @@ class Phase5FUnanswerableNormalizationTests(unittest.TestCase):
                 ),
             ],
             query_strategy="compare_synthesis",
+            query="How is prompt engineering different than context engineering?",
+            mode="default",
         )
 
         self.assertEqual(requirements["min_citation_count"], 2)
         self.assertEqual(requirements["min_distinct_doc_count"], 2)
         self.assertEqual(requirements["min_bullet_count"], 3)
+        self.assertEqual(requirements["min_answer_chars"], 260)
+
+    def test_validation_requirements_for_general_explanatory_query_require_structure(self) -> None:
+        requirements = rag_query._validation_requirements(  # noqa: SLF001
+            selected_chunks=[
+                rag_query.RetrievedChunk(
+                    doc_id="doc-1",
+                    chunk_id="chunk-1",
+                    title="Prompt Engineering Guide",
+                    source="guide.pdf",
+                    text="a",
+                    score=0.9,
+                    source_type="file",
+                    ingestion_channel="file",
+                    group="reference",
+                    tags=[],
+                ),
+                rag_query.RetrievedChunk(
+                    doc_id="doc-2",
+                    chunk_id="chunk-2",
+                    title="Prompt Benefits",
+                    source="benefits.pdf",
+                    text="b",
+                    score=0.8,
+                    source_type="file",
+                    ingestion_channel="file",
+                    group="reference",
+                    tags=[],
+                ),
+            ],
+            query_strategy="general_qa",
+            query="What are the benefits of prompt engineering?",
+            mode="default",
+        )
+
+        self.assertEqual(requirements["min_bullet_count"], 3)
+        self.assertEqual(requirements["min_citation_count"], 2)
+        self.assertEqual(requirements["min_answer_chars"], 220)
 
     def test_build_compare_fallback_response_returns_extract_from_two_docs(self) -> None:
         response = rag_query._build_compare_fallback_response(  # noqa: SLF001
@@ -553,6 +602,55 @@ class Phase5FUnanswerableNormalizationTests(unittest.TestCase):
         self.assertIn("context engineering", response["answer"].lower())
         self.assertEqual(len(response["citations"]), 2)
 
+    def test_build_general_qa_fallback_response_returns_structured_bullets(self) -> None:
+        response = rag_query._build_general_qa_fallback_response(  # noqa: SLF001
+            question="What are the benefits of prompt engineering? Give examples if possible.",
+            selected_chunks=[
+                rag_query.RetrievedChunk(
+                    doc_id="doc-1",
+                    chunk_id="chunk-1",
+                    title="Prompt Engineering for AI Guide",
+                    source="https://cloud.google.com/discover/what-is-prompt-engineering",
+                    text="Prompt engineering helps guide models toward more accurate, relevant, and safe responses.",
+                    score=0.9,
+                    source_type="url",
+                    ingestion_channel="bookmarklet",
+                    group="reference",
+                    tags=["article"],
+                ),
+                rag_query.RetrievedChunk(
+                    doc_id="doc-2",
+                    chunk_id="chunk-2",
+                    title="Prompt Engineering Overview",
+                    source="https://platform.claude.com/docs/prompt-engineering",
+                    text="Well-structured prompts make outputs easier to steer and evaluate, especially when examples are included.",
+                    score=0.8,
+                    source_type="url",
+                    ingestion_channel="bookmarklet",
+                    group="reference",
+                    tags=["article"],
+                ),
+                rag_query.RetrievedChunk(
+                    doc_id="doc-3",
+                    chunk_id="chunk-3",
+                    title="Prompting Guide",
+                    source="https://example.com/prompting",
+                    text="Prompt design can also improve consistency by clarifying the desired format and task boundaries.",
+                    score=0.7,
+                    source_type="url",
+                    ingestion_channel="bookmarklet",
+                    group="reference",
+                    tags=["article"],
+                ),
+            ],
+            reason="validation failed",
+            mode="default",
+        )
+
+        self.assertIsNotNone(response)
+        self.assertGreaterEqual(response["answer"].count("\n- "), 3)
+        self.assertEqual(len(response["citations"]), 3)
+
     def test_supporting_snippet_skips_boilerplate_when_query_terms_match_later_sentence(self) -> None:
         snippet = rag_query._supporting_snippet(  # noqa: SLF001
             "Thursday AM free if that works for you? Sent an invite, lmk if it works. Context engineering is about providing the right information and tools at the right time.",
@@ -560,6 +658,17 @@ class Phase5FUnanswerableNormalizationTests(unittest.TestCase):
         )
 
         self.assertIn("Context engineering", snippet)
+        self.assertNotIn("Thursday AM", snippet)
+
+    def test_supporting_snippet_strips_q_and_a_prefixes(self) -> None:
+        snippet = rag_query._supporting_snippet(  # noqa: SLF001
+            "GenAI Interview Questions: A: Hybrid prompting combines structured and open-ended prompts to improve output quality and relevance.",
+            question="What are the benefits of prompt engineering?",
+        )
+
+        self.assertIn("Hybrid prompting combines", snippet)
+        self.assertNotIn("GenAI Interview Questions", snippet)
+        self.assertNotIn("A:", snippet)
 
     def test_build_document_summary_fallback_response_returns_bullets(self) -> None:
         response = rag_query._build_document_summary_fallback_response(  # noqa: SLF001
