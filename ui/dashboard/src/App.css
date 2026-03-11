@@ -584,6 +584,32 @@ button:disabled {
   gap: 6px;
 }
 
+.chat-audit-details {
+  margin-top: 10px;
+}
+
+.chat-audit-details summary {
+  cursor: pointer;
+  color: #9ea6bc;
+  font-size: 0.76rem;
+  list-style: none;
+}
+
+.chat-audit-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.chat-audit-details summary::before {
+  content: "+";
+  display: inline-block;
+  margin-right: 6px;
+  color: #d6a24f;
+}
+
+.chat-audit-details[open] summary::before {
+  content: "−";
+}
+
 .chat-audit-pill {
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;

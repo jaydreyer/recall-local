@@ -645,11 +645,14 @@ class Phase5FUnanswerableNormalizationTests(unittest.TestCase):
             ],
             reason="validation failed",
             mode="default",
+            parsed_answer="Prompt engineering helps produce more relevant, controlled, and useful model responses.",
         )
 
         self.assertIsNotNone(response)
         self.assertGreaterEqual(response["answer"].count("\n- "), 3)
         self.assertEqual(len(response["citations"]), 3)
+        self.assertIn("Prompt engineering helps produce", response["answer"])
+        self.assertIn("More control over outputs", response["answer"])
 
     def test_supporting_snippet_skips_boilerplate_when_query_terms_match_later_sentence(self) -> None:
         snippet = rag_query._supporting_snippet(  # noqa: SLF001

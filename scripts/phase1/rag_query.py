@@ -116,6 +116,7 @@ SNIPPET_BOILERPLATE_PATTERNS = (
     "sent an invite",
     "this guide assumes",
     "if not, we highly suggest",
+    "here are some specific examples and use cases",
 )
 DOCUMENT_SUMMARY_MAX_SELECTED_CHUNKS = 8
 DOCUMENT_SUMMARY_MAX_CHARS_PER_CHUNK = 1200
@@ -571,6 +572,7 @@ def _generate_validated_answer(
             selected_chunks=selected_chunks,
             reason="; ".join(validation.errors if validation else ["unknown validation failure"]),
             mode=mode,
+            parsed_answer=str((validation.parsed_response or {}).get("answer", "")) if validation else "",
         )
         if general_fallback is not None:
             return general_fallback, attempts_used
@@ -732,23 +734,37 @@ def _build_general_qa_fallback_response(
     selected_chunks: list[RetrievedChunk],
     reason: str,
     mode: str,
+    parsed_answer: str = "",
 ) -> dict[str, Any] | None:
     if not selected_chunks:
         return None
     if not _requires_structured_general_answer(query=question, mode=mode):
         return None
 
-    answer_lines = [_general_qa_intro(question=question)]
+    intro = _general_qa_intro(question=question, parsed_answer=parsed_answer)
+    answer_lines = [intro]
     citations: list[dict[str, str]] = []
     seen_pairs: set[tuple[str, str]] = set()
+    seen_bullets: set[str] = set()
+    seen_labels: set[str] = set()
 
     for chunk in selected_chunks[:4]:
         pair = (chunk.doc_id, chunk.chunk_id)
         if pair in seen_pairs:
             continue
         seen_pairs.add(pair)
-        label = chunk.title or chunk.source
-        answer_lines.append(f"- {label}: {_supporting_snippet(chunk.text, question=question)}")
+        snippet = _supporting_snippet(chunk.text, question=question)
+        bullet = _general_qa_bullet(question=question, snippet=snippet)
+        bullet_key = bullet.lower().strip()
+        if bullet_key in seen_bullets:
+            continue
+        bullet_label = _general_qa_bullet_label(bullet)
+        if bullet_label and bullet_label in seen_labels:
+            continue
+        seen_bullets.add(bullet_key)
+        if bullet_label:
+            seen_labels.add(bullet_label)
+        answer_lines.append(bullet)
         citations.append({"doc_id": chunk.doc_id, "chunk_id": chunk.chunk_id})
 
     if len(answer_lines) < 4:
@@ -1399,13 +1415,63 @@ def _document_summary_intro(*, title: str, question: str) -> str:
     return f"{title} is summarized below using highlights grounded in the retrieved document."
 
 
-def _general_qa_intro(*, question: str) -> str:
+def _general_qa_intro(*, question: str, parsed_answer: str = "") -> str:
+    cleaned = " ".join(str(parsed_answer).split()).strip()
+    if cleaned and cleaned != UNANSWERABLE_ANSWER:
+        first_sentence = re.split(r"(?<=[.!?])\s+", cleaned)[0].strip()
+        if len(first_sentence) >= 40:
+            return _truncate_context_text(first_sentence, 220)
     lower_question = question.lower()
     if "benefit" in lower_question or "advantage" in lower_question:
         return "The retrieved context points to several practical benefits that make prompt engineering useful in day-to-day model interactions."
     if "improve" in lower_question or "enhance" in lower_question or "how to" in lower_question:
         return "The retrieved context suggests a few concrete ways to improve results, especially around structure, context, and iteration."
     return "The retrieved context supports the following concrete takeaways."
+
+
+def _general_qa_bullet(*, question: str, snippet: str) -> str:
+    lower_question = question.lower()
+    lower_snippet = snippet.lower()
+    if "benefit" in lower_question or "advantage" in lower_question:
+        label = _benefit_label_for_snippet(lower_snippet)
+        return f"- {label}: {snippet}"
+    if "improve" in lower_question or "enhance" in lower_question or "how to" in lower_question:
+        label = _action_label_for_snippet(lower_snippet)
+        return f"- {label}: {snippet}"
+    return f"- {snippet}"
+
+
+def _general_qa_bullet_label(bullet: str) -> str:
+    prefix = bullet.removeprefix("- ").strip()
+    if ":" not in prefix:
+        return ""
+    return prefix.split(":", 1)[0].strip().lower()
+
+
+def _benefit_label_for_snippet(lower_snippet: str) -> str:
+    if any(token in lower_snippet for token in ("evaluate", "evaluation", "quality", "diversity")):
+        return "Easier evaluation and iteration"
+    if any(token in lower_snippet for token in ("guide model", "guide ai", "steer", "steering", "guide model behaviour", "desired responses")):
+        return "More control over outputs"
+    if any(token in lower_snippet for token in ("accurate", "accuracy", "relevant", "relevance", "customized", "desired responses")):
+        return "Better relevance and accuracy"
+    if any(token in lower_snippet for token in ("safe", "safety", "guardrail")):
+        return "Safer interactions"
+    if any(token in lower_snippet for token in ("example", "examples", "use cases")):
+        return "Clearer examples and use cases"
+    return "Practical upside"
+
+
+def _action_label_for_snippet(lower_snippet: str) -> str:
+    if any(token in lower_snippet for token in ("clear", "structure", "format", "structured")):
+        return "Use clearer structure"
+    if any(token in lower_snippet for token in ("context", "relevant")):
+        return "Add the right context"
+    if any(token in lower_snippet for token in ("example", "examples")):
+        return "Include examples"
+    if any(token in lower_snippet for token in ("evaluate", "evaluation", "compare", "quality")):
+        return "Test and compare results"
+    return "Refine the prompt deliberately"
 
 
 def _topic_hint(title: str) -> str:

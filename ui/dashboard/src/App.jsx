@@ -1358,20 +1358,25 @@ function QueryPanel({ request, groupOptions }) {
                   <article className="chat-bubble assistant">
                     <p className="chat-role">Recall</p>
                     <p className="chat-text">{item.answer}</p>
-                    <div className="chat-audit-row" aria-label="Response diagnostics">
-                      {item.queryStrategy ? <span className="chat-audit-pill">strategy={formatStrategyLabel(item.queryStrategy)}</span> : null}
-                      {item.model ? <span className="chat-audit-pill">model={item.model}</span> : null}
-                      {item.latencyMs !== null ? (
-                        <span className="chat-audit-pill">latency={formatLatencyLabel(item.latencyMs)}</span>
-                      ) : null}
-                      {item.attempts !== null ? <span className="chat-audit-pill">attempts={item.attempts}</span> : null}
-                      {item.promptProfile ? <span className="chat-audit-pill">profile={item.promptProfile}</span> : null}
-                    </div>
-                    {item.fallbackUsed ? (
-                      <p className="chat-diagnostic fallback">
-                        Response used a guarded fallback path to stay grounded in retrieved sources.
-                        {item.fallbackReason ? ` ${item.fallbackReason}` : ""}
-                      </p>
+                    {(item.queryStrategy || item.model || item.latencyMs !== null || item.attempts !== null || item.promptProfile || item.fallbackUsed) ? (
+                      <details className="chat-audit-details">
+                        <summary>Response details</summary>
+                        <div className="chat-audit-row" aria-label="Response diagnostics">
+                          {item.queryStrategy ? <span className="chat-audit-pill">strategy={formatStrategyLabel(item.queryStrategy)}</span> : null}
+                          {item.model ? <span className="chat-audit-pill">model={item.model}</span> : null}
+                          {item.latencyMs !== null ? (
+                            <span className="chat-audit-pill">latency={formatLatencyLabel(item.latencyMs)}</span>
+                          ) : null}
+                          {item.attempts !== null ? <span className="chat-audit-pill">attempts={item.attempts}</span> : null}
+                          {item.promptProfile ? <span className="chat-audit-pill">profile={item.promptProfile}</span> : null}
+                        </div>
+                        {item.fallbackUsed ? (
+                          <p className="chat-diagnostic fallback">
+                            Response used a guarded fallback path to stay grounded in retrieved sources.
+                            {item.fallbackReason ? ` ${item.fallbackReason}` : ""}
+                          </p>
+                        ) : null}
+                      </details>
                     ) : null}
                     {item.retrievedCount === 0 && (
                       <p className="chat-diagnostic">
