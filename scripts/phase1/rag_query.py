@@ -62,7 +62,10 @@ UUID_PATTERN = re.compile(
 HEX_IDENTIFIER_PATTERN = re.compile(r"^[a-f0-9]{16,}$", flags=re.IGNORECASE)
 LIST_QUERY_PATTERN = re.compile(r"\b(list|bullet(?:ed)?|bullet-point|key points?|top \d+)\b", flags=re.IGNORECASE)
 COMPARE_QUERY_PATTERN = re.compile(r"\b(compare|comparison|different|difference|versus|vs\.?)\b", flags=re.IGNORECASE)
-STEPS_QUERY_PATTERN = re.compile(r"\b(how to|steps?|process|plan|improve|fix|make this better)\b", flags=re.IGNORECASE)
+STEPS_QUERY_PATTERN = re.compile(
+    r"\b(how to|how can i|how do i|steps?|process|plan|improve|enhance|optimi[sz]e|fix|make this better)\b",
+    flags=re.IGNORECASE,
+)
 EXPLANATION_QUERY_PATTERN = re.compile(
     r"\b(benefits?|advantages?|what are|what is|why|examples?|tradeoffs?|pros and cons|use cases?)\b",
     flags=re.IGNORECASE,
@@ -125,6 +128,10 @@ COMPARE_MAX_SELECTED_DOCS = 2
 COMPARE_CHUNKS_PER_DOC = 2
 COMPARE_MAX_CHARS_PER_CHUNK = 900
 COMPARE_MAX_CONTEXT_CHARS = 7000
+EXPLANATORY_QA_MAX_SELECTED_DOCS = 3
+EXPLANATORY_QA_CHUNKS_PER_DOC = 2
+EXPLANATORY_QA_MAX_CHARS_PER_CHUNK = 950
+EXPLANATORY_QA_MAX_CONTEXT_CHARS = 7200
 GENERAL_QA_MAX_SELECTED_DOCS = 3
 GENERAL_QA_CHUNKS_PER_DOC = 2
 GENERAL_QA_MAX_CHARS_PER_CHUNK = 850
@@ -138,6 +145,7 @@ class RagSettings:
     prompt_path: Path
     compare_prompt_path: Path
     synthesis_prompt_path: Path
+    explanatory_prompt_path: Path
     summary_prompt_path: Path
     retry_prompt_path: Path
     job_search_prompt_path: Path
@@ -187,6 +195,7 @@ def load_settings() -> RagSettings:
         prompt_path=ROOT / "prompts" / "workflow_02_rag_answer.md",
         compare_prompt_path=ROOT / "prompts" / "workflow_02_compare_synthesis.md",
         synthesis_prompt_path=ROOT / "prompts" / "workflow_02_multi_document_synthesis.md",
+        explanatory_prompt_path=ROOT / "prompts" / "workflow_02_explanatory_qa.md",
         summary_prompt_path=ROOT / "prompts" / "workflow_02_document_summary.md",
         retry_prompt_path=ROOT / "prompts" / "workflow_02_rag_answer_retry.md",
         job_search_prompt_path=ROOT / "prompts" / "job_search_coach.md",
@@ -249,6 +258,7 @@ def run_rag_query(
     query_strategy_hint = _query_strategy(question=query, retrieved=[])
     summary_hint = query_strategy_hint == "document_summary"
     compare_hint = query_strategy_hint == "compare_synthesis"
+    explanatory_hint = query_strategy_hint == "explanatory_qa"
     active_mode = _resolve_mode(
         mode=mode,
         filter_tags=normalized_filter_tags,
@@ -279,6 +289,8 @@ def run_rag_query(
             retrieval_limit = max(limit, settings.summary_top_k)
         elif compare_hint or query_strategy_hint == "multi_document_synthesis":
             retrieval_limit = max(limit, min(settings.summary_top_k, 12))
+        elif explanatory_hint:
+            retrieval_limit = max(limit, min(settings.summary_top_k, 10))
         retrieved = _retrieve_for_query_strategy(
             question=question,
             query_strategy=query_strategy_hint,
@@ -319,10 +331,11 @@ def run_rag_query(
                     retrieved=retrieved,
                     max_retries=retries,
                     temperature=settings.temperature,
-                    max_tokens=settings.summary_max_tokens if query_strategy == "document_summary" else settings.default_max_tokens,
+                    max_tokens=settings.summary_max_tokens if query_strategy in {"document_summary", "explanatory_qa"} else settings.default_max_tokens,
                     prompt_path=settings.prompt_path,
                     compare_prompt_path=settings.compare_prompt_path,
                     synthesis_prompt_path=settings.synthesis_prompt_path,
+                    explanatory_prompt_path=settings.explanatory_prompt_path,
                     summary_prompt_path=settings.summary_prompt_path,
                     job_search_prompt_path=settings.job_search_prompt_path,
                     learning_prompt_path=settings.learning_prompt_path,
@@ -453,6 +466,7 @@ def _generate_validated_answer(
     prompt_path: Path,
     compare_prompt_path: Path,
     synthesis_prompt_path: Path,
+    explanatory_prompt_path: Path,
     summary_prompt_path: Path,
     job_search_prompt_path: Path,
     learning_prompt_path: Path,
@@ -480,6 +494,8 @@ def _generate_validated_answer(
         selected_primary_prompt = compare_prompt_path
     elif query_strategy == "multi_document_synthesis":
         selected_primary_prompt = synthesis_prompt_path
+    elif query_strategy == "explanatory_qa":
+        selected_primary_prompt = explanatory_prompt_path
     elif mode == "job-search":
         selected_primary_prompt = job_search_prompt_path
     elif mode == "learning":
@@ -1133,6 +1149,17 @@ def _select_generation_chunks(
                     selected.append(items[depth])
         return _dedupe_chunks(selected)
 
+    if query_strategy == "explanatory_qa":
+        selected = []
+        for doc_id in ranked_docs[:EXPLANATORY_QA_MAX_SELECTED_DOCS]:
+            selected.extend(
+                _pick_evidence_chunks(
+                    grouped[doc_id],
+                    max_chunks=EXPLANATORY_QA_CHUNKS_PER_DOC,
+                )
+            )
+        return _dedupe_chunks(selected)
+
     selected = []
     for doc_id in ranked_docs[:GENERAL_QA_MAX_SELECTED_DOCS]:
         selected.extend(
@@ -1185,7 +1212,7 @@ def _ranked_doc_ids(
                         break
         lexical_bonus = (
             _title_source_query_overlap(chunks, query_tokens=query_tokens)
-            if query_strategy in {"compare_synthesis", "multi_document_synthesis"}
+            if query_strategy in {"compare_synthesis", "multi_document_synthesis", "explanatory_qa"}
             else 0.0
         )
         best_title_match = max((chunk.title_match_score or 0.0) for chunk in chunks)
@@ -1280,6 +1307,8 @@ def _context_budget(query_strategy: str) -> tuple[int, int]:
         return DOCUMENT_SUMMARY_MAX_CHARS_PER_CHUNK, DOCUMENT_SUMMARY_MAX_CONTEXT_CHARS
     if query_strategy == "compare_synthesis":
         return COMPARE_MAX_CHARS_PER_CHUNK, COMPARE_MAX_CONTEXT_CHARS
+    if query_strategy == "explanatory_qa":
+        return EXPLANATORY_QA_MAX_CHARS_PER_CHUNK, EXPLANATORY_QA_MAX_CONTEXT_CHARS
     return GENERAL_QA_MAX_CHARS_PER_CHUNK, GENERAL_QA_MAX_CONTEXT_CHARS
 
 
@@ -1301,6 +1330,13 @@ def _validation_requirements(
         min_answer_chars = 320
         if len(selected_chunks) >= 2:
             min_citation_count = 2
+    elif query_strategy == "explanatory_qa":
+        min_bullet_count = 4
+        min_answer_chars = 320
+        if len(selected_chunks) >= 2:
+            min_citation_count = 2
+        if len(distinct_docs) >= 2:
+            min_distinct_doc_count = 2
     elif query_strategy in {"compare_synthesis", "multi_document_synthesis"}:
         min_bullet_count = 3
         min_answer_chars = 260
@@ -1542,6 +1578,13 @@ def _infer_answer_style_instructions(*, query: str, mode: str, query_strategy: s
             "sentence, then provide 4-6 newline-separated bullets covering recommendations, tradeoffs, or takeaways "
             "grounded in at least two cited sources when available. Each bullet must start with '- '."
         )
+    if query_strategy == "explanatory_qa":
+        return (
+            "This is an explanatory synthesis request. In the JSON `answer` string, give a 1-2 sentence overview "
+            "followed by 4-6 newline-separated bullets that cover the main idea, why it matters, concrete benefits or "
+            "tradeoffs, and at least one example when the retrieved context supports it. Use evidence from at least two "
+            "cited sources when available. Each bullet must start with '- '."
+        )
     if LIST_QUERY_PATTERN.search(normalized_query):
         return (
             "The user asked for a list. In the JSON `answer` string, lead with one concise framing sentence, then "
@@ -1726,6 +1769,8 @@ def _prompt_profile_name(mode: str, *, query_strategy: str = "general_qa") -> st
         return "workflow_02_compare_synthesis"
     if query_strategy == "multi_document_synthesis":
         return "workflow_02_multi_document_synthesis"
+    if query_strategy == "explanatory_qa":
+        return "workflow_02_explanatory_qa"
     if mode == "job-search":
         return "job_search_coach"
     if mode == "learning":
@@ -1740,6 +1785,8 @@ def _query_strategy(*, question: str, retrieved: list[RetrievedChunk]) -> str:
         return "compare_synthesis"
     if _is_multi_document_synthesis_query(question):
         return "multi_document_synthesis"
+    if _is_explanatory_query(question):
+        return "explanatory_qa"
     return "general_qa"
 
 
@@ -1772,6 +1819,15 @@ def _is_multi_document_synthesis_query(question: str) -> bool:
         marker in lowered
         for marker in ("tradeoff", "tradeoffs", "practical", "ways", "implications", "expect")
     )
+
+
+def _is_explanatory_query(question: str) -> bool:
+    normalized = " ".join(question.strip().split())
+    if not normalized:
+        return False
+    if _is_named_document_summary_query(question) or _is_compare_query(question) or _is_multi_document_synthesis_query(question):
+        return False
+    return bool(EXPLANATION_QUERY_PATTERN.search(normalized) or STEPS_QUERY_PATTERN.search(normalized) or LIST_QUERY_PATTERN.search(normalized))
 
 
 def _env_bool(name: str, default: bool) -> bool:

@@ -130,6 +130,7 @@ class Phase5FUnanswerableNormalizationTests(unittest.TestCase):
         instructions = rag_query._infer_answer_style_instructions(  # noqa: SLF001
             query="What are the benefits of prompt engineering?",
             mode="default",
+            query_strategy="explanatory_qa",
         )
 
         self.assertIn("overview", instructions.lower())
@@ -556,14 +557,36 @@ class Phase5FUnanswerableNormalizationTests(unittest.TestCase):
                     tags=[],
                 ),
             ],
-            query_strategy="general_qa",
+            query_strategy="explanatory_qa",
             query="What are the benefits of prompt engineering?",
             mode="default",
         )
 
-        self.assertEqual(requirements["min_bullet_count"], 3)
+        self.assertEqual(requirements["min_bullet_count"], 4)
         self.assertEqual(requirements["min_citation_count"], 2)
-        self.assertEqual(requirements["min_answer_chars"], 220)
+        self.assertEqual(requirements["min_answer_chars"], 320)
+
+    def test_query_strategy_detects_explanatory_queries(self) -> None:
+        self.assertEqual(
+            rag_query._query_strategy(  # noqa: SLF001
+                question="What are the benefits of prompt engineering? Give examples if possible.",
+                retrieved=[],
+            ),
+            "explanatory_qa",
+        )
+        self.assertEqual(
+            rag_query._query_strategy(  # noqa: SLF001
+                question="How can I enhance my prompt-engineering abilities?",
+                retrieved=[],
+            ),
+            "explanatory_qa",
+        )
+
+    def test_prompt_profile_name_prefers_explanatory_strategy(self) -> None:
+        self.assertEqual(
+            rag_query._prompt_profile_name("default", query_strategy="explanatory_qa"),  # noqa: SLF001
+            "workflow_02_explanatory_qa",
+        )
 
     def test_build_compare_fallback_response_returns_extract_from_two_docs(self) -> None:
         response = rag_query._build_compare_fallback_response(  # noqa: SLF001
