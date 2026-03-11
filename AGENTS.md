@@ -72,6 +72,14 @@ cd /home/jaydreyer/recall-local/docker
 
 Do not proceed with n8n, Ollama, or Qdrant troubleshooting unless this validation passes.
 
+## RAG Quality Validation
+
+After changes to RAG retrieval, prompts, output validation, model selection, or the dashboard chat UI:
+
+- run the manual UI checklist in `/Users/jaydreyer/projects/recall-local/docs/Recall_local_RAG_UI_QA_Checklist.md`
+- if the change affects retrieval/generation quality, run `/Users/jaydreyer/projects/recall-local/scripts/eval/run_rag_model_bakeoff.sh`
+- keep the live ai-lab default pinned unless the bakeoff shows a clear quality improvement without unacceptable latency
+
 ## Ollama Model Invariant
 
 The live ai-lab stack must explicitly keep these model settings aligned in `/home/jaydreyer/recall-local/docker/.env`:

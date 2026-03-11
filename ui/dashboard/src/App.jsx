@@ -53,6 +53,25 @@ function formatClock(date) {
   return date.toLocaleTimeString("en-US", { hour12: false });
 }
 
+function formatLatencyLabel(value) {
+  const latency = Number(value);
+  if (!Number.isFinite(latency) || latency < 0) {
+    return "";
+  }
+  if (latency >= 1000) {
+    return `${(latency / 1000).toFixed(latency >= 10000 ? 0 : 1)}s`;
+  }
+  return `${Math.round(latency)}ms`;
+}
+
+function formatStrategyLabel(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return "";
+  }
+  return normalized.replace(/_/g, " ");
+}
+
 function formatActivityTimestamp(value) {
   const parsed = new Date(String(value || "").trim());
   if (Number.isNaN(parsed.getTime())) {
@@ -1217,8 +1236,14 @@ function QueryPanel({ request, groupOptions }) {
       const audit = response?.result?.audit && typeof response.result.audit === "object" ? response.result.audit : {};
       const retrievedCount = Number.isFinite(Number(audit?.retrieved_count)) ? Number(audit.retrieved_count) : null;
       const fallbackReason = String(audit?.fallback_reason || "").trim();
+      const fallbackUsed = Boolean(audit?.fallback_used) || Boolean(fallbackReason);
       const effectiveMode = String(audit?.mode || mode).trim() || mode;
       const effectiveFilterTagMode = String(audit?.filter_tag_mode || filterTagMode).trim().toLowerCase() || filterTagMode;
+      const queryStrategy = String(audit?.query_strategy || "").trim();
+      const attempts = Number.isFinite(Number(audit?.attempts)) ? Number(audit.attempts) : null;
+      const latencyMs = Number.isFinite(Number(audit?.latency_ms)) ? Number(audit.latency_ms) : null;
+      const model = String(audit?.model || "").trim();
+      const promptProfile = String(audit?.prompt_profile || "").trim();
       setHistory((current) => [
         ...current,
         {
@@ -1233,7 +1258,13 @@ function QueryPanel({ request, groupOptions }) {
           filterTags: effectiveTagFilters,
           filterTagMode: effectiveFilterTagMode,
           retrievedCount,
+          fallbackUsed,
           fallbackReason,
+          queryStrategy,
+          attempts,
+          latencyMs,
+          model,
+          promptProfile,
         },
       ]);
       setQuery("");
@@ -1327,6 +1358,21 @@ function QueryPanel({ request, groupOptions }) {
                   <article className="chat-bubble assistant">
                     <p className="chat-role">Recall</p>
                     <p className="chat-text">{item.answer}</p>
+                    <div className="chat-audit-row" aria-label="Response diagnostics">
+                      {item.queryStrategy ? <span className="chat-audit-pill">strategy={formatStrategyLabel(item.queryStrategy)}</span> : null}
+                      {item.model ? <span className="chat-audit-pill">model={item.model}</span> : null}
+                      {item.latencyMs !== null ? (
+                        <span className="chat-audit-pill">latency={formatLatencyLabel(item.latencyMs)}</span>
+                      ) : null}
+                      {item.attempts !== null ? <span className="chat-audit-pill">attempts={item.attempts}</span> : null}
+                      {item.promptProfile ? <span className="chat-audit-pill">profile={item.promptProfile}</span> : null}
+                    </div>
+                    {item.fallbackUsed ? (
+                      <p className="chat-diagnostic fallback">
+                        Response used a guarded fallback path to stay grounded in retrieved sources.
+                        {item.fallbackReason ? ` ${item.fallbackReason}` : ""}
+                      </p>
+                    ) : null}
                     {item.retrievedCount === 0 && (
                       <p className="chat-diagnostic">
                         No chunks matched your current filters.

@@ -61,6 +61,16 @@ scripts/phase4/run_repo_hygiene_check.sh
 
 5. Ensure PR checks are green (GitHub Actions `quality-checks` workflow).
 
+6. Run the manual chat QA pass in:
+
+- `/Users/jaydreyer/projects/recall-local/docs/Recall_local_RAG_UI_QA_Checklist.md`
+
+7. If the release changes RAG retrieval, prompts, validation, or model selection, run the model bakeoff and save the artifact path:
+
+```bash
+scripts/eval/run_rag_model_bakeoff.sh
+```
+
 ## ai-lab Sync Gate (required before runtime validation)
 
 Always sync local updates before any ai-lab restart/curl/n8n validation:

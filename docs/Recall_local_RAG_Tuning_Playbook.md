@@ -2,6 +2,10 @@
 
 Purpose: explain what was tuned in the RAG system, why it mattered, and where the implementation lives.
 
+For manual validation through the dashboard UI, use:
+
+- `/Users/jaydreyer/projects/recall-local/docs/Recall_local_RAG_UI_QA_Checklist.md`
+
 ## Scope
 
 This project did not fine-tune model weights. It tuned the RAG system through:
@@ -140,6 +144,25 @@ This project did not fine-tune model weights. It tuned the RAG system through:
 - `/Users/jaydreyer/projects/recall-local/scripts/eval/learning_eval_cases.json`
 - `/Users/jaydreyer/projects/recall-local/scripts/eval/scheduled_eval.sh`
 
+## 6A) Current local model recommendation
+
+As of the `2026-03-11` ai-lab bakeoff:
+
+- keep `qwen2.5:7b-instruct` as the pinned live default
+- do not promote `qwen3.5:9b` yet
+- do not promote `gemma3:12b-it-qat` yet
+
+Why:
+
+- `qwen2.5:7b-instruct` remains the best quality/latency tradeoff in this stack
+- `qwen3.5:9b` and `gemma3:12b-it-qat` were both materially slower and scored worse on the same RAG suite
+- one `qwen2.5` bakeoff miss was a transient `Connection reset by peer`, not a stable answer-quality regression
+
+Reference artifacts:
+
+- bakeoff summary: `data/artifacts/evals/bakeoff/20260311T020312Z_summary.md`
+- clean rerun on the restored default: `data/artifacts/evals/20260311T022400Z_8786f4ea80544b54b94e8c00da2c4b7b.md`
+
 ## 7) How to explain this in interviews
 
 Short version:
@@ -225,14 +248,16 @@ Use this order when quality drops:
 
 1. Baseline:
    - run target suite and record pass/total + artifact path.
+   - run the manual UI checklist if the change affects chat presentation, fallback handling, or user-visible answer quality
 2. Apply one change.
 3. Run target suite again.
-4. Compare:
+4. Re-run the manual UI checklist for affected flows.
+5. Compare:
    - pass rate
    - unanswerable correctness
    - latency
    - fallback frequency
-5. Promote only if:
+6. Promote only if:
    - pass rate is same or better
    - no major latency regression
    - no increase in false-answer behavior

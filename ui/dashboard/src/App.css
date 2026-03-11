@@ -577,6 +577,23 @@ button:disabled {
   white-space: pre-wrap;
 }
 
+.chat-audit-row {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chat-audit-pill {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: #9a9a9a;
+  background: rgba(255, 255, 255, 0.03);
+}
+
 .chat-meta {
   margin: 8px 0 0;
   font-family: var(--font-mono);
@@ -593,6 +610,12 @@ button:disabled {
   color: #f0c06c;
   font-size: 0.76rem;
   line-height: 1.45;
+}
+
+.chat-diagnostic.fallback {
+  border-color: rgba(96, 165, 250, 0.28);
+  background: rgba(96, 165, 250, 0.08);
+  color: #b7d3ff;
 }
 
 .citation-cards {
