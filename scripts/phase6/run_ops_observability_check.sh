@@ -7,10 +7,14 @@ DASHBOARD_URL="${2:-http://localhost:3001}"
 CHAT_UI_URL="${3:-http://localhost:8170}"
 API_KEY="${RECALL_API_KEY:-}"
 ARTIFACT_DIR="$ROOT_DIR/data/artifacts/observability"
+ALERT_WEBHOOK_URL="${RECALL_UPTIME_ALERT_WEBHOOK_URL:-}"
+ALERT_TELEGRAM_TOKEN="${RECALL_UPTIME_ALERT_TELEGRAM_BOT_TOKEN:-${RECALL_TELEGRAM_BOT_TOKEN:-}}"
+ALERT_TELEGRAM_CHAT_ID="${RECALL_UPTIME_ALERT_TELEGRAM_CHAT_ID:-${RECALL_TELEGRAM_CHAT_ID:-}}"
+NOTIFY_ON_SUCCESS="${RECALL_UPTIME_NOTIFY_ON_SUCCESS:-false}"
 
 mkdir -p "$ARTIFACT_DIR"
 
-python3 - "$BRIDGE_BASE_URL" "$DASHBOARD_URL" "$CHAT_UI_URL" "$ARTIFACT_DIR" "$API_KEY" <<'PY'
+python3 - "$BRIDGE_BASE_URL" "$DASHBOARD_URL" "$CHAT_UI_URL" "$ARTIFACT_DIR" "$API_KEY" "$ALERT_WEBHOOK_URL" "$ALERT_TELEGRAM_TOKEN" "$ALERT_TELEGRAM_CHAT_ID" "$NOTIFY_ON_SUCCESS" <<'PY'
 import json
 import pathlib
 import sys
@@ -23,6 +27,10 @@ dashboard_url = sys.argv[2].rstrip("/")
 chat_ui_url = sys.argv[3].rstrip("/")
 artifact_dir = pathlib.Path(sys.argv[4])
 api_key = sys.argv[5].strip()
+alert_webhook_url = sys.argv[6].strip()
+alert_telegram_token = sys.argv[7].strip()
+alert_telegram_chat_id = sys.argv[8].strip()
+notify_on_success = sys.argv[9].strip().lower() in {"1", "true", "yes", "on"}
 
 timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 artifact_path = artifact_dir / f"{timestamp}_ops_observability_check.json"
@@ -63,6 +71,20 @@ def fetch_text(url, *, timeout=30):
             "headers": dict(response.headers.items()),
             "body_preview": body,
         }
+
+
+def post_json(url, payload, *, timeout=15):
+    data = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        if response.status >= 300:
+            raise RuntimeError(f"POST {url} returned HTTP {response.status}")
+        return response.status
 
 
 def run_check(name, fn):
@@ -168,6 +190,43 @@ for check in checks:
         print(f"[ok] {check['name']}")
     else:
         print(f"[error] {check['name']}: {check.get('error')}")
+
+def build_alert_message():
+    failing = [check for check in checks if check["status"] != "ok"]
+    lines = [
+        f"Recall.local ops observability {'ALERT' if overall_status != 'ok' else 'OK'}",
+        f"bridge={bridge_base}",
+        f"dashboard={dashboard_url}",
+        f"chat={chat_ui_url}",
+        f"artifact={artifact_path}",
+    ]
+    if failing:
+        for check in failing:
+            lines.append(f"fail={check['name']}: {check.get('error')}")
+    else:
+        rag_summary = next((check.get("summary", {}) for check in checks if check["name"] == "rag_probe"), {})
+        lines.append(f"rag_strategy={rag_summary.get('strategy')}")
+        lines.append(f"rag_model={rag_summary.get('model')}")
+    return "\n".join(lines)
+
+
+alert_message = build_alert_message()
+should_notify = overall_status != "ok" or notify_on_success
+if should_notify and alert_webhook_url:
+    try:
+        post_json(alert_webhook_url, {"text": alert_message})
+        print("[ok] alert_webhook")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[error] alert_webhook: {exc}")
+
+if should_notify and alert_telegram_token and alert_telegram_chat_id:
+    telegram_url = f"https://api.telegram.org/bot{alert_telegram_token}/sendMessage"
+    telegram_payload = {"chat_id": alert_telegram_chat_id, "text": alert_message}
+    try:
+        post_json(telegram_url, telegram_payload)
+        print("[ok] alert_telegram")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[error] alert_telegram: {exc}")
 
 if overall_status != "ok":
     raise SystemExit(1)

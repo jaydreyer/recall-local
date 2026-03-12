@@ -115,6 +115,11 @@ Last updated: 2026-03-12
     - `/home/jaydreyer/recall-local/scripts/phase6/run_dashboard_smoke.sh`
   - consolidated operator observability:
     - `/home/jaydreyer/recall-local/scripts/phase6/run_ops_observability_check.sh`
+- Optional uptime alert env:
+  - `RECALL_UPTIME_ALERT_WEBHOOK_URL`
+  - `RECALL_UPTIME_ALERT_TELEGRAM_BOT_TOKEN`
+  - `RECALL_UPTIME_ALERT_TELEGRAM_CHAT_ID`
+  - `RECALL_UPTIME_NOTIFY_ON_SUCCESS`
 - Observability artifacts:
   - `/home/jaydreyer/recall-local/data/artifacts/observability`
 

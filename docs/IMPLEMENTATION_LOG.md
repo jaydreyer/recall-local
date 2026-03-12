@@ -1,5 +1,33 @@
 # Recall.local Implementation Log
 
+## 2026-03-12 - Ops uptime alerting added to observability wrapper
+
+### What was executed
+
+- Extended the consolidated observability wrapper in [/Users/jaydreyer/projects/recall-local/scripts/phase6/run_ops_observability_check.sh](/Users/jaydreyer/projects/recall-local/scripts/phase6/run_ops_observability_check.sh):
+  - optional generic webhook alerting via `RECALL_UPTIME_ALERT_WEBHOOK_URL`
+  - optional Telegram alerting via:
+    - `RECALL_UPTIME_ALERT_TELEGRAM_BOT_TOKEN`
+    - `RECALL_UPTIME_ALERT_TELEGRAM_CHAT_ID`
+  - optional success notifications via `RECALL_UPTIME_NOTIFY_ON_SUCCESS`
+- Updated the uptime/alerting documentation in:
+  - [/Users/jaydreyer/projects/recall-local/docs/OBSERVABILITY_STRATEGY.md](/Users/jaydreyer/projects/recall-local/docs/OBSERVABILITY_STRATEGY.md)
+  - [/Users/jaydreyer/projects/recall-local/docs/ENVIRONMENT_INVENTORY.md](/Users/jaydreyer/projects/recall-local/docs/ENVIRONMENT_INVENTORY.md)
+  - [/Users/jaydreyer/projects/recall-local/docker/.env.example](/Users/jaydreyer/projects/recall-local/docker/.env.example)
+
+### Validation
+
+- Local validation:
+  - `bash -n scripts/phase6/run_ops_observability_check.sh`
+- ai-lab validation:
+  - sync updated files from Mac to ai-lab
+  - run `./scripts/phase6/run_ops_observability_check.sh http://localhost:8090 http://localhost:3001 http://localhost:8170`
+
+### Results
+
+- The uptime check now has a real alerting path instead of stopping at local console output and artifacts.
+- Recall.local can now support a lightweight cron-driven uptime loop on `ai-lab` without introducing a new service.
+
 ## 2026-03-12 - Operator observability check + Phase 6 workflow cleanup
 
 ### What was executed

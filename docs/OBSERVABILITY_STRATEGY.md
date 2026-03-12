@@ -23,13 +23,14 @@ The observability foundation is no longer hypothetical. The current live baselin
   - `scripts/phase6/run_dashboard_smoke.sh`
 - a consolidated operator observability wrapper:
   - `scripts/phase6/run_ops_observability_check.sh`
+  - supports optional failure alerts through Telegram or a generic webhook
 - optional Langfuse tracing in `scripts/llm_client.py`
 
 What is still planned rather than implemented:
 
 - Honeycomb or OTEL export for cross-service tracing
 - scheduled synthetic browser checks with screenshots
-- automated alert delivery to Telegram
+- deeper alert routing and long-term uptime dashboards
 
 ## Recommendation
 
@@ -144,7 +145,7 @@ This is the current foundation to preserve now, even if full observability waits
 
 4. Basic operator checks
    - `scripts/phase6/run_dashboard_smoke.sh` for dashboard data readiness
-   - `scripts/phase6/run_ops_observability_check.sh` for bridge health, dashboard checks, UI reachability, and one grounded RAG probe
+   - `scripts/phase6/run_ops_observability_check.sh` for bridge health, dashboard checks, UI reachability, one grounded RAG probe, and optional failure alerting
 
 These pieces are worth doing before the project is "finished" because retrofitting correlation later is harder and less clean.
 
@@ -154,7 +155,7 @@ Add after more features stabilize:
 
 1. Honeycomb OTEL tracing for the bridge and core jobs
 2. n8n execution telemetry and error workflows
-3. alert thresholds and Telegram routing
+3. alert thresholds and richer Telegram/webhook routing
 4. broader synthetic coverage for new UI flows
 5. recruiter-facing dashboards and screenshots
 
@@ -228,6 +229,27 @@ First useful alerts:
 - scheduled eval regression versus recent baseline
 - repeated synthetic UI failures
 
+## Uptime and Alerting Now
+
+The practical uptime path is now:
+
+1. Run `scripts/phase6/run_ops_observability_check.sh`
+2. Write a JSON artifact under `data/artifacts/observability`
+3. Exit non-zero on failure
+4. Optionally send alerts when these env vars are present:
+   - `RECALL_UPTIME_ALERT_WEBHOOK_URL`
+   - `RECALL_UPTIME_ALERT_TELEGRAM_BOT_TOKEN`
+   - `RECALL_UPTIME_ALERT_TELEGRAM_CHAT_ID`
+   - `RECALL_UPTIME_NOTIFY_ON_SUCCESS`
+
+Recommended ai-lab cron baseline:
+
+```cron
+*/10 * * * * cd /home/jaydreyer/recall-local && /home/jaydreyer/recall-local/scripts/phase6/run_ops_observability_check.sh http://localhost:8090 http://localhost:3001 http://localhost:8170 >> /home/jaydreyer/recall-local/data/artifacts/observability/cron.log 2>&1
+```
+
+That is intentionally lightweight. It does not replace richer synthetic monitoring later, but it gives a real operator-facing uptime and alerting loop now.
+
 ## Definitions of Done
 
 ### Foundation complete
@@ -287,6 +309,7 @@ If this work starts before the rest of the product is complete, use this order:
 - `/Users/jaydreyer/projects/recall-local/scripts/llm_client.py`
 - `/Users/jaydreyer/projects/recall-local/scripts/eval/run_eval.py`
 - `/Users/jaydreyer/projects/recall-local/scripts/phase6/job_discovery_runner.py`
+- `/Users/jaydreyer/projects/recall-local/scripts/phase6/run_ops_observability_check.sh`
 - `/Users/jaydreyer/projects/recall-local/ui/dashboard/src/api.js`
 - `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/api.js`
 - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_PRD.md`
