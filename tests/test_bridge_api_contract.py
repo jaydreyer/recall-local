@@ -33,6 +33,21 @@ def build_client(env_updates: dict[str, str]) -> Iterator[TestClient]:
 
 
 class BridgeApiContractTests(unittest.TestCase):
+    def test_healthz_sets_request_id_header_and_echoes_incoming_id(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        with build_client(env) as client:
+            generated = client.get("/v1/healthz")
+            explicit = client.get("/v1/healthz", headers={"X-Request-Id": "demo-request-123"})
+
+        self.assertEqual(generated.status_code, 200)
+        self.assertTrue(generated.headers.get("X-Request-Id", "").startswith("req_"))
+        self.assertEqual(explicit.status_code, 200)
+        self.assertEqual(explicit.headers.get("X-Request-Id"), "demo-request-123")
+
     def test_startup_preloads_required_ollama_models(self) -> None:
         env = {
             "RECALL_API_KEY": "",

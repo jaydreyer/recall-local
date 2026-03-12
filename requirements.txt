@@ -13,3 +13,6 @@ langfuse
 watchdog
 python-multipart
 python-jobspy
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-exporter-otlp-proto-http

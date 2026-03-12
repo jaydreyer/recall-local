@@ -1,5 +1,40 @@
 # Recall.local Implementation Log
 
+## 2026-03-12 - Optional OTEL/Honeycomb bridge tracing added
+
+### What was executed
+
+- Added optional bridge-side OpenTelemetry wiring in:
+  - [/Users/jaydreyer/projects/recall-local/scripts/phase1/observability.py](/Users/jaydreyer/projects/recall-local/scripts/phase1/observability.py)
+  - [/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py](/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py)
+- Implemented a lightweight request middleware that:
+  - preserves or generates `X-Request-Id`
+  - returns `X-Request-Id` on responses
+  - returns `X-Trace-Id` and `traceparent` when tracing is enabled
+  - exports request spans over OTLP HTTP when `RECALL_OTEL_ENABLED=true`
+- Added Honeycomb-compatible env support in:
+  - [/Users/jaydreyer/projects/recall-local/docker/.env.example](/Users/jaydreyer/projects/recall-local/docker/.env.example)
+  - supports either direct OTLP env vars or `HONEYCOMB_API_KEY` + optional dataset
+- Added regression coverage in:
+  - [/Users/jaydreyer/projects/recall-local/tests/test_bridge_api_contract.py](/Users/jaydreyer/projects/recall-local/tests/test_bridge_api_contract.py)
+  - [/Users/jaydreyer/projects/recall-local/tests/test_phase1_observability.py](/Users/jaydreyer/projects/recall-local/tests/test_phase1_observability.py)
+
+### Validation
+
+- Local validation:
+  - `python3 -m unittest tests.test_bridge_api_contract tests.test_phase1_observability`
+  - `python3 -m py_compile scripts/phase1/ingest_bridge_api.py scripts/phase1/observability.py`
+- ai-lab validation:
+  - sync updated files from Mac to ai-lab
+  - rebuild only `recall-ingest-bridge`
+  - run `./validate-stack.sh` before and after
+  - verify `/v1/healthz` still returns `200`
+
+### Results
+
+- Recall.local now has a real bridge-side tracing hook for Honeycomb/OTLP without forcing a live provider change.
+- The feature is additive and dormant by default until credentials and `RECALL_OTEL_ENABLED=true` are supplied.
+
 ## 2026-03-12 - ai-lab uptime cron wrapper added
 
 ### What was executed

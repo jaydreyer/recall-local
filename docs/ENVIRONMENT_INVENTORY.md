@@ -122,6 +122,14 @@ Last updated: 2026-03-12
   - `RECALL_UPTIME_ALERT_TELEGRAM_BOT_TOKEN`
   - `RECALL_UPTIME_ALERT_TELEGRAM_CHAT_ID`
   - `RECALL_UPTIME_NOTIFY_ON_SUCCESS`
+- Optional OTEL / Honeycomb env:
+  - `RECALL_OTEL_ENABLED`
+  - `OTEL_SERVICE_NAME`
+  - `OTEL_EXPORTER_OTLP_ENDPOINT`
+  - `OTEL_EXPORTER_OTLP_HEADERS`
+  - `HONEYCOMB_API_KEY`
+  - `HONEYCOMB_DATASET`
+  - `HONEYCOMB_API_ENDPOINT`
 - Observability artifacts:
   - `/home/jaydreyer/recall-local/data/artifacts/observability`
 

@@ -36,6 +36,14 @@ from scripts.phase1.channel_adapters import normalize_payload  # noqa: E402
 from scripts.phase1.group_model import CANONICAL_GROUPS, normalize_group  # noqa: E402
 from scripts.phase1.ingest_from_payload import payload_to_requests  # noqa: E402
 from scripts.phase1.ingestion_pipeline import IngestRequest, ingest_request, qdrant_client_from_env  # noqa: E402
+from scripts.phase1.observability import (  # noqa: E402
+    current_request_id as obs_current_request_id,
+)
+from scripts.phase1.observability import current_trace_id_hex as obs_current_trace_id_hex  # noqa: E402
+from scripts.phase1.observability import current_traceparent as obs_current_traceparent  # noqa: E402
+from scripts.phase1.observability import init_observability  # noqa: E402
+from scripts.phase1.observability import pop_request_id as obs_pop_request_id  # noqa: E402
+from scripts.phase1.observability import push_request_id as obs_push_request_id  # noqa: E402
 from scripts.phase1.rag_query import run_rag_query  # noqa: E402
 from scripts.phase5.vault_sync import list_vault_tree, run_vault_sync_once  # noqa: E402
 from scripts.phase2.meeting_action_items import run_meeting_action_items  # noqa: E402
@@ -1441,6 +1449,7 @@ def create_app() -> FastAPI:
         if _env_flag("RECALL_DASHBOARD_CACHE_WARMER", default=True)
         else None
     )
+    observability = init_observability()
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -1493,6 +1502,46 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.state.observability = observability
+
+    @app.middleware("http")
+    async def request_context_middleware(request: Request, call_next):
+        request_id = request.headers.get("X-Request-Id", "").strip() or _generated_request_id()
+        request.state.request_id = request_id
+        request.state.request_started_at = time.monotonic()
+        token = obs_push_request_id(request_id)
+        span_name = f"{request.method} {request.url.path}"
+        with observability.request_span(
+            name=span_name,
+            request_headers=request.headers,
+            attributes={
+                "http.method": request.method,
+                "http.route": request.url.path,
+                "http.target": str(request.url),
+                "recall.request_id": request_id,
+            },
+        ) as span:
+            try:
+                response = await call_next(request)
+            except Exception as exc:
+                if span is not None:
+                    span.record_exception(exc)
+                    span.set_attribute("http.response.status_code", 500)
+                raise
+            finally:
+                obs_pop_request_id(token)
+            duration_ms = int((time.monotonic() - request.state.request_started_at) * 1000)
+            if span is not None:
+                span.set_attribute("http.response.status_code", response.status_code)
+                span.set_attribute("recall.latency_ms", duration_ms)
+            response.headers["X-Request-Id"] = request_id
+            trace_id = obs_current_trace_id_hex()
+            if trace_id:
+                response.headers["X-Trace-Id"] = trace_id
+            traceparent = obs_current_traceparent()
+            if traceparent:
+                response.headers["traceparent"] = traceparent
+            return response
 
     @app.get(
         f"{API_PREFIX}/healthz",
@@ -4258,6 +4307,10 @@ def _enforce_api_key_if_configured(request: Request, *, request_id: str) -> Opti
 
 
 def _request_id() -> str:
+    return obs_current_request_id() or _generated_request_id()
+
+
+def _generated_request_id() -> str:
     return f"req_{uuid.uuid4().hex[:12]}"
 
 

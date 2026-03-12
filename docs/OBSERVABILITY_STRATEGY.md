@@ -25,12 +25,13 @@ The observability foundation is no longer hypothetical. The current live baselin
   - `scripts/phase6/run_ops_observability_check.sh`
   - supports optional failure alerts through Telegram or a generic webhook
 - optional Langfuse tracing in `scripts/llm_client.py`
+- optional OpenTelemetry tracing for the bridge via OTLP / Honeycomb-compatible env vars
 
 What is still planned rather than implemented:
 
-- Honeycomb or OTEL export for cross-service tracing
 - scheduled synthetic browser checks with screenshots
 - deeper alert routing and long-term uptime dashboards
+- broader cross-service tracing beyond the bridge itself
 
 ## Recommendation
 
@@ -90,6 +91,12 @@ Use Honeycomb for:
 Key path to trace:
 
 `UI or n8n -> bridge API -> retrieval/storage/LLM/dependency -> response`
+
+Current implementation note:
+
+- the bridge now supports opt-in OTLP HTTP tracing
+- Honeycomb can be used by setting OTLP exporter env vars directly or by setting `HONEYCOMB_API_KEY`
+- tracing is not enabled in the live ai-lab baseline unless `RECALL_OTEL_ENABLED=true`
 
 ### Layer 2: LLM Quality and Behavior
 
@@ -173,6 +180,12 @@ Add after more features stabilize:
 - export to Honeycomb
 - trace retrieval, generation, eval, and job-discovery paths
 
+Current status:
+
+- partially implemented for the FastAPI bridge
+- request spans can now be exported through OTLP when enabled
+- request IDs and trace IDs are returned on bridge responses
+
 ### Phase C: Workflow Coverage
 
 - emit `n8n` execution metadata
@@ -212,6 +225,9 @@ Planned additions:
 - `OTEL_SERVICE_NAME`
 - `OTEL_EXPORTER_OTLP_ENDPOINT`
 - `OTEL_EXPORTER_OTLP_HEADERS`
+- `HONEYCOMB_API_KEY`
+- `HONEYCOMB_DATASET`
+- `HONEYCOMB_API_ENDPOINT`
 - `RECALL_OBS_REDACT_MODE`
 - `RECALL_TRACE_SAMPLE_SUCCESS_RATE`
 - `RECALL_TRACE_SAMPLE_ERROR_RATE`
@@ -270,11 +286,18 @@ The cron-driven uptime check plus alerting closes that gap with very low overhea
 - uptime checks tell us that something is broken
 - Honeycomb would tell us why a request path is slow or failing across service boundaries
 
+Current status:
+
+- bridge-side OTLP tracing support is now implemented
+- live export still requires real Honeycomb or OTLP credentials plus `RECALL_OTEL_ENABLED=true`
+- broader service coverage for `n8n`, Qdrant, and browser flows is still future work
+
 ## Definitions of Done
 
 ### Foundation complete
 
 - every bridge response includes a request ID
+- bridge responses can include `X-Trace-Id` and `traceparent` when tracing is enabled
 - logs and Langfuse traces can be correlated by request ID
 - raw text is redacted by default in hosted telemetry
 
