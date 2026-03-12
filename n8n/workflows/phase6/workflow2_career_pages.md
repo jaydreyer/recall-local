@@ -2,6 +2,15 @@
 
 Goal: monitor target company boards every 12 hours, normalize results in n8n, then hand normalized jobs to bridge for dedupe + storage.
 
+## Reliability notes for the import-ready workflows
+
+- The import-ready Workflow 2 JSON files now use `this.helpers.httpRequest()` inside Code nodes instead of raw `fetch()`.
+- Keep that helper-based approach if you edit the workflow in n8n. It is more reliable inside the n8n execution runtime and gives cleaner timeout / status handling.
+- The "Summary (No Matches)" step now emits:
+  - `status: fetch-error` when the ATS request fails
+  - `status: no-matches` when the ATS request succeeds but nothing matches the title filters
+- Preserve that distinction so operators can tell the difference between a quiet board and a broken fetch.
+
 ## Node 1: Schedule Trigger
 
 - Node type: `Schedule Trigger`

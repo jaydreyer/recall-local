@@ -94,12 +94,29 @@ Last updated: 2026-03-12
 ## LLM Runtime
 
 - Local endpoint: `http://localhost:11434`
-- Installed models observed:
-  - `nomic-embed-text:latest`
-  - `phi3:mini`
-  - `mistral:7b`
-  - `llama3.2:3b`
+- Live ai-lab `.env` model invariant:
+  - `RECALL_LLM_PROVIDER=ollama`
+  - `OLLAMA_MODEL=qwen2.5:7b-instruct`
+  - `OLLAMA_EMBED_MODEL=nomic-embed-text`
+- Required live-model verification:
+  - `docker exec -i ollama ollama list`
 - `.env.example` default model: `qwen2.5:7b-instruct`
+
+## Observability and Operator Checks
+
+- Bridge request IDs:
+  - bridge responses include `X-Request-Id`
+  - error envelopes include `requestId`
+- Langfuse:
+  - optional tracing is wired in `scripts/llm_client.py`
+  - enabled only when Langfuse env vars are present
+- Canonical operator checks:
+  - dashboard data readiness:
+    - `/home/jaydreyer/recall-local/scripts/phase6/run_dashboard_smoke.sh`
+  - consolidated operator observability:
+    - `/home/jaydreyer/recall-local/scripts/phase6/run_ops_observability_check.sh`
+- Observability artifacts:
+  - `/home/jaydreyer/recall-local/data/artifacts/observability`
 
 ## Cloud Providers
 
@@ -234,6 +251,9 @@ Last updated: 2026-03-12
 - Phase 3: complete (`3A` operator wrappers/forms, `3B` retrieval-quality track, `3C` ops hardening + portfolio bundle validated on ai-lab on 2026-02-24)
 - Phase 5: complete (`5A`-`5E.1` implementation complete and `5F` hardening/closeout validated, including canonical-only API cutover, coverage gate, operator entrypoint, demo runner evidence, auth/rate-limit verification, and completion checklist closure on 2026-02-26)
 - Phase 6A: complete (foundation routes live on ai-lab, `recall_jobs`/`recall_resume` created, resume version `2` ingested from `/home/jaydreyer/obsidian-vault/career/Jay-Dreyer-Resume.md`, and Daily Dashboard serving on port `3001` as of 2026-03-04)
+- Phase 6B: complete (job discovery runner, n8n workflow exports, and OpenAI Ashby migration shipped and validated on ai-lab)
+- Phase 6C: complete (evaluation, Telegram notification, observation telemetry, and Workflow 3 runtime path validated on ai-lab)
+- Phase 6D: complete (daily dashboard implementation, deploy validation, cache warming, recovery UX, and operator smoke path live on ai-lab)
 
 ## Skills Baseline (local Codex)
 

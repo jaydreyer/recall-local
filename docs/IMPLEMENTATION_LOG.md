@@ -1,5 +1,43 @@
 # Recall.local Implementation Log
 
+## 2026-03-12 - Operator observability check + Phase 6 workflow cleanup
+
+### What was executed
+
+- Added a consolidated operator observability wrapper:
+  - [/Users/jaydreyer/projects/recall-local/scripts/phase6/run_ops_observability_check.sh](/Users/jaydreyer/projects/recall-local/scripts/phase6/run_ops_observability_check.sh)
+  - checks bridge health, dashboard readiness, dashboard UI reachability, chat UI reachability, and one grounded `/v1/rag-queries` probe
+  - writes JSON artifacts to:
+    - `/Users/jaydreyer/projects/recall-local/data/artifacts/observability`
+- Reconciled observability/runtime docs to the live state:
+  - [/Users/jaydreyer/projects/recall-local/AGENTS.md](/Users/jaydreyer/projects/recall-local/AGENTS.md)
+  - [/Users/jaydreyer/projects/recall-local/docs/OBSERVABILITY_STRATEGY.md](/Users/jaydreyer/projects/recall-local/docs/OBSERVABILITY_STRATEGY.md)
+  - [/Users/jaydreyer/projects/recall-local/docs/ENVIRONMENT_INVENTORY.md](/Users/jaydreyer/projects/recall-local/docs/ENVIRONMENT_INVENTORY.md)
+  - [/Users/jaydreyer/projects/recall-local/docs/README.md](/Users/jaydreyer/projects/recall-local/docs/README.md)
+- Cleaned up the remaining tracked Phase 6 workflow deltas by keeping the reliability-oriented workflow changes and documenting them in:
+  - [/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6/workflow2_career_pages.md](/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6/workflow2_career_pages.md)
+  - [/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6b_career_page_monitor_import.workflow.json](/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6b_career_page_monitor_import.workflow.json)
+  - [/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6b_career_page_monitor_traditional_import.workflow.json](/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6b_career_page_monitor_traditional_import.workflow.json)
+  - [/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6b_career_page_monitor_traditional_active_import.workflow.json](/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6b_career_page_monitor_traditional_active_import.workflow.json)
+
+### Validation
+
+- Local validation:
+  - `bash -n scripts/phase6/run_ops_observability_check.sh`
+- ai-lab validation:
+  - sync updated files from Mac to ai-lab
+  - spot-check the remote script/docs/workflow guide before verification
+  - run `./scripts/phase6/run_ops_observability_check.sh http://localhost:8090 http://localhost:3001 http://localhost:8170`
+
+### Results
+
+- Recall.local now has one practical operator check that captures both dashboard readiness and a lightweight grounded RAG health probe.
+- The written docs now match the actual live baseline more closely:
+  - observability is a partial implementation, not just a future plan
+  - ai-lab model expectations are explicit
+  - Phase 6 status no longer stops at `6A`
+- The remaining tracked Phase 6 workflow edits are now treated as intentional reliability improvements instead of unexplained repo drift.
+
 ## 2026-03-12 - Daily dashboard UI recovery and state polish (local + ai-lab)
 
 ### What was executed

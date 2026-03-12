@@ -82,6 +82,19 @@ After changes that affect the daily dashboard UI, the Phase 6 jobs/companies/gap
   - `GET /v1/dashboard-checks`
   - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Daily_Dashboard_Reliability_Runbook.md`
 
+## Ops Observability Validation
+
+After changes that affect operator readiness, dashboard reliability, bridge availability, or demo safety:
+
+- run the consolidated operator check:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/run_ops_observability_check.sh`
+- review the latest artifact in:
+  - `/Users/jaydreyer/projects/recall-local/data/artifacts/observability`
+- if the consolidated check fails, inspect:
+  - `GET /v1/healthz`
+  - `GET /v1/dashboard-checks`
+  - `/Users/jaydreyer/projects/recall-local/docs/OBSERVABILITY_STRATEGY.md`
+
 ## RAG Quality Validation
 
 After changes to RAG retrieval, prompts, output validation, model selection, or the dashboard chat UI:
