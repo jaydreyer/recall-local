@@ -21,7 +21,10 @@ from scripts.phase1.ingestion_pipeline import IngestResult
 
 @contextmanager
 def build_client(env_updates: dict[str, str]) -> Iterator[TestClient]:
-    merged_env = {"RECALL_PRELOAD_OLLAMA_MODELS": "false"}
+    merged_env = {
+        "RECALL_PRELOAD_OLLAMA_MODELS": "false",
+        "RECALL_DASHBOARD_CACHE_WARMER": "false",
+    }
     merged_env.update(env_updates)
     with patch.dict(os.environ, merged_env, clear=False):
         app = ingest_bridge_api.create_app()
@@ -187,6 +190,36 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"]["code"], "validation_failed")
         self.assertIn("filter_tag_mode", response.json()["error"]["message"])
+
+    def test_dashboard_checks_endpoint_returns_summary(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        with patch("scripts.phase1.ingest_bridge_api.phase6_list_jobs", return_value={"total": 12, "items": [{"jobId": "job-1"}]}), patch(
+            "scripts.phase1.ingest_bridge_api.phase6_job_stats",
+            return_value={"total_jobs": 12, "high_fit_count": 3},
+        ), patch(
+            "scripts.phase1.ingest_bridge_api.phase6_all_jobs",
+            return_value=[{"jobId": "job-1", "company": "OpenAI", "status": "evaluated", "fit_score": 90}],
+        ), patch(
+            "scripts.phase1.ingest_bridge_api.phase6_list_company_profiles",
+            return_value=[{"company_id": "openai", "company_name": "OpenAI"}],
+        ), patch(
+            "scripts.phase1.ingest_bridge_api.phase6_aggregate_gaps",
+            return_value={"aggregated_gaps": [{"gap": "Kubernetes"}], "total_jobs_analyzed": 4},
+        ):
+            with build_client(env) as client:
+                response = client.get("/v1/dashboard-checks")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["workflow"], "workflow_06a_dashboard_checks")
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["jobs"]["count"], 12)
+        self.assertEqual(payload["companies"]["count"], 1)
+        self.assertEqual(payload["gaps"]["count"], 1)
 
     def test_file_ingestion_endpoint_accepts_supported_upload_and_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

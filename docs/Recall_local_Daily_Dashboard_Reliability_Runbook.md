@@ -20,6 +20,8 @@ Typical symptoms:
 4. The dashboard should keep a last-good local snapshot so reloads are still useful if one live request fails.
 5. Company list endpoints should avoid embedded job arrays unless the client explicitly asks for them.
 6. Job list endpoints should support a lightweight summary view for board rendering.
+7. The bridge should keep dashboard-critical caches warm in the background so first paint does not wait for cold aggregations.
+8. Operators should use a single smoke command before demos or interviews rather than ad hoc curls.
 
 ## Current implementation
 
@@ -33,12 +35,28 @@ Typical symptoms:
   - `GET /v1/job-gaps` only when the `Skill Gaps` tab is opened
 - Settings:
   - `GET /v1/llm-settings` only when the settings panel is opened
+- Bridge readiness endpoint:
+  - `GET /v1/dashboard-checks`
+- Operator smoke wrapper:
+  - `scripts/phase6/run_dashboard_smoke.sh`
 - UI cache keys:
   - `daily-dashboard-jobs-snapshot-v1`
   - `daily-dashboard-gap-snapshot-v1`
   - `daily-dashboard-companies-snapshot-v1`
   - `daily-dashboard-settings-snapshot-v1`
   - `daily-dashboard-active-tab-v1`
+
+## Bridge-side cache warming
+
+The bridge now supports a background dashboard cache warmer for jobs, companies, and skill gaps.
+
+Environment controls:
+
+- `RECALL_DASHBOARD_CACHE_WARMER=true|false`
+- `RECALL_DASHBOARD_CACHE_WARM_INTERVAL_SECONDS` (default `300`)
+- `RECALL_PHASE6_COMPANY_CACHE_SECONDS` (default `180`)
+- `RECALL_PHASE6_JOBS_CACHE_SECONDS` (default `15`)
+- `RECALL_PHASE6_GAP_CACHE_SECONDS` (default `300`)
 
 ## Proxy settings
 
@@ -80,6 +98,15 @@ PY
 '
 ```
 
+### Single-command dashboard smoke
+
+```bash
+ssh ai-lab '
+  cd /home/jaydreyer/recall-local &&
+  ./scripts/phase6/run_dashboard_smoke.sh http://localhost:8090
+'
+```
+
 ### Browser-level checks
 
 Open `http://100.116.103.78:3001/` and confirm:
@@ -94,9 +121,11 @@ Open `http://100.116.103.78:3001/` and confirm:
 
 1. Check browser console for `504` and `ERR_CONTENT_LENGTH_MISMATCH`.
 2. Verify direct bridge endpoints on `:8090` still return data.
-3. If direct bridge is healthy, inspect `recall-daily-dashboard` nginx logs.
-4. Compare the requested dashboard payload sizes and confirm the client is still using:
+3. Run `scripts/phase6/run_dashboard_smoke.sh` against the bridge and inspect the `dashboard-checks` payload.
+4. If direct bridge is healthy, inspect `recall-daily-dashboard` nginx logs.
+5. Compare the requested dashboard payload sizes and confirm the client is still using:
    - jobs `view=summary`
    - companies `include_jobs=false`
    - lazy loading for gaps/settings
-5. Only after that consider increasing proxy timeouts or investigating bridge performance.
+6. Check the `cache_warmer` section in `GET /v1/dashboard-checks` for stale completion times or the last warm-up error.
+7. Only after that consider increasing proxy timeouts or investigating bridge performance.

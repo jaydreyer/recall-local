@@ -1,5 +1,54 @@
 # Recall.local Implementation Log
 
+## 2026-03-11 - Daily dashboard reliability hardening (local + ai-lab)
+
+### What was executed
+
+- Added a bridge-side dashboard readiness route in [/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py](/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py):
+  - `GET /v1/dashboard-checks`
+  - lightweight readiness checks for jobs, companies, and skill gaps
+  - dashboard cache-warmer status in the response payload
+- Added a background dashboard cache warmer in [/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py](/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py):
+  - warms job stats, summary jobs, company profiles, and gap aggregation on an interval
+  - controlled by:
+    - `RECALL_DASHBOARD_CACHE_WARMER`
+    - `RECALL_DASHBOARD_CACHE_WARM_INTERVAL_SECONDS`
+- Added Phase 6 company-profile caching in [/Users/jaydreyer/projects/recall-local/scripts/phase6/company_profiler.py](/Users/jaydreyer/projects/recall-local/scripts/phase6/company_profiler.py):
+  - cached list/detail rollups keyed by job/config/profile signatures
+  - invalidation on tracked-company upsert and profile refresh
+  - TTL controlled by `RECALL_PHASE6_COMPANY_CACHE_SECONDS`
+- Added an operator smoke wrapper:
+  - [/Users/jaydreyer/projects/recall-local/scripts/phase6/run_dashboard_smoke.sh](/Users/jaydreyer/projects/recall-local/scripts/phase6/run_dashboard_smoke.sh)
+- Added regression coverage:
+  - [/Users/jaydreyer/projects/recall-local/tests/test_bridge_api_contract.py](/Users/jaydreyer/projects/recall-local/tests/test_bridge_api_contract.py)
+  - [/Users/jaydreyer/projects/recall-local/tests/test_phase6_company_profiler_cache.py](/Users/jaydreyer/projects/recall-local/tests/test_phase6_company_profiler_cache.py)
+- Updated operator/runtime docs:
+  - [/Users/jaydreyer/projects/recall-local/AGENTS.md](/Users/jaydreyer/projects/recall-local/AGENTS.md)
+  - [/Users/jaydreyer/projects/recall-local/docs/ENVIRONMENT_INVENTORY.md](/Users/jaydreyer/projects/recall-local/docs/ENVIRONMENT_INVENTORY.md)
+  - [/Users/jaydreyer/projects/recall-local/docs/Recall_local_Daily_Dashboard_Reliability_Runbook.md](/Users/jaydreyer/projects/recall-local/docs/Recall_local_Daily_Dashboard_Reliability_Runbook.md)
+- Synced the updated files from Mac to `ai-lab`, spot-checked the remote code, rebuilt only `recall-ingest-bridge` under Compose project `recall`, and re-ran stack validation before and after the recreate.
+
+### Validation
+
+- Local validation:
+  - `python3 -m unittest tests/test_bridge_api_contract.py tests/test_phase6_company_profiler_cache.py` -> `OK`
+  - `python3 -m py_compile scripts/phase1/ingest_bridge_api.py scripts/phase6/company_profiler.py`
+- ai-lab validation:
+  - `/home/jaydreyer/recall-local/docker/validate-stack.sh` -> `pass` before and after bridge recreate
+  - `./scripts/phase6/run_dashboard_smoke.sh http://localhost:8090` -> `ok`
+- Live observed smoke behavior:
+  - first smoke after restart hit the cold gap-aggregation path and completed slowly while caches warmed
+  - second smoke completed quickly with warm caches:
+    - jobs latency `235ms`
+    - companies latency `18ms`
+    - gaps latency `12ms`
+
+### Results
+
+- The daily dashboard now has a single canonical readiness check for operators and demo validation.
+- Company profile rollups no longer require recomputing the same summary payloads on every request.
+- The bridge keeps dashboard-critical data warm in the background, which materially improves first-load reliability after startup and reduces the risk of an empty board during demos.
+
 ## 2026-03-07 - OpenAI careers automation migrated to Ashby (ai-lab)
 
 ### What was executed
@@ -3199,3 +3248,22 @@
 - Add real API keys for Anthropic/OpenAI/Gemini in server `docker/.env`.
 - Run provider validation for cloud fallback.
 - Optional: install `python3-venv` on server later to use isolated `.venv` path instead of user-site fallback.
+
+---
+
+## 2026-03-10 - Observability Strategy Added
+
+### Scope
+
+- Added a durable planning document for future observability work:
+  - `docs/OBSERVABILITY_STRATEGY.md`
+
+### Notes
+
+- This is a strategy and backlog document, not an implementation slice.
+- It captures the recommended phased approach:
+  - request ID propagation and structured telemetry first
+  - Langfuse hardening for LLM observability
+  - Honeycomb for cross-service tracing later
+  - Playwright synthetic checks for UI monitoring
+- The plan is intentionally staged so the observability foundation can land before the entire product surface is complete.

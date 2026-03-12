@@ -72,6 +72,16 @@ cd /home/jaydreyer/recall-local/docker
 
 Do not proceed with n8n, Ollama, or Qdrant troubleshooting unless this validation passes.
 
+## Daily Dashboard Validation
+
+After changes that affect the daily dashboard UI, the Phase 6 jobs/companies/gaps endpoints, or nginx proxy behavior:
+
+- run the dashboard smoke wrapper:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/run_dashboard_smoke.sh`
+- if the smoke result is not `ok`, inspect:
+  - `GET /v1/dashboard-checks`
+  - `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Daily_Dashboard_Reliability_Runbook.md`
+
 ## RAG Quality Validation
 
 After changes to RAG retrieval, prompts, output validation, model selection, or the dashboard chat UI:

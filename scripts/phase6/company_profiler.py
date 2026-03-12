@@ -3,21 +3,32 @@
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import json
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+import os
 
 from scripts.phase6 import storage
 
 ROOT = Path(__file__).resolve().parents[2]
 CAREER_PAGES_PATH = ROOT / "config" / "career_pages.json"
+_COMPANY_PROFILE_CACHE: dict[tuple[bool, int | None], tuple[float, str, list[dict[str, Any]]]] = {}
 
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _cache_ttl_seconds() -> float:
+    try:
+        return max(float(os.getenv("RECALL_PHASE6_COMPANY_CACHE_SECONDS", "180")), 0.0)
+    except (TypeError, ValueError):
+        return 180.0
 
 
 def slugify_company(name: str) -> str:
@@ -161,6 +172,7 @@ def upsert_tracked_company_config(*, company_id: str | None = None, patch: dict[
         )
     finally:
         conn.close()
+    invalidate_company_profile_cache()
 
     return {
         "company_id": resolved_company_id,
@@ -388,6 +400,17 @@ def build_company_profiles(jobs: list[dict[str, Any]], *, include_jobs: bool = T
     configured = list_tracked_company_configs()
     by_config = {slugify_company(str(item.get("name", ""))): item for item in configured}
     persisted = _load_persisted_profiles()
+    cache_signature = _company_profile_cache_signature(
+        jobs=jobs,
+        configured=configured,
+        persisted=persisted,
+    )
+    cache_key = (include_jobs, limit)
+    cache_ttl_seconds = _cache_ttl_seconds()
+    if cache_ttl_seconds > 0:
+        cached = _COMPANY_PROFILE_CACHE.get(cache_key)
+        if cached and cached[0] > datetime.now(timezone.utc).timestamp() and cached[1] == cache_signature:
+            return copy.deepcopy(cached[2])
     grouped_jobs = _group_jobs_by_company(jobs)
 
     company_names = {str(job.get("company", "")).strip() for job in jobs if str(job.get("company", "")).strip()}
@@ -424,7 +447,14 @@ def build_company_profiles(jobs: list[dict[str, Any]], *, include_jobs: bool = T
     )
 
     if limit is not None and limit > 0:
-        return profiles[:limit]
+        profiles = profiles[:limit]
+
+    if cache_ttl_seconds > 0:
+        _COMPANY_PROFILE_CACHE[cache_key] = (
+            datetime.now(timezone.utc).timestamp() + cache_ttl_seconds,
+            cache_signature,
+            copy.deepcopy(profiles),
+        )
     return profiles
 
 
@@ -466,6 +496,7 @@ def refresh_company_profile(company_id: str, jobs: list[dict[str, Any]]) -> dict
         )
     finally:
         conn.close()
+    invalidate_company_profile_cache()
 
     return {
         "run_id": f"company_refresh_{profile['company_id']}",
@@ -475,3 +506,39 @@ def refresh_company_profile(company_id: str, jobs: list[dict[str, Any]]) -> dict
         "profile": profile,
         "refreshed_at": _now_iso(),
     }
+
+
+def invalidate_company_profile_cache() -> None:
+    _COMPANY_PROFILE_CACHE.clear()
+
+
+def _company_profile_cache_signature(
+    *,
+    jobs: list[dict[str, Any]],
+    configured: list[dict[str, Any]],
+    persisted: dict[str, dict[str, Any]],
+) -> str:
+    digest = hashlib.sha256()
+    for job in sorted(jobs, key=lambda item: str(item.get("jobId") or item.get("job_id") or "")):
+        digest.update(str(job.get("jobId") or job.get("job_id") or "").encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(str(job.get("company") or "").encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(str(job.get("status") or "").encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(str(job.get("fit_score") or "").encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(str(job.get("company_tier") or "").encode("utf-8"))
+        digest.update(b"\n")
+
+    for item in configured:
+        digest.update(json.dumps(item, sort_keys=True, ensure_ascii=True).encode("utf-8"))
+        digest.update(b"\n")
+
+    for company_id in sorted(persisted):
+        digest.update(company_id.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(json.dumps(persisted[company_id], sort_keys=True, ensure_ascii=True).encode("utf-8"))
+        digest.update(b"\n")
+
+    return digest.hexdigest()

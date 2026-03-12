@@ -85,6 +85,7 @@ CANONICAL_GROUP_ENUM = list(CANONICAL_GROUPS)
 PHASE6_JOB_STATUSES = {"new", "evaluated", "applied", "dismissed", "expired", "error"}
 PHASE6_JOB_SOURCES = {"jobspy", "adzuna", "serpapi", "career_page", "chrome_extension"}
 DEFAULT_OLLAMA_PULL_TIMEOUT_SECONDS = 900.0
+DEFAULT_DASHBOARD_WARM_INTERVAL_SECONDS = 300
 
 
 class InMemoryRateLimiter:
@@ -112,8 +113,83 @@ class InMemoryRateLimiter:
             return True, 0
 
 
+class DashboardCacheWarmer:
+    """Background cache warmer for dashboard-critical bridge endpoints."""
+
+    def __init__(self, *, interval_seconds: int):
+        self.interval_seconds = max(interval_seconds, 30)
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._lock = threading.Lock()
+        self.last_started_at: str | None = None
+        self.last_completed_at: str | None = None
+        self.last_error: str | None = None
+
+    def start(self) -> None:
+        if self._thread is not None and self._thread.is_alive():
+            return
+        self._thread = threading.Thread(target=self._run, name="dashboard-cache-warmer", daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=5)
+
+    def snapshot(self) -> dict[str, Any]:
+        with self._lock:
+            return {
+                "enabled": True,
+                "interval_seconds": self.interval_seconds,
+                "last_started_at": self.last_started_at,
+                "last_completed_at": self.last_completed_at,
+                "last_error": self.last_error,
+            }
+
+    def warm_once(self) -> None:
+        started_at = _now_iso()
+        with self._lock:
+            self.last_started_at = started_at
+            self.last_error = None
+        try:
+            jobs = phase6_all_jobs()
+            phase6_job_stats()
+            phase6_list_jobs(status="all", limit=60, include_details=False)
+            phase6_list_company_profiles(jobs, include_jobs=False, limit=300)
+            phase6_aggregate_gaps(jobs)
+        except Exception as exc:  # noqa: BLE001
+            with self._lock:
+                self.last_error = str(exc)
+            return
+        with self._lock:
+            self.last_completed_at = _now_iso()
+
+    def _run(self) -> None:
+        self.warm_once()
+        while not self._stop_event.wait(self.interval_seconds):
+            self.warm_once()
+
+
 class HealthResponse(BaseModel):
     status: Literal["ok"] = Field(..., description="Bridge health status.")
+
+
+class DashboardCheckSection(BaseModel):
+    status: Literal["ok", "degraded"] = Field(..., description="Section status for the dashboard readiness check.")
+    count: Optional[int] = Field(default=None, description="Count of records or items loaded for this section.")
+    detail: Optional[str] = Field(default=None, description="Short human-readable summary for this section.")
+    latency_ms: int = Field(..., description="Time spent loading this section in milliseconds.")
+
+
+class DashboardChecksResponse(BaseModel):
+    workflow: Literal["workflow_06a_dashboard_checks"]
+    status: Literal["ok", "degraded"]
+    checked_at: str
+    jobs: DashboardCheckSection
+    companies: DashboardCheckSection
+    gaps: Optional[DashboardCheckSection] = None
+    cache_warmer: dict[str, Any] = Field(default_factory=dict)
+    notes: list[str] = Field(default_factory=list)
 
 
 class ErrorDetail(BaseModel):
@@ -1355,12 +1431,26 @@ def create_app() -> FastAPI:
         window_seconds=rate_limit_window_seconds,
         max_requests=rate_limit_max_requests,
     )
+    dashboard_cache_warmer = (
+        DashboardCacheWarmer(
+            interval_seconds=_read_positive_int_env(
+                "RECALL_DASHBOARD_CACHE_WARM_INTERVAL_SECONDS",
+                DEFAULT_DASHBOARD_WARM_INTERVAL_SECONDS,
+            )
+        )
+        if _env_flag("RECALL_DASHBOARD_CACHE_WARMER", default=True)
+        else None
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         if _env_flag("RECALL_PRELOAD_OLLAMA_MODELS", default=True):
             _ensure_required_ollama_models()
+        if dashboard_cache_warmer is not None:
+            dashboard_cache_warmer.start()
         yield
+        if dashboard_cache_warmer is not None:
+            dashboard_cache_warmer.stop()
 
     app = FastAPI(
         title=API_NAME,
@@ -1380,6 +1470,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
         openapi_tags=[
             {"name": "Health", "description": "Service liveness endpoints."},
+            {"name": "Dashboard", "description": "Readiness and smoke-check endpoints for the daily dashboard."},
             {"name": "Ingestions", "description": "Create ingestion operations from supported channels."},
             {"name": "RAG Queries", "description": "Run cited retrieval-augmented queries."},
             {"name": "Meeting Action Items", "description": "Extract action items and structured notes from meeting transcripts."},
@@ -1412,6 +1503,36 @@ def create_app() -> FastAPI:
     )
     async def healthz_v1() -> JSONResponse:
         return _json_response(200, {"status": "ok"})
+
+    @app.get(
+        f"{API_PREFIX}/dashboard-checks",
+        tags=["Dashboard"],
+        summary="Get dashboard readiness checks",
+        description=(
+            "Runs lightweight dashboard-facing checks against jobs, companies, and optionally skill gaps. "
+            "This endpoint is intended for operator smoke validation and demo-readiness checks."
+        ),
+        response_model=DashboardChecksResponse,
+        responses={
+            200: {"description": "Dashboard readiness checks completed."},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+    )
+    async def get_dashboard_checks(
+        request: Request,
+        include_gaps: bool = Query(True, description="Include the skill-gap readiness check."),
+    ) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        payload = _dashboard_checks_payload(
+            include_gaps=include_gaps,
+            cache_warmer=dashboard_cache_warmer,
+        )
+        return _json_response(200, payload)
 
     @app.get(
         f"{API_PREFIX}/auto-tag-rules",
@@ -2959,6 +3080,111 @@ def _env_flag(name: str, *, default: bool) -> bool:
     if not raw:
         return default
     return raw in {"1", "true", "yes", "on"}
+
+
+def _dashboard_checks_payload(
+    *,
+    include_gaps: bool,
+    cache_warmer: DashboardCacheWarmer | None,
+) -> dict[str, Any]:
+    notes: list[str] = []
+    sections: dict[str, dict[str, Any] | None] = {
+        "jobs": _run_dashboard_check(
+            label="jobs",
+            runner=lambda: _dashboard_jobs_section(),
+            notes=notes,
+        ),
+        "companies": _run_dashboard_check(
+            label="companies",
+            runner=lambda: _dashboard_companies_section(),
+            notes=notes,
+        ),
+        "gaps": (
+            _run_dashboard_check(
+                label="gaps",
+                runner=lambda: _dashboard_gaps_section(),
+                notes=notes,
+            )
+            if include_gaps
+            else None
+        ),
+    }
+    statuses = [section["status"] for section in sections.values() if isinstance(section, dict)]
+    overall_status = "ok" if statuses and all(status == "ok" for status in statuses) else "degraded"
+    warmer_snapshot = cache_warmer.snapshot() if cache_warmer is not None else {
+        "enabled": False,
+        "interval_seconds": 0,
+        "last_started_at": None,
+        "last_completed_at": None,
+        "last_error": None,
+    }
+    if warmer_snapshot.get("last_error"):
+        notes.append(f"Cache warmer last error: {warmer_snapshot['last_error']}")
+        overall_status = "degraded"
+    return {
+        "workflow": "workflow_06a_dashboard_checks",
+        "status": overall_status,
+        "checked_at": _now_iso(),
+        "jobs": sections["jobs"],
+        "companies": sections["companies"],
+        "gaps": sections["gaps"],
+        "cache_warmer": warmer_snapshot,
+        "notes": notes,
+    }
+
+
+def _run_dashboard_check(
+    *,
+    label: str,
+    runner: Any,
+    notes: list[str],
+) -> dict[str, Any]:
+    started = time.perf_counter()
+    try:
+        section = runner()
+    except Exception as exc:  # noqa: BLE001
+        notes.append(f"{label} check failed: {exc}")
+        return {
+            "status": "degraded",
+            "count": 0,
+            "detail": f"{label} check failed",
+            "latency_ms": int((time.perf_counter() - started) * 1000),
+        }
+    section["latency_ms"] = int((time.perf_counter() - started) * 1000)
+    return section
+
+
+def _dashboard_jobs_section() -> dict[str, Any]:
+    jobs_payload = phase6_list_jobs(status="all", limit=60, include_details=False)
+    stats_payload = phase6_job_stats()
+    item_count = len(jobs_payload.get("items") or [])
+    total_jobs = int(jobs_payload.get("total") or stats_payload.get("total_jobs") or 0)
+    high_fit = int(stats_payload.get("high_fit_count") or 0)
+    status = "ok" if total_jobs > 0 and item_count > 0 else "degraded"
+    detail = f"{item_count} jobs loaded for the board, {total_jobs} total tracked, {high_fit} high-fit"
+    return {"status": status, "count": total_jobs, "detail": detail}
+
+
+def _dashboard_companies_section() -> dict[str, Any]:
+    jobs = phase6_all_jobs()
+    profiles = phase6_list_company_profiles(jobs, include_jobs=False, limit=300)
+    count = len(profiles)
+    top_company = str((profiles[0] or {}).get("company_name") or "").strip() if profiles else ""
+    status = "ok" if count > 0 else "degraded"
+    detail = f"{count} tracked companies loaded"
+    if top_company:
+        detail += f"; top company {top_company}"
+    return {"status": status, "count": count, "detail": detail}
+
+
+def _dashboard_gaps_section() -> dict[str, Any]:
+    jobs = phase6_all_jobs()
+    payload = phase6_aggregate_gaps(jobs)
+    gap_count = len(payload.get("aggregated_gaps") or [])
+    analyzed = int(payload.get("total_jobs_analyzed") or 0)
+    status = "ok" if analyzed > 0 else "degraded"
+    detail = f"{gap_count} aggregated gaps across {analyzed} evaluated jobs"
+    return {"status": status, "count": gap_count, "detail": detail}
 
 
 def _db_path() -> Path:

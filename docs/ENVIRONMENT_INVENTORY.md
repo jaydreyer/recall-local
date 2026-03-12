@@ -1,6 +1,6 @@
 # Recall.local Environment Inventory
 
-Last updated: 2026-03-07
+Last updated: 2026-03-12
 
 ## Decision Snapshot
 
@@ -32,6 +32,10 @@ Last updated: 2026-03-07
 - `recall-ui` container: `0.0.0.0:8170->80` (verified running on ai-lab via `scripts/phase5/run_operator_stack_now.sh up` on 2026-02-26)
 - `recall-daily-dashboard` container: `0.0.0.0:3001->80` (verified running on ai-lab via `docker compose -f docker/docker-compose.yml up -d --build daily-dashboard` on 2026-03-04)
 - `recall-daily-dashboard` HTTP check: `GET/HEAD http://100.116.103.78:3001` -> `200` after Phase 6D deploy validation on 2026-03-06
+- dashboard smoke endpoint:
+  - `GET http://localhost:8090/v1/dashboard-checks`
+- dashboard smoke wrapper:
+  - `/home/jaydreyer/recall-local/scripts/phase6/run_dashboard_smoke.sh`
 
 ## Data and Storage
 
@@ -201,6 +205,16 @@ Last updated: 2026-03-07
   - `RECALL_VAULT_IS_SYNCED` (default `true`)
 - ai-lab host dependency note (watch mode):
   - `watchdog` required for `--watch` mode (`pip install watchdog`).
+- Dashboard support:
+  - canonical readiness route:
+    - `GET /v1/dashboard-checks`
+  - background cache warmer env:
+    - `RECALL_DASHBOARD_CACHE_WARMER`
+    - `RECALL_DASHBOARD_CACHE_WARM_INTERVAL_SECONDS`
+  - Phase 6 cache env:
+    - `RECALL_PHASE6_JOBS_CACHE_SECONDS`
+    - `RECALL_PHASE6_COMPANY_CACHE_SECONDS`
+    - `RECALL_PHASE6_GAP_CACHE_SECONDS`
 
 ## Execution Debug Rule (n8n)
 
