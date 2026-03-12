@@ -242,13 +242,33 @@ The practical uptime path is now:
    - `RECALL_UPTIME_ALERT_TELEGRAM_CHAT_ID`
    - `RECALL_UPTIME_NOTIFY_ON_SUCCESS`
 
+Cron-friendly wrapper:
+
+- `scripts/phase6/run_ops_observability_cron.sh`
+- sources `docker/.env`
+- falls back to `RECALL_TELEGRAM_BOT_TOKEN` and `RECALL_TELEGRAM_CHAT_ID` when dedicated uptime alert vars are unset
+
 Recommended ai-lab cron baseline:
 
 ```cron
-*/10 * * * * cd /home/jaydreyer/recall-local && /home/jaydreyer/recall-local/scripts/phase6/run_ops_observability_check.sh http://localhost:8090 http://localhost:3001 http://localhost:8170 >> /home/jaydreyer/recall-local/data/artifacts/observability/cron.log 2>&1
+*/10 * * * * cd /home/jaydreyer/recall-local && /home/jaydreyer/recall-local/scripts/phase6/run_ops_observability_cron.sh >> /home/jaydreyer/recall-local/data/artifacts/observability/cron.log 2>&1
 ```
 
 That is intentionally lightweight. It does not replace richer synthetic monitoring later, but it gives a real operator-facing uptime and alerting loop now.
+
+## Honeycomb Status
+
+We have not given up on Honeycomb. We intentionally deferred it.
+
+Reason:
+
+- the current highest-risk gap was not trace visualizations
+- it was "will I know quickly when the live stack is broken before a demo or interview?"
+
+The cron-driven uptime check plus alerting closes that gap with very low overhead. Honeycomb is still the recommended next layer once the operator loop is stable, because it answers a different question:
+
+- uptime checks tell us that something is broken
+- Honeycomb would tell us why a request path is slow or failing across service boundaries
 
 ## Definitions of Done
 

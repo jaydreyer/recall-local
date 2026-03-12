@@ -1,5 +1,32 @@
 # Recall.local Implementation Log
 
+## 2026-03-12 - ai-lab uptime cron wrapper added
+
+### What was executed
+
+- Added a cron-safe uptime wrapper:
+  - [/Users/jaydreyer/projects/recall-local/scripts/phase6/run_ops_observability_cron.sh](/Users/jaydreyer/projects/recall-local/scripts/phase6/run_ops_observability_cron.sh)
+  - sources `docker/.env`
+  - reuses existing Telegram alert credentials when dedicated uptime alert vars are unset
+- Updated observability/runtime docs:
+  - [/Users/jaydreyer/projects/recall-local/docs/OBSERVABILITY_STRATEGY.md](/Users/jaydreyer/projects/recall-local/docs/OBSERVABILITY_STRATEGY.md)
+  - [/Users/jaydreyer/projects/recall-local/docs/ENVIRONMENT_INVENTORY.md](/Users/jaydreyer/projects/recall-local/docs/ENVIRONMENT_INVENTORY.md)
+  - [/Users/jaydreyer/projects/recall-local/docs/README.md](/Users/jaydreyer/projects/recall-local/docs/README.md)
+
+### Validation
+
+- Local validation:
+  - `bash -n scripts/phase6/run_ops_observability_cron.sh`
+- ai-lab validation:
+  - sync updated files from Mac to ai-lab
+  - run `./scripts/phase6/run_ops_observability_cron.sh`
+  - install cron entry for repeated uptime checks
+
+### Results
+
+- ai-lab now has a clean path to run the uptime check from cron without hand-exporting secrets.
+- The uptime monitor can piggyback on the existing Telegram notification setup instead of introducing a second secret-management path.
+
 ## 2026-03-12 - Ops uptime alerting added to observability wrapper
 
 ### What was executed

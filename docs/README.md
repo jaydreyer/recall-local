@@ -83,6 +83,7 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `OBSERVABILITY_STRATEGY.md`: Current observability foundation, operator checks, and later expansion plan.
 - `Recall_local_Daily_Dashboard_Reliability_Runbook.md`: Dashboard reliability rules, cache-warming behavior, and operator smoke flow.
 - `../scripts/phase6/run_ops_observability_check.sh`: Consolidated operator check for bridge health, dashboard readiness, UI reachability, and a grounded RAG probe.
+- `../scripts/phase6/run_ops_observability_cron.sh`: Cron-safe observability wrapper that sources `docker/.env` and reuses uptime alert settings.
 - `CONTEXT_KICKOFF_SHARING_GUIDE.md`: Shareable guide for adopting the context-kickoff pattern across projects.
 - `../n8n/workflows/PHASE1C_WORKFLOW02_WIRING.md`: Workflow 02 deployment and troubleshooting runbook.
 - `../n8n/workflows/PHASE2A_WORKFLOW03_WIRING.md`: Workflow 03 deployment and troubleshooting runbook.
