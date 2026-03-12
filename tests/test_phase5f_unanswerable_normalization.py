@@ -210,6 +210,14 @@ class Phase5FUnanswerableNormalizationTests(unittest.TestCase):
 
         self.assertEqual(strategy, "compare_synthesis")
 
+    def test_query_strategy_detects_named_source_lookup_queries(self) -> None:
+        strategy = rag_query._query_strategy(  # noqa: SLF001
+            question="According to the article \"The New Skill in AI is Not Prompting, It's Context Engineering\", what is the main bottleneck in building useful LLM systems?",
+            retrieved=[],
+        )
+
+        self.assertEqual(strategy, "named_source_lookup")
+
     def test_query_strategy_detects_multi_document_synthesis_queries(self) -> None:
         strategy = rag_query._query_strategy(  # noqa: SLF001
             question="What are practical ways to reduce latency in multi-agent systems, and what tradeoffs should I expect in RAG design?",
@@ -526,8 +534,8 @@ class Phase5FUnanswerableNormalizationTests(unittest.TestCase):
 
         self.assertEqual(requirements["min_citation_count"], 2)
         self.assertEqual(requirements["min_distinct_doc_count"], 2)
-        self.assertEqual(requirements["min_bullet_count"], 3)
-        self.assertEqual(requirements["min_answer_chars"], 260)
+        self.assertEqual(requirements["min_bullet_count"], 4)
+        self.assertEqual(requirements["min_answer_chars"], 320)
 
     def test_validation_requirements_for_general_explanatory_query_require_structure(self) -> None:
         requirements = rag_query._validation_requirements(  # noqa: SLF001
@@ -613,6 +621,12 @@ class Phase5FUnanswerableNormalizationTests(unittest.TestCase):
         self.assertEqual(
             rag_query._prompt_profile_name("default", query_strategy="explanatory_qa"),  # noqa: SLF001
             "workflow_02_explanatory_qa",
+        )
+
+    def test_prompt_profile_name_prefers_named_source_lookup_strategy(self) -> None:
+        self.assertEqual(
+            rag_query._prompt_profile_name("default", query_strategy="named_source_lookup"),  # noqa: SLF001
+            "workflow_02_targeted_lookup",
         )
 
     def test_build_compare_fallback_response_returns_extract_from_two_docs(self) -> None:
@@ -704,6 +718,100 @@ class Phase5FUnanswerableNormalizationTests(unittest.TestCase):
         self.assertIn("Prompt engineering helps produce", response["answer"])
         self.assertIn("More control over outputs", response["answer"])
 
+    def test_build_explanatory_fallback_response_returns_clear_takeaways(self) -> None:
+        response = rag_query._build_explanatory_fallback_response(  # noqa: SLF001
+            question="How can I enhance my prompt-engineering abilities?",
+            selected_chunks=[
+                rag_query.RetrievedChunk(
+                    doc_id="doc-1",
+                    chunk_id="chunk-1",
+                    title="Prompt Engineering for AI Guide",
+                    source="https://cloud.google.com/discover/what-is-prompt-engineering",
+                    text="Clear instructions and explicit formats help models respond more consistently.",
+                    score=0.9,
+                    source_type="url",
+                    ingestion_channel="bookmarklet",
+                    group="reference",
+                    tags=["article"],
+                ),
+                rag_query.RetrievedChunk(
+                    doc_id="doc-2",
+                    chunk_id="chunk-2",
+                    title="Claude Prompt Engineering Overview",
+                    source="https://platform.claude.com/docs/prompt-engineering",
+                    text="Examples and reference outputs make it easier to steer the model toward the style you want.",
+                    score=0.85,
+                    source_type="url",
+                    ingestion_channel="bookmarklet",
+                    group="reference",
+                    tags=["article"],
+                ),
+                rag_query.RetrievedChunk(
+                    doc_id="doc-3",
+                    chunk_id="chunk-3",
+                    title="Prompting Guide",
+                    source="https://example.com/prompting",
+                    text="Testing prompt variants side by side helps you evaluate quality and iterate deliberately.",
+                    score=0.8,
+                    source_type="url",
+                    ingestion_channel="bookmarklet",
+                    group="reference",
+                    tags=["article"],
+                ),
+                rag_query.RetrievedChunk(
+                    doc_id="doc-4",
+                    chunk_id="chunk-4",
+                    title="Context Engineering Notes",
+                    source="https://example.com/context",
+                    text="Relevant context and supporting information keep the model grounded on the real task.",
+                    score=0.75,
+                    source_type="url",
+                    ingestion_channel="bookmarklet",
+                    group="reference",
+                    tags=["article"],
+                ),
+            ],
+            reason="validation failed",
+            parsed_answer="You can improve by tightening structure, adding context, and testing iterations.",
+        )
+
+        self.assertIsNotNone(response)
+        self.assertGreaterEqual(response["answer"].count("\n- "), 4)
+        self.assertEqual(len(response["citations"]), 4)
+        self.assertIn("Use clearer structure", response["answer"])
+        self.assertIn("Test and compare results", response["answer"])
+
+    def test_generation_max_tokens_uses_summary_budget_for_structured_compare(self) -> None:
+        settings = rag_query.RagSettings(  # noqa: SLF001
+            db_path=rag_query.ROOT / "data" / "recall.db",
+            artifacts_dir=rag_query.ROOT / "data" / "artifacts" / "rag",
+            prompt_path=rag_query.ROOT / "prompts" / "workflow_02_rag_answer.md",
+            compare_prompt_path=rag_query.ROOT / "prompts" / "workflow_02_compare_synthesis.md",
+            synthesis_prompt_path=rag_query.ROOT / "prompts" / "workflow_02_multi_document_synthesis.md",
+            explanatory_prompt_path=rag_query.ROOT / "prompts" / "workflow_02_explanatory_qa.md",
+            summary_prompt_path=rag_query.ROOT / "prompts" / "workflow_02_document_summary.md",
+            retry_prompt_path=rag_query.ROOT / "prompts" / "workflow_02_rag_answer_retry.md",
+            job_search_prompt_path=rag_query.ROOT / "prompts" / "job_search_coach.md",
+            learning_prompt_path=rag_query.ROOT / "prompts" / "learning_coach.md",
+            top_k=5,
+            summary_top_k=20,
+            min_score=0.2,
+            max_retries=1,
+            temperature=0.2,
+            summary_max_tokens=768,
+            default_max_tokens=384,
+        )
+
+        self.assertEqual(
+            rag_query._generation_max_tokens(  # noqa: SLF001
+                question="How is prompt engineering different than context engineering?",
+                mode="default",
+                query_strategy="compare_synthesis",
+                settings=settings,
+            ),
+            768,
+        )
+
     def test_supporting_snippet_skips_boilerplate_when_query_terms_match_later_sentence(self) -> None:
         snippet = rag_query._supporting_snippet(  # noqa: SLF001
             "Thursday AM free if that works for you? Sent an invite, lmk if it works. Context engineering is about providing the right information and tools at the right time.",
@@ -759,6 +867,43 @@ class Phase5FUnanswerableNormalizationTests(unittest.TestCase):
         self.assertIn("RAG", response["answer"])
         self.assertIn("\n-", response["answer"])
         self.assertGreaterEqual(len(response["citations"]), 2)
+
+    def test_build_named_source_lookup_fallback_response_returns_direct_answer(self) -> None:
+        response = rag_query._build_named_source_lookup_fallback_response(  # noqa: SLF001
+            question="According to the article \"The New Skill in AI is Not Prompting, It's Context Engineering\", what is the main bottleneck in building useful LLM systems?",
+            selected_chunks=[
+                rag_query.RetrievedChunk(
+                    doc_id="doc-context",
+                    chunk_id="chunk-context",
+                    title="The New Skill in AI is Not Prompting, It's Context Engineering",
+                    source="https://philschmid.de/context-engineering",
+                    text="The magic is not in a smarter model. It is about providing the right context, information, and tools at the right time.",
+                    score=0.9,
+                    source_type="url",
+                    ingestion_channel="bookmarklet",
+                    group="reference",
+                    tags=["article"],
+                ),
+                rag_query.RetrievedChunk(
+                    doc_id="doc-context",
+                    chunk_id="chunk-context-2",
+                    title="The New Skill in AI is Not Prompting, It's Context Engineering",
+                    source="https://philschmid.de/context-engineering",
+                    text="You need the right context for the right task.",
+                    score=0.8,
+                    source_type="url",
+                    ingestion_channel="bookmarklet",
+                    group="reference",
+                    tags=["article"],
+                ),
+            ],
+            reason="validation failed",
+        )
+
+        self.assertIsNotNone(response)
+        self.assertIn("main bottleneck", response["answer"].lower())
+        self.assertIn("right context", response["answer"].lower())
+        self.assertGreaterEqual(len(response["citations"]), 1)
 
     def test_prompt_profile_name_prefers_document_summary_strategy(self) -> None:
         self.assertEqual(

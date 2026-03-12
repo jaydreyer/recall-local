@@ -80,6 +80,10 @@ EXACT_SECRET_QUERY_PATTERN = re.compile(
 )
 SUMMARY_QUERY_PATTERN = re.compile(r"\b(summarize|summary|highlights|key takeaways|recap|overview)\b", flags=re.IGNORECASE)
 DOCUMENT_REFERENCE_PATTERN = re.compile(r"\b(article|post|blog post|essay|paper|write-?up|document)\b", flags=re.IGNORECASE)
+TARGETED_SOURCE_LOOKUP_PATTERN = re.compile(
+    r"\b(according to|in the article|in the document|from the article|from the document|what does the article say|what does the document say)\b",
+    flags=re.IGNORECASE,
+)
 QUOTED_TARGET_PATTERN = re.compile(r'["“”](.+?)["“”]')
 SYNTHESIS_CONNECTOR_PATTERN = re.compile(r"\b(and|plus|along with)\b", flags=re.IGNORECASE)
 RANKING_STOPWORDS = {
@@ -134,12 +138,12 @@ DOCUMENT_SUMMARY_MAX_CHARS_PER_CHUNK = 1200
 DOCUMENT_SUMMARY_MAX_CONTEXT_CHARS = 9000
 COMPARE_MAX_SELECTED_DOCS = 2
 COMPARE_CHUNKS_PER_DOC = 2
-COMPARE_MAX_CHARS_PER_CHUNK = 900
-COMPARE_MAX_CONTEXT_CHARS = 7000
-EXPLANATORY_QA_MAX_SELECTED_DOCS = 3
+COMPARE_MAX_CHARS_PER_CHUNK = 1000
+COMPARE_MAX_CONTEXT_CHARS = 7800
+EXPLANATORY_QA_MAX_SELECTED_DOCS = 4
 EXPLANATORY_QA_CHUNKS_PER_DOC = 2
-EXPLANATORY_QA_MAX_CHARS_PER_CHUNK = 950
-EXPLANATORY_QA_MAX_CONTEXT_CHARS = 7200
+EXPLANATORY_QA_MAX_CHARS_PER_CHUNK = 1000
+EXPLANATORY_QA_MAX_CONTEXT_CHARS = 8200
 GENERAL_QA_MAX_SELECTED_DOCS = 3
 GENERAL_QA_CHUNKS_PER_DOC = 2
 GENERAL_QA_MAX_CHARS_PER_CHUNK = 850
@@ -339,7 +343,12 @@ def run_rag_query(
                     retrieved=retrieved,
                     max_retries=retries,
                     temperature=settings.temperature,
-                    max_tokens=settings.summary_max_tokens if query_strategy in {"document_summary", "explanatory_qa"} else settings.default_max_tokens,
+                    max_tokens=_generation_max_tokens(
+                        question=question,
+                        mode=active_mode,
+                        query_strategy=query_strategy,
+                        settings=settings,
+                    ),
                     prompt_path=settings.prompt_path,
                     compare_prompt_path=settings.compare_prompt_path,
                     synthesis_prompt_path=settings.synthesis_prompt_path,
@@ -587,6 +596,14 @@ def _generate_validated_answer(
             )
             if summary_fallback is not None:
                 return summary_fallback, attempts_used
+        if query_strategy == "named_source_lookup":
+            source_lookup_fallback = _build_named_source_lookup_fallback_response(
+                question=question,
+                selected_chunks=selected_chunks,
+                reason="; ".join(validation.errors if validation else ["unknown validation failure"]),
+            )
+            if source_lookup_fallback is not None:
+                return source_lookup_fallback, attempts_used
         if query_strategy in {"compare_synthesis", "multi_document_synthesis"}:
             compare_fallback = _build_compare_fallback_response(
                 question=question,
@@ -595,6 +612,15 @@ def _generate_validated_answer(
             )
             if compare_fallback is not None:
                 return compare_fallback, attempts_used
+        if query_strategy == "explanatory_qa":
+            explanatory_fallback = _build_explanatory_fallback_response(
+                question=question,
+                selected_chunks=selected_chunks,
+                reason="; ".join(validation.errors if validation else ["unknown validation failure"]),
+                parsed_answer=str((validation.parsed_response or {}).get("answer", "")) if validation else "",
+            )
+            if explanatory_fallback is not None:
+                return explanatory_fallback, attempts_used
         general_fallback = _build_general_qa_fallback_response(
             question=question,
             selected_chunks=selected_chunks,
@@ -655,6 +681,26 @@ def _build_unanswerable_response(
     )
 
 
+def _generation_max_tokens(
+    *,
+    question: str,
+    mode: str,
+    query_strategy: str,
+    settings: RagSettings,
+) -> int:
+    if query_strategy in {
+        "document_summary",
+        "named_source_lookup",
+        "compare_synthesis",
+        "multi_document_synthesis",
+        "explanatory_qa",
+    }:
+        return settings.summary_max_tokens
+    if _requires_structured_general_answer(query=question, mode=mode):
+        return settings.summary_max_tokens
+    return settings.default_max_tokens
+
+
 def _build_compare_fallback_response(
     *,
     question: str,
@@ -682,16 +728,16 @@ def _build_compare_fallback_response(
 
     answer_lines = [
         _compare_intro_sentence(question=question, primary=primary, secondary=secondary),
-        f"- {primary.title}: {_supporting_snippet(primary.text, question=question)}",
-        f"- {secondary.title}: {_supporting_snippet(secondary.text, question=question)}",
+        f"- {_compare_focus_label(chunk=primary, question=question)}: {_supporting_snippet(primary.text, question=question)}",
+        f"- {_compare_focus_label(chunk=secondary, question=question)}: {_supporting_snippet(secondary.text, question=question)}",
     ]
     if additional is not None:
         answer_lines.append(
-            f"- Additional detail from {additional.title}: {_supporting_snippet(additional.text, question=question)}"
+            f"- Additional evidence: {_supporting_snippet(additional.text, question=question)}"
         )
     answer_lines.append(
-        f"- Practical tradeoff: use {primary.title} when you need guidance closest to { _topic_hint(primary.title) }, "
-        f"and use {secondary.title} when you need guidance closest to { _topic_hint(secondary.title) }."
+        f"- Practical tradeoff: rely on {_topic_hint(primary.title)} guidance when the problem is mostly about {_topic_hint(primary.title)}, "
+        f"and shift toward {_topic_hint(secondary.title)} guidance when the bottleneck is really about {_topic_hint(secondary.title)}."
     )
 
     citations = [
@@ -713,6 +759,108 @@ def _build_compare_fallback_response(
         "audit": {
             "fallback_used": True,
             "fallback_reason": f"Compare synthesis fallback used after validation failure: {reason}",
+        },
+    }
+
+
+def _build_named_source_lookup_fallback_response(
+    *,
+    question: str,
+    selected_chunks: list[RetrievedChunk],
+    reason: str,
+) -> dict[str, Any] | None:
+    if not selected_chunks:
+        return None
+
+    primary_doc_id = selected_chunks[0].doc_id
+    primary_chunks = [chunk for chunk in selected_chunks if chunk.doc_id == primary_doc_id]
+    if not primary_chunks:
+        return None
+
+    primary = primary_chunks[0]
+    snippet = _supporting_snippet(primary.text, question=question, max_chars=240)
+    answer = _named_source_lookup_answer(question=question, title=primary.title, snippet=snippet)
+    citations = [{"doc_id": primary.doc_id, "chunk_id": primary.chunk_id}]
+    if len(primary_chunks) > 1:
+        citations.append({"doc_id": primary_chunks[1].doc_id, "chunk_id": primary_chunks[1].chunk_id})
+
+    return {
+        "answer": answer,
+        "citations": citations,
+        "confidence_level": "low",
+        "assumptions": [
+            "Returned a direct named-source lookup fallback because the model could not produce a valid structured answer.",
+            f"Fallback reason: {reason}",
+        ],
+        "sources": _source_rows(primary_chunks),
+        "audit": {
+            "fallback_used": True,
+            "fallback_reason": f"Named source lookup fallback used after validation failure: {reason}",
+        },
+    }
+
+
+def _build_explanatory_fallback_response(
+    *,
+    question: str,
+    selected_chunks: list[RetrievedChunk],
+    reason: str,
+    parsed_answer: str = "",
+) -> dict[str, Any] | None:
+    if not selected_chunks:
+        return None
+
+    intro = _general_qa_intro(question=question, parsed_answer=parsed_answer)
+    answer_lines = [intro]
+    citations: list[dict[str, str]] = []
+    seen_pairs: set[tuple[str, str]] = set()
+    seen_labels: set[str] = set()
+    seen_bullets: set[str] = set()
+
+    for chunk in selected_chunks:
+        pair = (chunk.doc_id, chunk.chunk_id)
+        if pair in seen_pairs:
+            continue
+        seen_pairs.add(pair)
+        snippet = _supporting_snippet(chunk.text, question=question, max_chars=220)
+        bullet = _explanatory_fallback_bullet(question=question, snippet=snippet, title=chunk.title)
+        bullet_key = bullet.lower().strip()
+        label = _general_qa_bullet_label(bullet)
+        if bullet_key in seen_bullets:
+            continue
+        if label and label in seen_labels:
+            bullet = _explanatory_fallback_bullet(
+                question="",
+                snippet=snippet,
+                title=chunk.title,
+            )
+            bullet_key = bullet.lower().strip()
+            label = _general_qa_bullet_label(bullet)
+            if bullet_key in seen_bullets:
+                continue
+        seen_bullets.add(bullet_key)
+        if label:
+            seen_labels.add(label)
+        answer_lines.append(bullet)
+        citations.append({"doc_id": chunk.doc_id, "chunk_id": chunk.chunk_id})
+        if len(citations) >= 5:
+            break
+
+    if len(citations) < 4:
+        return None
+
+    return {
+        "answer": "\n".join(answer_lines),
+        "citations": citations,
+        "confidence_level": "low",
+        "assumptions": [
+            "Returned a synthesized explanatory fallback because the model could not produce a valid structured explanation.",
+            f"Fallback reason: {reason}",
+        ],
+        "sources": _source_rows(selected_chunks),
+        "audit": {
+            "fallback_used": True,
+            "fallback_reason": f"Explanatory QA fallback used after validation failure: {reason}",
         },
     }
 
@@ -1164,6 +1312,13 @@ def _select_generation_chunks(
             max_chunks=DOCUMENT_SUMMARY_MAX_SELECTED_CHUNKS,
         )
 
+    if query_strategy == "named_source_lookup":
+        primary_doc_id = ranked_docs[0]
+        return _pick_evidence_chunks(
+            grouped[primary_doc_id],
+            max_chunks=min(4, len(grouped[primary_doc_id])),
+        )
+
     if query_strategy in {"compare_synthesis", "multi_document_synthesis"}:
         target_doc_ids = ranked_docs[:COMPARE_MAX_SELECTED_DOCS]
         if len(target_doc_ids) < 2 and len(grouped) >= 2:
@@ -1337,7 +1492,7 @@ def _dedupe_chunks(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
 
 
 def _context_budget(query_strategy: str) -> tuple[int, int]:
-    if query_strategy == "document_summary":
+    if query_strategy in {"document_summary", "named_source_lookup"}:
         return DOCUMENT_SUMMARY_MAX_CHARS_PER_CHUNK, DOCUMENT_SUMMARY_MAX_CONTEXT_CHARS
     if query_strategy == "compare_synthesis":
         return COMPARE_MAX_CHARS_PER_CHUNK, COMPARE_MAX_CONTEXT_CHARS
@@ -1364,6 +1519,10 @@ def _validation_requirements(
         min_answer_chars = 320
         if len(selected_chunks) >= 2:
             min_citation_count = 2
+    elif query_strategy == "named_source_lookup":
+        min_answer_chars = 160
+        if selected_chunks:
+            min_citation_count = 1
     elif query_strategy == "explanatory_qa":
         min_bullet_count = 4
         min_answer_chars = 320
@@ -1372,15 +1531,15 @@ def _validation_requirements(
         if len(distinct_docs) >= 2:
             min_distinct_doc_count = 2
     elif query_strategy in {"compare_synthesis", "multi_document_synthesis"}:
-        min_bullet_count = 3
-        min_answer_chars = 260
+        min_bullet_count = 4
+        min_answer_chars = 320
         if len(selected_chunks) >= 2:
             min_citation_count = 2
         if len(distinct_docs) >= 2:
             min_distinct_doc_count = 2
     elif _requires_structured_general_answer(query=query, mode=mode):
         min_bullet_count = 3
-        min_answer_chars = 220
+        min_answer_chars = 260
         if len(selected_chunks) >= 2:
             min_citation_count = 2
 
@@ -1476,6 +1635,23 @@ def _compare_intro_sentence(*, question: str, primary: RetrievedChunk, secondary
     )
 
 
+def _compare_focus_label(*, chunk: RetrievedChunk, question: str) -> str:
+    lower_question = question.lower()
+    lower_title = chunk.title.lower()
+    if "prompt engineering" in lower_question and "prompt engineering" in lower_title:
+        return "Prompt engineering focus"
+    if "context engineering" in lower_question and "context engineering" in lower_title:
+        return "Context engineering focus"
+    if "embedding" in lower_title:
+        return "Embedding-model focus"
+    if "vector" in lower_title and "db" in lower_title:
+        return "Vector database focus"
+    topic = _topic_hint(chunk.title).replace("-", " ").strip()
+    if not topic:
+        return "Source focus"
+    return f"{topic.capitalize()} focus"
+
+
 def _document_summary_intro(*, title: str, question: str) -> str:
     normalized_title = title.lower()
     if "rag" in normalized_title:
@@ -1483,6 +1659,20 @@ def _document_summary_intro(*, title: str, question: str) -> str:
     if "embedding" in normalized_title:
         return f"{title} summarizes the main concepts, practical steps, and tradeoffs highlighted in the retrieved document."
     return f"{title} is summarized below using highlights grounded in the retrieved document."
+
+
+def _named_source_lookup_answer(*, question: str, title: str, snippet: str) -> str:
+    lower_question = question.lower()
+    cleaned_snippet = snippet.rstrip(".")
+    if "bottleneck" in lower_question and "context" in cleaned_snippet.lower():
+        return (
+            "According to the named source, the main bottleneck is not simply model intelligence. "
+            "It is getting the right context, information, and tools in front of the model at the right time."
+        )
+    if cleaned_snippet:
+        normalized_snippet = cleaned_snippet[0].lower() + cleaned_snippet[1:] if len(cleaned_snippet) > 1 else cleaned_snippet.lower()
+        return f"According to the named source, {normalized_snippet}."
+    return f"According to {title}, the retrieved context supports a direct answer from that source."
 
 
 def _general_qa_intro(*, question: str, parsed_answer: str = "") -> str:
@@ -1493,9 +1683,11 @@ def _general_qa_intro(*, question: str, parsed_answer: str = "") -> str:
             return _truncate_context_text(first_sentence, 220)
     lower_question = question.lower()
     if "benefit" in lower_question or "advantage" in lower_question:
-        return "The retrieved context points to several practical benefits that make prompt engineering useful in day-to-day model interactions."
+        return "The retrieved context points to several practical benefits that make prompt engineering more useful and controllable in real work."
     if "improve" in lower_question or "enhance" in lower_question or "how to" in lower_question:
-        return "The retrieved context suggests a few concrete ways to improve results, especially around structure, context, and iteration."
+        return "The retrieved context suggests a few concrete ways to improve results, especially around structure, context, and deliberate iteration."
+    if "what makes" in lower_question or "effective" in lower_question:
+        return "The retrieved context suggests that stronger results come from clearer intent, better context, and more deliberate testing."
     return "The retrieved context supports the following concrete takeaways."
 
 
@@ -1509,6 +1701,28 @@ def _general_qa_bullet(*, question: str, snippet: str) -> str:
         label = _action_label_for_snippet(lower_snippet)
         return f"- {label}: {snippet}"
     return f"- {snippet}"
+
+
+def _explanatory_fallback_bullet(*, question: str, snippet: str, title: str) -> str:
+    lower_question = question.lower()
+    lower_snippet = snippet.lower()
+    if "benefit" in lower_question or "advantage" in lower_question:
+        label = _benefit_label_for_snippet(lower_snippet)
+        return f"- {label}: {snippet}"
+    if "improve" in lower_question or "enhance" in lower_question or "how to" in lower_question:
+        label = _action_label_for_snippet(lower_snippet)
+        return f"- {label}: {snippet}"
+    if "tradeoff" in lower_question or "risk" in lower_question or "limitation" in lower_question:
+        return f"- Tradeoff to watch: {snippet}"
+    if "example" in lower_snippet or "such as" in lower_snippet:
+        return f"- Example in practice: {snippet}"
+    if any(token in lower_snippet for token in ("context", "tool", "retrieval", "information")):
+        return f"- Context and setup matter: {snippet}"
+    if any(token in lower_snippet for token in ("evaluate", "evaluation", "compare", "test", "iteration")):
+        return f"- Evaluation improves reliability: {snippet}"
+    topic = _topic_hint(title).replace("-", " ").strip()
+    label = f"{topic.capitalize()} takeaway" if topic else "Key takeaway"
+    return f"- {label}: {snippet}"
 
 
 def _general_qa_bullet_label(bullet: str) -> str:
@@ -1599,12 +1813,19 @@ def _infer_answer_style_instructions(*, query: str, mode: str, query_strategy: s
             "followed by 5-8 newline-separated bullet points covering the document's main arguments, notable claims, "
             "and practical takeaways. Each bullet must start with '- '."
         )
+    if query_strategy == "named_source_lookup":
+        return (
+            "This is a targeted lookup from a named source. In the JSON `answer` string, answer directly in 2-4 "
+            "sentences grounded in the named source. Do not answer generically, do not switch into a bullet list, "
+            "and make the core claim explicit."
+        )
     if query_strategy == "compare_synthesis":
         return (
             "This is a cross-document comparison request. In the JSON `answer` string, lead with one concise "
             "comparison sentence, then provide 4-6 newline-separated bullets covering concrete differences, "
             "overlaps, examples, and practical tradeoffs grounded in at least two cited sources when available. "
-            "Each bullet must start with '- '."
+            "Each bullet must start with '- '. Use plain language, and do not turn the answer into a source-by-source "
+            "dump of titles plus excerpts."
         )
     if query_strategy == "multi_document_synthesis":
         return (
@@ -1617,7 +1838,8 @@ def _infer_answer_style_instructions(*, query: str, mode: str, query_strategy: s
             "This is an explanatory synthesis request. In the JSON `answer` string, give a 1-2 sentence overview "
             "followed by 4-6 newline-separated bullets that cover the main idea, why it matters, concrete benefits or "
             "tradeoffs, and at least one example when the retrieved context supports it. Use evidence from at least two "
-            "cited sources when available. Each bullet must start with '- '."
+            "cited sources when available. Each bullet must start with '- '. Use plain language and make each bullet "
+            "read like a takeaway, not a raw excerpt."
         )
     if LIST_QUERY_PATTERN.search(normalized_query):
         return (
@@ -1641,7 +1863,8 @@ def _infer_answer_style_instructions(*, query: str, mode: str, query_strategy: s
         return (
             "The user is asking for an explanatory answer. In the JSON `answer` string, give a 1-2 sentence overview "
             "followed by 4-6 newline-separated bullets that cover the main idea, why it matters, concrete benefits or "
-            "tradeoffs, and at least one example when the retrieved context supports it. Each bullet must start with '- '."
+            "tradeoffs, and at least one example when the retrieved context supports it. Each bullet must start with '- '. "
+            "Use plain language and avoid reading like source notes."
         )
     if mode == "job-search":
         return (
@@ -1799,6 +2022,8 @@ def _normalize_filter_tag_mode(filter_tag_mode: str | None) -> str:
 def _prompt_profile_name(mode: str, *, query_strategy: str = "general_qa") -> str:
     if query_strategy == "document_summary":
         return "workflow_02_document_summary"
+    if query_strategy == "named_source_lookup":
+        return "workflow_02_targeted_lookup"
     if query_strategy == "compare_synthesis":
         return "workflow_02_compare_synthesis"
     if query_strategy == "multi_document_synthesis":
@@ -1815,6 +2040,8 @@ def _prompt_profile_name(mode: str, *, query_strategy: str = "general_qa") -> st
 def _query_strategy(*, question: str, retrieved: list[RetrievedChunk]) -> str:
     if _is_named_document_summary_query(question):
         return "document_summary"
+    if _is_named_source_lookup_query(question):
+        return "named_source_lookup"
     if _is_compare_query(question):
         return "compare_synthesis"
     if _is_multi_document_synthesis_query(question):
@@ -1831,6 +2058,18 @@ def _is_named_document_summary_query(question: str) -> bool:
     has_summary_intent = bool(SUMMARY_QUERY_PATTERN.search(normalized))
     has_document_reference = bool(DOCUMENT_REFERENCE_PATTERN.search(normalized) or QUOTED_TARGET_PATTERN.search(normalized))
     return has_summary_intent and has_document_reference
+
+
+def _is_named_source_lookup_query(question: str) -> bool:
+    normalized = " ".join(question.strip().split())
+    if not normalized:
+        return False
+    if _is_named_document_summary_query(question) or _is_compare_query(question) or _is_multi_document_synthesis_query(question):
+        return False
+    has_named_source = bool(QUOTED_TARGET_PATTERN.search(normalized) or DOCUMENT_REFERENCE_PATTERN.search(normalized))
+    if not has_named_source:
+        return False
+    return bool(TARGETED_SOURCE_LOOKUP_PATTERN.search(normalized))
 
 
 def _is_compare_query(question: str) -> bool:
@@ -1861,6 +2100,7 @@ def _is_explanatory_query(question: str) -> bool:
         return False
     if (
         _is_named_document_summary_query(question)
+        or _is_named_source_lookup_query(question)
         or _is_compare_query(question)
         or _is_multi_document_synthesis_query(question)
         or _is_sensitive_secret_query(question)

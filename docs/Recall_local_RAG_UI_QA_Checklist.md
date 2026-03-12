@@ -1,6 +1,6 @@
 # Recall.local RAG UI QA Checklist
 
-Purpose: provide a small, repeatable manual validation pass for the `Recall Chat` UI after RAG, prompt, model, or dashboard changes.
+Purpose: provide a repeatable manual validation pass for the `Recall Chat` UI after RAG, prompt, model, or dashboard changes, plus a matching scripted smoke suite for the same core behaviors.
 
 Use this checklist after:
 
@@ -23,12 +23,16 @@ The chat UI should do these jobs well:
 ## Environment notes
 
 - Use the live `Recall Chat` UI against the current `ai-lab` stack.
+- Before a manual UI pass, run the scripted smoke suite when retrieval/generation behavior changed:
+  - `/Users/jaydreyer/projects/recall-local/scripts/eval/run_chat_quality_smoke.sh`
 - For learning/PDF cases, set:
   - `Tag Filter`: `learning,genai-docs`
   - `Tag Match`: `all (AND)`
 - Leave `Group Filter` empty unless a test case explicitly needs it.
 
 ## Core UI test set
+
+The first 6 prompts below are the canonical manual pass. The scripted smoke suite extends that set with additional explanatory and learning-doc cases.
 
 ### 1) Specific article summary
 
@@ -141,6 +145,7 @@ For each response, verify:
 2. Record any `Soft fail` or `Hard fail`.
 3. If the UI looks wrong, compare the answer against a direct API run and inspect audit metadata.
 4. If behavior changed after a code change, rerun the scripted bakeoff:
+   - `scripts/eval/run_chat_quality_smoke.sh`
    - `scripts/eval/run_eval.py`
    - `scripts/eval/run_rag_model_bakeoff.sh`
 5. Keep the current live default pinned unless the bakeoff shows a clear quality gain without unacceptable latency.

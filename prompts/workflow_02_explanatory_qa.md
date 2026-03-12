@@ -20,8 +20,10 @@ Rules:
    - then provide 4-6 newline-separated bullets
    - every bullet must start with "- "
 7. The bullets should explain why the idea matters, concrete benefits or tradeoffs, and at least one example when supported by the retrieved context.
-8. Avoid repeating the same point with slightly different wording.
-9. If the retrieved context does not support a meaningful explanation, answer:
+8. Write in plain language. Each bullet should read like a takeaway you could show another person, not a pasted note from a source card.
+9. Do not format bullets as raw source-title plus excerpt. Use citations for grounding instead of stuffing titles into every line.
+10. Avoid repeating the same point with slightly different wording.
+11. If the retrieved context does not support a meaningful explanation, answer:
    "I don't have enough information in the retrieved context to answer that."
    and set confidence_level to "low".
 

@@ -22,14 +22,26 @@
     "max_latency_ms": 30000
   },
   {
+    "case_id": "explanatory-context-engineering-list",
+    "category": "explanatory_qa",
+    "question": "Give me a bulleted list of what context engineering is all about.",
+    "expected_title_contains": ["Context Engineering"],
+    "expected_source_contains": ["philschmid.de/context-engineering"],
+    "required_terms": ["context engineering", "context"],
+    "min_bullet_count": 4,
+    "min_citation_count": 2,
+    "min_answer_chars": 320,
+    "max_latency_ms": 30000
+  },
+  {
     "case_id": "compare-prompt-vs-context",
     "category": "compare_synthesis",
     "question": "How is prompt engineering different than context engineering? Give examples, if possible.",
     "required_terms": ["prompt engineering", "context engineering", "example"],
-    "min_bullet_count": 3,
+    "min_bullet_count": 4,
     "min_citation_count": 2,
     "min_distinct_doc_count": 2,
-    "min_answer_chars": 260,
+    "min_answer_chars": 320,
     "max_latency_ms": 30000
   },
   {
@@ -41,7 +53,57 @@
     "required_terms": ["context engineering", "prompt", "context"],
     "min_bullet_count": 4,
     "min_citation_count": 2,
-    "min_answer_chars": 250,
+    "min_answer_chars": 300,
+    "max_latency_ms": 45000
+  },
+  {
+    "case_id": "targeted-bottleneck-context-engineering",
+    "category": "targeted_lookup",
+    "question": "According to the article \"The New Skill in AI is Not Prompting, It's Context Engineering\", what is the main bottleneck in building useful LLM systems?",
+    "expected_title_contains": ["Context Engineering"],
+    "expected_source_contains": ["philschmid.de/context-engineering"],
+    "required_terms": ["context", "task"],
+    "min_citation_count": 1,
+    "min_answer_chars": 160,
+    "max_latency_ms": 30000
+  },
+  {
+    "case_id": "summary-vector-embeddings-guide",
+    "category": "document_summary",
+    "question": "Summarize the document \"Vector Embeddings Guide\" as a practical bulleted cheat sheet.",
+    "filter_tags": ["learning", "genai-docs"],
+    "filter_tag_mode": "all",
+    "expected_title_contains": ["Vector Embeddings Guide"],
+    "required_terms": ["embedding"],
+    "min_bullet_count": 4,
+    "min_citation_count": 2,
+    "min_answer_chars": 280,
+    "max_latency_ms": 45000
+  },
+  {
+    "case_id": "compare-embeddings-vs-vector-db",
+    "category": "compare_synthesis",
+    "question": "Compare the document \"Vector Embeddings Guide\" with the \"LLM Embeddings Vector DB Comparison Guide\". When should I optimize the embedding model versus the vector database?",
+    "filter_tags": ["learning", "genai-docs"],
+    "filter_tag_mode": "all",
+    "required_terms": ["embedding", "vector", "database"],
+    "min_bullet_count": 4,
+    "min_citation_count": 2,
+    "min_distinct_doc_count": 2,
+    "min_answer_chars": 320,
+    "max_latency_ms": 45000
+  },
+  {
+    "case_id": "synthesis-latency-and-rag-tradeoffs",
+    "category": "multi_document_synthesis",
+    "question": "What are practical ways to reduce latency in multi-agent systems, and what tradeoffs should I expect in RAG design?",
+    "filter_tags": ["learning", "genai-docs"],
+    "filter_tag_mode": "all",
+    "required_terms": ["latency", "rag", "tradeoff"],
+    "min_bullet_count": 4,
+    "min_citation_count": 2,
+    "min_distinct_doc_count": 2,
+    "min_answer_chars": 320,
     "max_latency_ms": 45000
   },
   {

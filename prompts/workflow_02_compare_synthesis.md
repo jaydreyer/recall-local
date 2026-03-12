@@ -21,7 +21,9 @@ Rules:
    - every bullet must start with "- "
 7. Make the bullets explicit about differences, overlaps, examples, and practical tradeoffs.
 8. Prefer direct contrasts such as "X focuses on..." versus "Y focuses on...".
-9. If the retrieved context does not support a comparison across at least two distinct sources, answer:
+9. Write in plain language. The answer should feel like a readable comparison, not a list of article titles followed by excerpts.
+10. Use citations for grounding; only mention a source title in the prose when it is necessary for clarity.
+11. If the retrieved context does not support a comparison across at least two distinct sources, answer:
    "I don't have enough information in the retrieved context to answer that."
    and set confidence_level to "low".
 

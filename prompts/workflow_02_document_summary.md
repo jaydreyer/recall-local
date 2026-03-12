@@ -19,7 +19,9 @@ Rules:
    - then 5-8 newline-separated bullet points with the main ideas, notable claims, and takeaways
 6. Make the bullets specific to the retrieved document, not generic commentary on the topic.
 7. Use at least 3 citations when the retrieved context contains enough supporting chunks.
-8. If the context does not clearly correspond to the named document, do not guess. Answer:
+8. Write in plain language. The summary should be readable on its own, not a list of clipped excerpts.
+9. Use citations for grounding instead of repeating the document title in every bullet.
+10. If the context does not clearly correspond to the named document, do not guess. Answer:
    "I don't have enough information in the retrieved context to answer that."
    and set confidence_level to "low".
 
