@@ -377,6 +377,12 @@ body {
   background: rgba(255, 247, 243, 0.88);
 }
 
+.status-chip.warning {
+  border-color: rgba(201, 132, 54, 0.28);
+  color: #8f5f20;
+  background: rgba(255, 248, 235, 0.94);
+}
+
 .status-dot.pulse {
   animation: statusPulse 1.25s ease-in-out infinite;
 }
@@ -854,6 +860,60 @@ body {
 .section-message.error,
 .draft-shell.error {
   color: var(--accent);
+}
+
+.state-notice {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+  border: 1px solid rgba(226, 216, 202, 0.92);
+  background: rgba(255, 255, 255, 0.84);
+  padding: 16px 18px;
+}
+
+.state-notice.compact {
+  padding: 14px 16px;
+}
+
+.state-notice.warning {
+  border-color: rgba(201, 132, 54, 0.28);
+  background: rgba(255, 248, 235, 0.94);
+}
+
+.state-notice-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.state-notice-title {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.state-notice-body {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.state-notice-action {
+  flex: 0 0 auto;
+  border: 1px solid rgba(232, 85, 58, 0.24);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--accent);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 10px 12px;
+}
+
+.state-notice-action:hover {
+  background: rgba(255, 247, 243, 0.92);
 }
 
 .company-tier-board {
@@ -2322,6 +2382,10 @@ body {
 }
 
 @media (max-width: 960px) {
+  .state-notice {
+    flex-direction: column;
+  }
+
   .page-header,
   .dashboard-grid,
   .jobs-layout,

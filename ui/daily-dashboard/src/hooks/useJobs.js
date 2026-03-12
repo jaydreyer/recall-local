@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useState } from 'react'
+import { startTransition, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   createCoverLetterDraft,
@@ -23,6 +23,10 @@ const DEFAULT_FILTERS = {
 
 const JOBS_CACHE_KEY = 'daily-dashboard-jobs-snapshot-v1'
 const GAPS_CACHE_KEY = 'daily-dashboard-gap-snapshot-v1'
+const JOBS_REFRESH_INTERVAL_MS = 120000
+const JOBS_RETRY_INTERVAL_MS = 15000
+const GAPS_REFRESH_INTERVAL_MS = 300000
+const GAPS_RETRY_INTERVAL_MS = 30000
 
 function resolveScoreRange(scoreRange) {
   switch (scoreRange) {
@@ -74,13 +78,15 @@ function persistGapSnapshot({ gaps, lastLoadedAt }) {
 export function useJobs({ loadGaps = false } = {}) {
   const cachedJobsState = readCachedJson(JOBS_CACHE_KEY, {})
   const cachedGapsState = readCachedJson(GAPS_CACHE_KEY, {})
+  const hasCachedJobs = Array.isArray(cachedJobsState.jobs) && cachedJobsState.jobs.length > 0
+  const hasCachedGaps = Boolean(cachedGapsState.gaps)
   const [filters, setFilters] = useState(DEFAULT_FILTERS)
-  const [jobs, setJobs] = useState(Array.isArray(cachedJobsState.jobs) ? cachedJobsState.jobs : [])
+  const [jobs, setJobs] = useState(hasCachedJobs ? cachedJobsState.jobs : [])
   const [stats, setStats] = useState(cachedJobsState.stats || null)
   const [gaps, setGaps] = useState(cachedGapsState.gaps || null)
   const [selectedJobId, setSelectedJobId] = useState(cachedJobsState.selectedJobId || null)
   const [selectedJob, setSelectedJob] = useState(null)
-  const [loading, setLoading] = useState(!(Array.isArray(cachedJobsState.jobs) && cachedJobsState.jobs.length > 0))
+  const [loading, setLoading] = useState(!hasCachedJobs)
   const [error, setError] = useState('')
   const [lastLoadedAt, setLastLoadedAt] = useState(String(cachedJobsState.lastLoadedAt || ''))
   const [detailLoading, setDetailLoading] = useState(false)
@@ -88,12 +94,17 @@ export function useJobs({ loadGaps = false } = {}) {
   const [gapsLoading, setGapsLoading] = useState(false)
   const [gapsError, setGapsError] = useState('')
   const [gapsLoadedAt, setGapsLoadedAt] = useState(String(cachedGapsState.lastLoadedAt || ''))
+  const [dataSource, setDataSource] = useState(hasCachedJobs ? 'cache' : 'live')
+  const [gapsDataSource, setGapsDataSource] = useState(hasCachedGaps ? 'cache' : 'live')
   const [coverLetterState, setCoverLetterState] = useState({
     jobId: '',
     loading: false,
     error: '',
     draft: null,
   })
+  const jobsLengthRef = useRef(jobs.length)
+  const hasStatsRef = useRef(Boolean(stats))
+  const hasGapsRef = useRef(Boolean(gaps))
 
   const apiFilters = useMemo(() => buildFilters(filters), [filters])
 
@@ -112,8 +123,16 @@ export function useJobs({ loadGaps = false } = {}) {
     syncSelectedJob(jobId)
   }
 
-  async function loadJobsData() {
-    setLoading(true)
+  useEffect(() => {
+    jobsLengthRef.current = jobs.length
+    hasStatsRef.current = Boolean(stats)
+    hasGapsRef.current = Boolean(gaps)
+  }, [jobs.length, stats, gaps])
+
+  async function loadJobsData({ background = false } = {}) {
+    if (!background || (!jobsLengthRef.current && !hasStatsRef.current)) {
+      setLoading(true)
+    }
     setError('')
     try {
       const jobsPayload = await fetchJobs(apiFilters)
@@ -123,6 +142,7 @@ export function useJobs({ loadGaps = false } = {}) {
 
       setJobs(items)
       setLastLoadedAt(refreshedAt)
+      setDataSource('live')
 
       if (!nextSelectedJobId && items.length > 0) {
         nextSelectedJobId = items[0].jobId
@@ -146,6 +166,7 @@ export function useJobs({ loadGaps = false } = {}) {
       fetchJobStats()
         .then((statsPayload) => {
           setStats(statsPayload)
+          setDataSource('live')
           persistJobsSnapshot({
             jobs: items,
             stats: statsPayload,
@@ -159,6 +180,7 @@ export function useJobs({ loadGaps = false } = {}) {
     } catch (loadError) {
       const message = loadError.message || 'Unable to load jobs.'
       if (jobs.length > 0 || stats) {
+        setDataSource('cache')
         setError(`Showing last cached board snapshot. Live refresh failed: ${message}`)
       } else {
         setError(message)
@@ -168,18 +190,22 @@ export function useJobs({ loadGaps = false } = {}) {
     }
   }
 
-  async function loadGapData() {
-    setGapsLoading(true)
+  async function loadGapData({ background = false } = {}) {
+    if (!background || !hasGapsRef.current) {
+      setGapsLoading(true)
+    }
     setGapsError('')
     try {
       const payload = await fetchJobGaps()
       const refreshedAt = new Date().toISOString()
       setGaps(payload)
       setGapsLoadedAt(refreshedAt)
+      setGapsDataSource('live')
       persistGapSnapshot({ gaps: payload, lastLoadedAt: refreshedAt })
     } catch (loadError) {
       const message = loadError.message || 'Unable to load skill gaps.'
       if (gaps) {
+        setGapsDataSource('cache')
         setGapsError(`Showing last cached learning radar. Live refresh failed: ${message}`)
       } else {
         setGapsError(message)
@@ -190,14 +216,98 @@ export function useJobs({ loadGaps = false } = {}) {
   }
 
   useEffect(() => {
-    loadJobsData()
-  }, [apiFilters])
+    loadJobsData({ background: hasCachedJobs })
+  }, [apiFilters, selectedJobId, jobs.length, stats])
 
   useEffect(() => {
     if (loadGaps) {
-      loadGapData()
+      loadGapData({ background: hasCachedGaps })
     }
   }, [loadGaps])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (!document.hidden) {
+        loadJobsData({ background: true })
+      }
+    }, JOBS_REFRESH_INTERVAL_MS)
+
+    function handleForegroundRefresh() {
+      loadJobsData({ background: true })
+    }
+
+    function handleVisibilityChange() {
+      if (!document.hidden) {
+        handleForegroundRefresh()
+      }
+    }
+
+    window.addEventListener('focus', handleForegroundRefresh)
+    window.addEventListener('online', handleForegroundRefresh)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', handleForegroundRefresh)
+      window.removeEventListener('online', handleForegroundRefresh)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [apiFilters])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !error) {
+      return undefined
+    }
+    const retryId = window.setTimeout(() => {
+      loadJobsData({ background: true })
+    }, JOBS_RETRY_INTERVAL_MS)
+    return () => window.clearTimeout(retryId)
+  }, [error, apiFilters, selectedJobId, jobs.length, stats])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !loadGaps) {
+      return undefined
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (!document.hidden) {
+        loadGapData({ background: true })
+      }
+    }, GAPS_REFRESH_INTERVAL_MS)
+
+    function handleForegroundGapRefresh() {
+      loadGapData({ background: true })
+    }
+
+    function handleVisibilityChange() {
+      if (!document.hidden) {
+        handleForegroundGapRefresh()
+      }
+    }
+
+    window.addEventListener('online', handleForegroundGapRefresh)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.clearInterval(intervalId)
+      window.removeEventListener('online', handleForegroundGapRefresh)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [loadGaps, gaps])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !loadGaps || !gapsError) {
+      return undefined
+    }
+    const retryId = window.setTimeout(() => {
+      loadGapData({ background: true })
+    }, GAPS_RETRY_INTERVAL_MS)
+    return () => window.clearTimeout(retryId)
+  }, [gapsError, loadGaps, gaps])
 
   useEffect(() => {
     syncSelectedJob(selectedJobId)
@@ -305,9 +415,11 @@ export function useJobs({ loadGaps = false } = {}) {
     loading,
     error,
     lastLoadedAt,
+    dataSource,
     gapsLoading,
     gapsError,
     gapsLoadedAt,
+    gapsDataSource,
     selectedJobId,
     selectedJob,
     detailLoading,

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import CompanyLogo from './CompanyLogo'
+import StateNotice from './StateNotice'
 
 const TIER_LANES = [
   { tier: 1, label: 'Tier 1', title: 'Immediate focus' },
@@ -57,6 +58,7 @@ export default function CompanyList({
   movingCompanyId,
   onSelect,
   onMoveTier,
+  onRefresh,
 }) {
   const [expandedTiers, setExpandedTiers] = useState({})
 
@@ -112,7 +114,15 @@ export default function CompanyList({
             </div>
 
             <div className="tier-lane-list">
-              {items.length === 0 && <p className="section-message">No companies in this tier yet.</p>}
+              {items.length === 0 && (
+                <StateNotice
+                  compact
+                  title="No companies in this tier yet"
+                  body={lane.tier === 1 ? 'Move a company up when it becomes a real focus account.' : 'Tracked companies will appear here as the watchlist grows.'}
+                  actionLabel={typeof onRefresh === 'function' ? 'Refresh list' : ''}
+                  onAction={onRefresh}
+                />
+              )}
 
               {visibleItems.map((company) => {
                 const isMoving = movingCompanyId === company.company_id

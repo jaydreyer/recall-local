@@ -165,9 +165,9 @@ export default function App() {
               </div>
               <div className="section-rule" />
               <div className="section-status-row">
-                <span className={companiesState.loading ? 'status-chip loading' : 'status-chip'}>
+                <span className={companiesState.loading ? 'status-chip loading' : companiesState.dataSource === 'cache' ? 'status-chip warning' : 'status-chip'}>
                   <span className={companiesState.loading ? 'status-dot pulse' : 'status-dot'} />
-                  {companiesState.loading ? 'Loading watchlist' : 'Watchlist ready'}
+                  {companiesState.loading ? 'Loading watchlist' : companiesState.dataSource === 'cache' ? 'Cached watchlist on screen' : 'Watchlist ready'}
                 </span>
                 <span className="meta-text">
                   {companiesState.lastLoadedAt
@@ -183,6 +183,7 @@ export default function App() {
                 movingCompanyId={companiesState.savingCompanyId}
                 onSelect={companiesState.selectCompany}
                 onMoveTier={companiesState.moveCompanyTier}
+                onRefresh={companiesState.refresh}
               />
               <CompanyProfile
                 company={companiesState.selectedCompany}
@@ -199,9 +200,9 @@ export default function App() {
           {activeTab === 'Skill Gaps' && (
             <>
               <div className="section-status-row skill-gap-status">
-                <span className={jobsState.gapsLoading ? 'status-chip loading' : 'status-chip'}>
+                <span className={jobsState.gapsLoading ? 'status-chip loading' : jobsState.gapsDataSource === 'cache' ? 'status-chip warning' : 'status-chip'}>
                   <span className={jobsState.gapsLoading ? 'status-dot pulse' : 'status-dot'} />
-                  {jobsState.gapsLoading ? 'Loading learning radar' : 'Learning radar ready'}
+                  {jobsState.gapsLoading ? 'Loading learning radar' : jobsState.gapsDataSource === 'cache' ? 'Cached learning radar on screen' : 'Learning radar ready'}
                 </span>
                 <span className="meta-text">
                   {jobsState.gapsLoadedAt
@@ -213,6 +214,7 @@ export default function App() {
                 gapData={jobsState.gaps}
                 loading={jobsState.gapsLoading}
                 error={jobsState.gapsError}
+                onRetry={jobsState.loadGapData}
               />
             </>
           )}

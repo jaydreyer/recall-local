@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import CompanyLogo from './CompanyLogo'
+import StateNotice from './StateNotice'
 
 function metadataChips(company) {
   return [
@@ -56,10 +57,10 @@ export default function CompanyProfile({ company, loading, error, onRefresh, ref
     return <p className="section-message">Loading company profile and watch settings...</p>
   }
   if (error && !company) {
-    return <p className="section-message error">{error}</p>
+    return <StateNotice tone="warning" title="Company profile is unavailable right now" body={error} actionLabel="Retry profile" onAction={onRefresh} />
   }
   if (!company) {
-    return <p className="section-message">Select a company to view the profile.</p>
+    return <StateNotice title="Select a company to view the profile" body="Choose a company from the watchlist to load its board context, score summary, and tracking settings." />
   }
 
   const skillData = topSkillData(Array.isArray(company.skill_chart) ? company.skill_chart : [])

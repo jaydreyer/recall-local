@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { createCompany, fetchCompanies, fetchCompany, refreshCompanyProfile, updateCompany } from '../api'
 import { readCachedJson, writeCachedJson } from '../lib/cache'
 
 const COMPANIES_CACHE_KEY = 'daily-dashboard-companies-snapshot-v1'
+const COMPANIES_REFRESH_INTERVAL_MS = 180000
+const COMPANIES_RETRY_INTERVAL_MS = 20000
 
 function preferredCompany(items) {
   return [...items].sort((left, right) => {
@@ -28,20 +30,22 @@ function preferredCompany(items) {
   })[0]
 }
 
-function persistCompanySnapshot({ companies, selectedCompanyId, lastLoadedAt }) {
+function persistCompanySnapshot({ companies, selectedCompanyId, selectedCompany, lastLoadedAt }) {
   writeCachedJson(COMPANIES_CACHE_KEY, {
     companies,
     selectedCompanyId,
+    selectedCompany,
     lastLoadedAt,
   })
 }
 
 export function useCompanies({ enabled = false } = {}) {
   const cachedState = readCachedJson(COMPANIES_CACHE_KEY, {})
-  const [companies, setCompanies] = useState(Array.isArray(cachedState.companies) ? cachedState.companies : [])
+  const hasCachedCompanies = Array.isArray(cachedState.companies) && cachedState.companies.length > 0
+  const [companies, setCompanies] = useState(hasCachedCompanies ? cachedState.companies : [])
   const [selectedCompanyId, setSelectedCompanyId] = useState(cachedState.selectedCompanyId || '')
-  const [selectedCompany, setSelectedCompany] = useState(null)
-  const [loading, setLoading] = useState(enabled && !(Array.isArray(cachedState.companies) && cachedState.companies.length > 0))
+  const [selectedCompany, setSelectedCompany] = useState(cachedState.selectedCompany || null)
+  const [loading, setLoading] = useState(enabled && !hasCachedCompanies)
   const [detailLoading, setDetailLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -50,9 +54,17 @@ export function useCompanies({ enabled = false } = {}) {
   const [lastLoadedAt, setLastLoadedAt] = useState(String(cachedState.lastLoadedAt || ''))
   const [detailError, setDetailError] = useState('')
   const [saveError, setSaveError] = useState('')
+  const [dataSource, setDataSource] = useState(hasCachedCompanies ? 'cache' : 'live')
+  const companiesCountRef = useRef(companies.length)
 
-  async function loadCompanies() {
-    setLoading(true)
+  useEffect(() => {
+    companiesCountRef.current = companies.length
+  }, [companies.length])
+
+  async function loadCompanies({ background = false } = {}) {
+    if (!background || !companiesCountRef.current) {
+      setLoading(true)
+    }
     setError('')
     setSaveError('')
     try {
@@ -63,6 +75,7 @@ export function useCompanies({ enabled = false } = {}) {
 
       setCompanies(items)
       setLastLoadedAt(refreshedAt)
+      setDataSource('live')
 
       if (items.length > 0 && (!nextSelectedCompanyId || !items.some((item) => item.company_id === nextSelectedCompanyId))) {
         const preferred = preferredCompany(items)
@@ -79,11 +92,13 @@ export function useCompanies({ enabled = false } = {}) {
       persistCompanySnapshot({
         companies: items,
         selectedCompanyId: nextSelectedCompanyId,
+        selectedCompany,
         lastLoadedAt: refreshedAt,
       })
     } catch (loadError) {
       const message = loadError.message || 'Unable to load companies.'
       if (companies.length > 0) {
+        setDataSource('cache')
         setError(`Showing cached watchlist. Live refresh failed: ${message}`)
       } else {
         setError(message)
@@ -103,9 +118,21 @@ export function useCompanies({ enabled = false } = {}) {
     try {
       const payload = await fetchCompany(companyId)
       setSelectedCompany(payload)
+      persistCompanySnapshot({
+        companies,
+        selectedCompanyId: companyId,
+        selectedCompany: payload,
+        lastLoadedAt,
+      })
     } catch (loadError) {
-      setSelectedCompany(null)
-      setDetailError(loadError.message || 'Unable to load company profile.')
+      const cachedDetail = cachedState.selectedCompany
+      if (cachedDetail && cachedDetail.company_id === companyId) {
+        setSelectedCompany(cachedDetail)
+        setDetailError(`Showing cached company profile. Live refresh failed: ${loadError.message || 'Unable to load company profile.'}`)
+      } else {
+        setSelectedCompany(null)
+        setDetailError(loadError.message || 'Unable to load company profile.')
+      }
     } finally {
       setDetailLoading(false)
     }
@@ -113,7 +140,7 @@ export function useCompanies({ enabled = false } = {}) {
 
   useEffect(() => {
     if (enabled) {
-      loadCompanies()
+      loadCompanies({ background: hasCachedCompanies })
     }
   }, [enabled])
 
@@ -123,6 +150,52 @@ export function useCompanies({ enabled = false } = {}) {
     }
   }, [enabled, selectedCompanyId])
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || !enabled) {
+      return undefined
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (!document.hidden) {
+        loadCompanies({ background: true })
+      }
+    }, COMPANIES_REFRESH_INTERVAL_MS)
+
+    function handleForegroundRefresh() {
+      loadCompanies({ background: true })
+      if (selectedCompanyId) {
+        loadCompany(selectedCompanyId)
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (!document.hidden) {
+        handleForegroundRefresh()
+      }
+    }
+
+    window.addEventListener('focus', handleForegroundRefresh)
+    window.addEventListener('online', handleForegroundRefresh)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', handleForegroundRefresh)
+      window.removeEventListener('online', handleForegroundRefresh)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [enabled, selectedCompanyId])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !enabled || !error) {
+      return undefined
+    }
+    const retryId = window.setTimeout(() => {
+      loadCompanies({ background: true })
+    }, COMPANIES_RETRY_INTERVAL_MS)
+    return () => window.clearTimeout(retryId)
+  }, [enabled, error])
+
   async function refreshSelectedCompany() {
     if (!selectedCompanyId) {
       return
@@ -131,7 +204,7 @@ export function useCompanies({ enabled = false } = {}) {
     setDetailError('')
     try {
       await refreshCompanyProfile(selectedCompanyId)
-      await Promise.all([loadCompanies(), loadCompany(selectedCompanyId)])
+      await Promise.all([loadCompanies({ background: true }), loadCompany(selectedCompanyId)])
     } catch (refreshError) {
       setDetailError(refreshError.message || 'Unable to refresh company profile.')
     } finally {
@@ -146,7 +219,7 @@ export function useCompanies({ enabled = false } = {}) {
     try {
       const payload = companyId ? await updateCompany(companyId, draft) : await createCompany(draft)
       const savedId = payload.company_id || companyId
-      await loadCompanies()
+      await loadCompanies({ background: false })
       if (savedId) {
         setSelectedCompanyId(savedId)
         await loadCompany(savedId)
@@ -172,6 +245,7 @@ export function useCompanies({ enabled = false } = {}) {
     savingCompanyId,
     error,
     lastLoadedAt,
+    dataSource,
     detailError,
     saveError,
     selectCompany: setSelectedCompanyId,

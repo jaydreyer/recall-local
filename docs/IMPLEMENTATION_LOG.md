@@ -1,5 +1,43 @@
 # Recall.local Implementation Log
 
+## 2026-03-12 - Daily dashboard UI recovery and state polish (local + ai-lab)
+
+### What was executed
+
+- Improved dashboard browser request behavior in [/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/api.js](/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/api.js):
+  - added request timeouts for reads and mutations
+  - added a single retry for retryable `GET` failures and timeouts
+- Hardened dashboard hooks:
+  - [/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/hooks/useJobs.js](/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/hooks/useJobs.js)
+  - [/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/hooks/useCompanies.js](/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/hooks/useCompanies.js)
+  - [/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/hooks/useSettings.js](/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/hooks/useSettings.js)
+- Added browser-side resilience behavior:
+  - periodic background refresh
+  - refresh on browser focus / visibility return
+  - refresh on network reconnect
+  - timed retry after failed reads
+  - cached company-detail reuse when a live detail refresh fails
+- Added a reusable dashboard state card:
+  - [/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/StateNotice.jsx](/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/StateNotice.jsx)
+- Replaced flat empty/error copy with clearer recovery-oriented UI in:
+  - [/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/App.jsx](/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/App.jsx)
+  - [/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/JobsCommandCenter.jsx](/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/JobsCommandCenter.jsx)
+  - [/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/CompanyList.jsx](/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/CompanyList.jsx)
+  - [/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/CompanyProfile.jsx](/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/CompanyProfile.jsx)
+  - [/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/SkillGapRadar.jsx](/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/SkillGapRadar.jsx)
+  - [/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/styles/theme.css](/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/styles/theme.css)
+
+### Validation
+
+- Local validation:
+  - `npm run build` in `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard` -> `OK`
+
+### Results
+
+- The dashboard is less dependent on manual reloads and should recover more gracefully from transient bridge or network hiccups.
+- Cached data is now surfaced more intentionally, so a stale-but-usable board looks deliberate instead of broken.
+- Empty and error states now give the operator an obvious next action instead of leaving the page looking unfinished.
+
 ## 2026-03-11 - Daily dashboard reliability hardening (local + ai-lab)
 
 ### What was executed

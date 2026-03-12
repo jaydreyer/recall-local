@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 
 import { recommendationUrl } from '../utils/recommendationLinks'
+import StateNotice from './StateNotice'
 
 function severityClass(value) {
   if (value === 'critical') {
@@ -26,7 +27,7 @@ function effortScore(value) {
   return 2
 }
 
-export default function SkillGapRadar({ gapData, loading, error }) {
+export default function SkillGapRadar({ gapData, loading, error, onRetry }) {
   const [view, setView] = useState('recommendations')
   const [completed, setCompleted] = useState({})
   const [showAll, setShowAll] = useState(false)
@@ -110,10 +111,26 @@ export default function SkillGapRadar({ gapData, loading, error }) {
           </div>
         </>
       )}
-      {error && <p className="section-message error">{error}</p>}
+      {error && (
+        <StateNotice
+          tone="warning"
+          title="Learning radar is showing the last good snapshot"
+          body={error}
+          actionLabel={typeof onRetry === 'function' ? 'Retry radar' : ''}
+          onAction={onRetry}
+        />
+      )}
 
       {!loading && !error && (
         <>
+          {aggregatedGaps.length === 0 && (
+            <StateNotice
+              title="No aggregated gaps yet"
+              body="This view becomes useful after more jobs have been evaluated. Once that happens, the radar will summarize the most common missing skills and learning resources."
+              actionLabel={typeof onRetry === 'function' ? 'Refresh radar' : ''}
+              onAction={onRetry}
+            />
+          )}
           <div className="gap-summary-grid">
             <div className="gap-summary-card">
               <span className="mini-label">Tracked gaps</span>

@@ -22,6 +22,7 @@ Typical symptoms:
 6. Job list endpoints should support a lightweight summary view for board rendering.
 7. The bridge should keep dashboard-critical caches warm in the background so first paint does not wait for cold aggregations.
 8. Operators should use a single smoke command before demos or interviews rather than ad hoc curls.
+9. The browser client should retry transient read failures automatically and keep the last-good snapshot visible while it recovers.
 
 ## Current implementation
 
@@ -45,6 +46,13 @@ Typical symptoms:
   - `daily-dashboard-companies-snapshot-v1`
   - `daily-dashboard-settings-snapshot-v1`
   - `daily-dashboard-active-tab-v1`
+- Browser recovery behavior:
+  - request timeouts for dashboard reads/mutations
+  - one retry for retryable `GET` failures
+  - background refresh while the page stays open
+  - refresh on browser focus / visibility return
+  - refresh on network reconnect
+  - recovery-oriented empty/error state cards instead of blank panels
 
 ## Bridge-side cache warming
 
@@ -116,6 +124,7 @@ Open `http://100.116.103.78:3001/` and confirm:
 3. `Companies` tab loads after tab switch rather than during first paint
 4. `Skill Gaps` tab loads after tab switch rather than during first paint
 5. settings open without blocking the rest of the page
+6. transient failures show a recovery notice and keep cached data visible when possible
 
 ## If the dashboard regresses
 

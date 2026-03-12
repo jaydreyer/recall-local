@@ -2,6 +2,7 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 
 import CompanyLogo from './CompanyLogo'
 import JobDetail from './JobDetail'
+import StateNotice from './StateNotice'
 
 const LANE_COPY = {
   focus: 'Best-fit evaluated roles ready for outreach or drafting.',
@@ -342,9 +343,9 @@ export default function JobsCommandCenter({ jobsState, settings, onOpenSettings,
       <div className="section-rule" />
 
       <div className="section-status-row">
-        <span className={isInitialLoad || isRefreshing ? 'status-chip loading' : 'status-chip'}>
+        <span className={isInitialLoad || isRefreshing ? 'status-chip loading' : jobsState.dataSource === 'cache' ? 'status-chip warning' : 'status-chip'}>
           <span className={isInitialLoad || isRefreshing ? 'status-dot pulse' : 'status-dot'} />
-          {isInitialLoad ? 'Loading live jobs' : isRefreshing ? 'Refreshing live jobs' : 'Live board ready'}
+          {isInitialLoad ? 'Loading live jobs' : isRefreshing ? 'Refreshing live jobs' : jobsState.dataSource === 'cache' ? 'Cached board snapshot on screen' : 'Live board ready'}
         </span>
         <span className="meta-text">
           {jobsState.lastLoadedAt ? `Last refreshed ${formatRefreshLabel(jobsState.lastLoadedAt)}` : 'Waiting for first sync'}
@@ -549,7 +550,12 @@ export default function JobsCommandCenter({ jobsState, settings, onOpenSettings,
             </section>
           ) : (
             <section className="panel-section">
-              <p className="section-message">No roles are loaded yet. Try refreshing the board or broadening the filters.</p>
+              <StateNotice
+                title="No roles are on the board yet"
+                body="Try refreshing the board. If this persists, the bridge may still be warming caches or the current filters may be too narrow."
+                actionLabel="Refresh data"
+                onAction={jobsState.refresh}
+              />
             </section>
           )}
 
@@ -563,12 +569,33 @@ export default function JobsCommandCenter({ jobsState, settings, onOpenSettings,
                 <span className="meta-text">{LANE_COPY[activeLane]}</span>
               </div>
               <div className="section-rule" />
-              {jobsState.error && <p className="section-message error">{jobsState.error}</p>}
+              {jobsState.error && visibleJobs.length > 0 && (
+                <StateNotice
+                  tone="warning"
+                  compact
+                  title="Working from the last good board snapshot"
+                  body={jobsState.error}
+                  actionLabel="Retry now"
+                  onAction={jobsState.refresh}
+                />
+              )}
               {isRefreshing && <p className="section-message">Refreshing jobs while keeping the current board in view…</p>}
               {isInitialLoad && (
                 <p className="section-message">Loading the first live set of roles from the bridge…</p>
               )}
-              {!jobsState.loading && visibleJobs.length === 0 && <p className="section-message">No roles matched this lane and filter set.</p>}
+              {!jobsState.loading && visibleJobs.length === 0 && (
+                <StateNotice
+                  compact
+                  title={jobs.length === 0 ? 'No roles loaded yet' : 'No roles matched this lane'}
+                  body={
+                    jobs.length === 0
+                      ? 'The board does not have any visible roles yet. Refresh to try the live bridge again.'
+                      : 'Try another lane, clear the search box, or broaden the source and score filters.'
+                  }
+                  actionLabel={jobs.length === 0 ? 'Refresh data' : 'Show all scores'}
+                  onAction={jobs.length === 0 ? jobsState.refresh : () => jobsState.setFilter('scoreRange', 'all')}
+                />
+              )}
               <div className="queue-list">
                 {isInitialLoad
                   ? Array.from({ length: 4 }, (_, index) => <QueueSkeletonCard key={`queue-skeleton-${index}`} />)
@@ -612,7 +639,11 @@ export default function JobsCommandCenter({ jobsState, settings, onOpenSettings,
                       </button>
                     ))}
                 {!isInitialLoad && companyPulse.length === 0 && (
-                  <p className="section-message">Company pulse will populate once matching roles load into the board.</p>
+                  <StateNotice
+                    compact
+                    title="Company pulse is waiting on more roles"
+                    body="This panel fills in once the current board has enough matching roles to surface company heat."
+                  />
                 )}
               </div>
             </section>

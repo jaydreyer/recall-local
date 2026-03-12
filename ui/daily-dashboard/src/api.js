@@ -1,6 +1,12 @@
 const rawBaseUrl = (import.meta.env.VITE_RECALL_API_BASE_URL || '').replace(/\/+$/, '')
 const apiBaseUrl = rawBaseUrl
 const apiKey = (import.meta.env.VITE_RECALL_API_KEY || '').trim()
+const GET_TIMEOUT_MS = 25000
+const MUTATION_TIMEOUT_MS = 45000
+const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504])
+const RECENT_GET_TTL_MS = 3000
+const inflightGetRequests = new Map()
+const recentGetResponses = new Map()
 
 function buildHeaders() {
   const headers = { Accept: 'application/json' }
@@ -17,29 +23,93 @@ function buildUrl(path) {
 async function parseResponse(response) {
   if (!response.ok) {
     const errorText = await response.text()
-    throw new Error(`${response.status} ${response.statusText}: ${errorText}`)
+    const error = new Error(`${response.status} ${response.statusText}: ${errorText}`)
+    error.retryable = RETRYABLE_STATUS_CODES.has(response.status)
+    throw error
   }
   return response.json()
 }
 
+function sleep(delayMs) {
+  return new Promise((resolve) => window.setTimeout(resolve, delayMs))
+}
+
+async function requestJson(path, { method = 'GET', body, timeoutMs, retries = 0 } = {}) {
+  let lastError = null
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs)
+
+    try {
+      const response = await fetch(buildUrl(path), {
+        method,
+        headers: body === undefined
+          ? buildHeaders()
+          : {
+              ...buildHeaders(),
+              'Content-Type': 'application/json',
+            },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: controller.signal,
+      })
+      window.clearTimeout(timeoutId)
+      return await parseResponse(response)
+    } catch (error) {
+      window.clearTimeout(timeoutId)
+      const timedOut = error?.name === 'AbortError'
+      const retryable = Boolean(error?.retryable) || timedOut || error instanceof TypeError
+      lastError = timedOut ? new Error(`Request timed out after ${Math.round(timeoutMs / 1000)}s.`) : error
+      if (attempt < retries && retryable) {
+        await sleep(350 * (attempt + 1))
+        continue
+      }
+      throw lastError
+    }
+  }
+
+  throw lastError || new Error('Request failed.')
+}
+
 async function getJson(path) {
-  const response = await fetch(buildUrl(path), {
+  const recent = recentGetResponses.get(path)
+  if (recent && recent.expiresAt > Date.now()) {
+    return recent.payload
+  }
+
+  const inflight = inflightGetRequests.get(path)
+  if (inflight) {
+    return inflight
+  }
+
+  const request = requestJson(path, {
     method: 'GET',
-    headers: buildHeaders(),
+    timeoutMs: GET_TIMEOUT_MS,
+    retries: 1,
   })
-  return parseResponse(response)
+    .then((payload) => {
+      recentGetResponses.set(path, {
+        payload,
+        expiresAt: Date.now() + RECENT_GET_TTL_MS,
+      })
+      return payload
+    })
+    .finally(() => {
+      inflightGetRequests.delete(path)
+    })
+
+  inflightGetRequests.set(path, request)
+  return request
 }
 
 async function sendJson(path, method, body) {
-  const response = await fetch(buildUrl(path), {
+  recentGetResponses.clear()
+  return requestJson(path, {
     method,
-    headers: {
-      ...buildHeaders(),
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
+    body,
+    timeoutMs: MUTATION_TIMEOUT_MS,
+    retries: 0,
   })
-  return parseResponse(response)
 }
 
 function buildJobQuery(filters) {
