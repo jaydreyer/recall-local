@@ -1,3 +1,31 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "recall-local"
+version = "0.1.0"
+description = "Local-first AI operations system for ingestion, cited RAG, and job-search workflows."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "Jay Dreyer" },
+]
+license = { text = "MIT" }
+dynamic = ["dependencies"]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==8.4.2",
+  "pytest-cov==6.3.0",
+  "pip-audit==2.10.0",
+  "ruff==0.15.5",
+  "pre-commit==4.5.1",
+]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
 [tool.ruff]
 line-length = 120
 target-version = "py311"

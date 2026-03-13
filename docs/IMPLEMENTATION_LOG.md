@@ -1,5 +1,40 @@
 # Recall.local Implementation Log
 
+## 2026-03-13 - Python packaging metadata, dev dependencies, and lock files added
+
+### What was executed
+
+- Expanded Python project metadata in:
+  - [/Users/jaydreyer/projects/recall-local/pyproject.toml](/Users/jaydreyer/projects/recall-local/pyproject.toml)
+  - added `build-system`
+  - added PEP 621-style `project` metadata
+  - wired runtime dependencies dynamically from `requirements.txt`
+  - added a pinned `dev` optional dependency group
+- Added explicit development dependencies in:
+  - [/Users/jaydreyer/projects/recall-local/requirements-dev.txt](/Users/jaydreyer/projects/recall-local/requirements-dev.txt)
+  - includes pinned versions of `pytest`, `pytest-cov`, `pip-audit`, `ruff`, and `pre-commit`
+- Switched CI away from ad hoc test-tool installs in:
+  - [/Users/jaydreyer/projects/recall-local/.github/workflows/quality_checks.yml](/Users/jaydreyer/projects/recall-local/.github/workflows/quality_checks.yml)
+  - test and audit steps now install from `requirements-dev.txt`
+- Removed an unnecessary direct dependency from:
+  - [/Users/jaydreyer/projects/recall-local/requirements.txt](/Users/jaydreyer/projects/recall-local/requirements.txt)
+  - dropped `lxml_html_clean`, which is not imported directly by the repo and was adding avoidable packaging noise
+- Updated the public README in:
+  - [/Users/jaydreyer/projects/recall-local/README.md](/Users/jaydreyer/projects/recall-local/README.md)
+  - documents runtime vs dev dependency files and local install commands
+
+### Validation
+
+- Local validation:
+  - `python3 -m py_compile scripts/phase1/retrieval.py scripts/phase6/job_dedup.py scripts/phase6/job_evaluator.py`
+  - `python3 -m pytest tests/ -q --cov=scripts --cov-report=term-missing --cov-fail-under=25`
+
+### Results
+
+- The repo no longer relies on CI-only implicit installs for test tooling.
+- The Python project now has modern metadata plus a clearer local-development setup story.
+- The direct dependency story is cleaner and better separated even though a true Python 3.11 lockfile still needs to be generated in a 3.11-capable environment.
+
 ## 2026-03-13 - README testing narrative and Phase 0/4 regression coverage added
 
 ### What was executed

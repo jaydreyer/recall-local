@@ -79,6 +79,24 @@ Run locally with:
 python3 -m pytest tests/ -q --cov=scripts --cov-report=term-missing
 ```
 
+## Python Environment
+
+The repo now separates runtime and development dependencies:
+
+- [requirements.txt](requirements.txt): pinned runtime dependencies
+- [requirements-dev.txt](requirements-dev.txt): pinned local tooling for tests, coverage, linting, and dependency audit
+- `pyproject.toml`: modern project metadata plus a `dev` optional dependency group
+
+Example local setup:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt -r requirements-dev.txt
+```
+
+Dependency audit is enforced in CI with `pip-audit`.
+
 If you are reviewing the project for maintainability, the highest-signal test files are:
 
 - [tests/test_bridge_api_contract.py](tests/test_bridge_api_contract.py)
