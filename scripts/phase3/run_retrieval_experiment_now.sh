@@ -20,7 +20,7 @@ Options:
 
 Examples:
   run_retrieval_experiment_now.sh
-  run_retrieval_experiment_now.sh --n8n-host http://100.116.103.78:5678
+  run_retrieval_experiment_now.sh --n8n-host http://localhost:5678
   run_retrieval_experiment_now.sh --cases-file /home/jaydreyer/recall-local/scripts/eval/learning_eval_cases.json
 EOF
 }

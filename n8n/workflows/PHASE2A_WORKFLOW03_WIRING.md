@@ -62,7 +62,7 @@ curl -sS http://localhost:8090/healthz
 5. Confirm node `HTTP Meeting Action Items` URL is:
 
 ```text
-http://100.116.103.78:8090/v1/meeting-action-items
+http://localhost:8090/v1/meeting-action-items
 ```
 
 If n8n and bridge are on the same Docker network, `http://recall-ingest-bridge:8090/v1/meeting-action-items` also works.

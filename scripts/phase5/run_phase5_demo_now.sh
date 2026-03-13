@@ -34,7 +34,7 @@ Options:
 
 Examples:
   run_phase5_demo_now.sh
-  run_phase5_demo_now.sh --bridge-url http://100.116.103.78:8090 --mode dry-run --eval-suite both
+  run_phase5_demo_now.sh --bridge-url http://localhost:8090 --mode dry-run --eval-suite both
   run_phase5_demo_now.sh --mode live --api-key phase5-secret --require-eval-pass
 HELP
 }

@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-REMOTE_HOST="${AI_LAB_HOST:-100.116.103.78}"
+REMOTE_HOST="${AI_LAB_HOST:-ai-lab}"
 REMOTE_USER="${AI_LAB_USER:-jaydreyer}"
 REMOTE_REPO_PATH="${AI_LAB_REPO_PATH:-/home/jaydreyer/recall-local}"
 REMOTE_SSH_KEY="${AI_LAB_SSH_KEY:-}"
@@ -17,7 +17,7 @@ Usage:
   run_repo_hygiene_check.sh [options]
 
 Options:
-  --remote-host <host>       ai-lab host/address (default: 100.116.103.78)
+  --remote-host <host>       ai-lab host/address (default: ai-lab)
   --remote-user <user>       ai-lab SSH user (default: jaydreyer)
   --remote-repo-path <path>  ai-lab runtime repo path (default: /home/jaydreyer/recall-local)
   --ssh-key <path>           Optional SSH private key path for ai-lab checks
@@ -30,7 +30,7 @@ Examples:
   run_repo_hygiene_check.sh
   run_repo_hygiene_check.sh --skip-remote
   run_repo_hygiene_check.sh --ssh-key ~/.ssh/codex_ai_lab
-  run_repo_hygiene_check.sh --remote-host 100.116.103.78 --remote-user jaydreyer
+  run_repo_hygiene_check.sh --remote-host ai-lab --remote-user jaydreyer
 EOF
 }
 

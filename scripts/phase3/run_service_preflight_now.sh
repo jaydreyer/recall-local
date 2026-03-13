@@ -27,7 +27,7 @@ Options:
 
 Examples:
   run_service_preflight_now.sh
-  run_service_preflight_now.sh --n8n-host http://100.116.103.78:5678
+  run_service_preflight_now.sh --n8n-host http://localhost:5678
 HELP
 }
 

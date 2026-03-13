@@ -26,6 +26,7 @@ if str(ROOT) not in sys.path:
 from scripts import llm_client  # noqa: E402
 from scripts.phase1.group_model import normalize_group  # noqa: E402
 from scripts.phase1.retrieval import RetrievedChunk, retrieve_chunks  # noqa: E402
+from scripts.shared_time import now_iso  # noqa: E402
 from scripts.validate_output import ValidationResult, validate_rag_output  # noqa: E402
 
 UNANSWERABLE_ANSWER = "I don't have enough information in the retrieved context to answer that."
@@ -452,14 +453,15 @@ def run_rag_query(
         artifact_path: str | None = None
         if not dry_run:
             artifact_path = _write_artifact(settings=settings, run_id=run_id, payload=response)
-            _mark_run_completed(
-                conn=conn,
-                run_id=run_id,
-                ended_at=_now_iso(),
-                latency_ms=latency_ms,
-                model=response["audit"]["model"],
-                output_path=artifact_path,
-            )
+            if conn is not None:
+                _mark_run_completed(
+                    conn=conn,
+                    run_id=run_id,
+                    ended_at=_now_iso(),
+                    latency_ms=latency_ms,
+                    model=response["audit"]["model"],
+                    output_path=artifact_path,
+                )
             response["audit"]["artifact_path"] = artifact_path
 
         return response
@@ -2149,7 +2151,7 @@ def _artifact_stamp() -> str:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return now_iso()
 
 
 def parse_args() -> argparse.Namespace:

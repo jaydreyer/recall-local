@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from scripts.phase1.ingestion_pipeline import qdrant_client_from_env
+from scripts.shared_strings import slugify
 
 LOGGER = logging.getLogger(__name__)
 COLLECTION_JOBS = "recall_jobs"
@@ -104,11 +105,7 @@ def _matches_search(job: dict[str, Any], query: str) -> bool:
 
 
 def _to_slug(value: str) -> str:
-    lowered = value.strip().lower()
-    cleaned = "".join(char if char.isalnum() else "-" for char in lowered)
-    while "--" in cleaned:
-        cleaned = cleaned.replace("--", "-")
-    return cleaned.strip("-") or "unknown"
+    return slugify(value, fallback="unknown")
 
 
 def _normalize_job(record: Any) -> dict[str, Any]:

@@ -22,7 +22,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ ($env.RECALL_BRIDGE_BASE_URL || 'http://100.116.103.78:8090') + '/v1/ingestions' }}",
+        "url": "={{ ($env.RECALL_BRIDGE_BASE_URL || 'http://localhost:8090') + '/v1/ingestions' }}",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ Object.assign({}, ($json.body || $json), { channel: 'webhook' }) }}",

@@ -20,7 +20,7 @@ Options:
 
 Examples:
   run_all_evals_now.sh
-  run_all_evals_now.sh --n8n-host http://100.116.103.78:5678
+  run_all_evals_now.sh --n8n-host http://localhost:5678
   run_all_evals_now.sh --webhook-url http://localhost:5678/webhook/recall-query
 EOF
 }

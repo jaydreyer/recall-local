@@ -55,7 +55,7 @@
       {
         "parameters": {
           "method": "POST",
-          "url": "http://100.116.103.78:8090/v1/ingestions",
+          "url": "={{ ($env.RECALL_BRIDGE_BASE_URL || 'http://localhost:8090') + '/v1/ingestions' }}",
           "sendBody": true,
           "specifyBody": "json",
           "jsonBody": "={{ ({\n  channel: 'gmail-forward',\n  subject: $json.subject || '',\n  from: (typeof $json.from === 'string' ? $json.from : (($json.from && $json.from.text) ? $json.from.text : '')),\n  messageId: $json.messageId || $json.message_id || '',\n  text: $json.textPlain || $json.text || $json.textHtml || $json.html || ($json.subject ? ('Subject: ' + $json.subject) : ''),\n  html: $json.textHtml || $json.html || '',\n  attachment_paths: Array.isArray($json.attachment_paths) ? $json.attachment_paths : []\n}) }}",

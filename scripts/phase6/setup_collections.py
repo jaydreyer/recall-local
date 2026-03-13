@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from urllib.parse import urlparse
 
 from dotenv import load_dotenv
+from qdrant_client import QdrantClient
+
+from scripts.shared_qdrant import create_qdrant_client
 
 COLLECTION_JOBS = "recall_jobs"
 COLLECTION_RESUME = "recall_resume"
@@ -59,13 +61,7 @@ class CollectionStatus:
 
 
 def qdrant_client_from_env():
-    from qdrant_client import QdrantClient
-
-    host_url = os.getenv("QDRANT_HOST", "http://localhost:6333").strip() or "http://localhost:6333"
-    parsed = urlparse(host_url)
-    if parsed.scheme:
-        return QdrantClient(url=host_url)
-    return QdrantClient(host=host_url, port=6333)
+    return create_qdrant_client(os.getenv("QDRANT_HOST"), client_cls=QdrantClient)
 
 
 def _existing_collection_names(client) -> set[str]:

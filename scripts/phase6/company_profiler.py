@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from scripts.shared_strings import slugify
+from scripts.shared_time import now_iso
 from scripts.phase6 import storage
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -21,7 +23,7 @@ _COMPANY_PROFILE_CACHE: dict[tuple[bool, int | None], tuple[float, str, list[dic
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return now_iso()
 
 
 def _cache_ttl_seconds() -> float:
@@ -32,11 +34,7 @@ def _cache_ttl_seconds() -> float:
 
 
 def slugify_company(name: str) -> str:
-    lowered = name.strip().lower()
-    cleaned = "".join(char if char.isalnum() else "-" for char in lowered)
-    while "--" in cleaned:
-        cleaned = cleaned.replace("--", "-")
-    return cleaned.strip("-") or "unknown-company"
+    return slugify(name, fallback="unknown-company")
 
 
 def _load_career_pages() -> list[dict[str, Any]]:

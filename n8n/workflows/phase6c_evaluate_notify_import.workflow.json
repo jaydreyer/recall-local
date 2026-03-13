@@ -36,7 +36,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "http://100.116.103.78:8090/v1/llm-settings",
+        "url": "={{ ($env.RECALL_BRIDGE_BASE_URL || 'http://localhost:8090') + '/v1/llm-settings' }}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -64,7 +64,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://100.116.103.78:8090/v1/job-evaluation-runs",
+        "url": "={{ ($env.RECALL_BRIDGE_BASE_URL || 'http://localhost:8090') + '/v1/job-evaluation-runs' }}",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ $json }}",

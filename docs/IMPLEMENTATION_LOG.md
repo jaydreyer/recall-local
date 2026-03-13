@@ -2,6 +2,54 @@
 
 Public-repo note: historical entries use placeholder hostnames and paths where the original logs referenced private machine details. Older file references remain as evidence-first text and may no longer be directly clickable.
 
+## 2026-03-13 - Public-readiness hardening, shared helpers, and bridge route extraction
+
+### What was executed
+
+- Removed reviewer-visible private-host leakage from public-facing code, workflow exports, shell examples, and wiring docs:
+  - standardized workflow bridge targets around `RECALL_BRIDGE_BASE_URL` with `http://localhost:8090` fallback
+  - replaced private host defaults in shell examples and hygiene tooling with localhost-safe values or the `ai-lab` alias
+  - removed the hardcoded deployment server default from FastAPI OpenAPI `servers`; local is now the only default and an optional deploy server can be injected with `RECALL_API_SERVER_DEPLOY`
+- Added shared helper modules in:
+  - `<repo-root>/scripts/shared_time.py`
+  - `<repo-root>/scripts/shared_strings.py`
+  - `<repo-root>/scripts/shared_qdrant.py`
+  - consolidated duplicated ISO timestamp, slug, and Qdrant client wiring used across Phase 0, Phase 1, and Phase 6 modules
+- Added direct regression coverage for previously reviewer-visible gaps in:
+  - `<repo-root>/tests/phase1/test_rag_query_pytest.py`
+  - `<repo-root>/tests/test_phase6_job_evaluator_pytest.py`
+  - `<repo-root>/tests/phase1/test_channel_adapters_pytest.py`
+  - `<repo-root>/tests/test_phase0_bootstrap_qdrant_pytest.py`
+  - `<repo-root>/tests/test_phase0_connectivity_check_pytest.py`
+- Expanded static type coverage in:
+  - `<repo-root>/pyproject.toml`
+  - now includes `scripts/phase1/rag_query.py` and `scripts/phase6/job_evaluator.py`
+- Extracted bridge endpoint registration out of the top-level FastAPI app file into:
+  - `<repo-root>/scripts/phase1/bridge_routes_core.py`
+  - `<repo-root>/scripts/phase1/bridge_routes_phase6.py`
+  - top-level app creation in `<repo-root>/scripts/phase1/ingest_bridge_api.py` now keeps startup, middleware, auth/rate-limiting, and fallback handlers while delegating route registration to dedicated modules
+
+### Validation
+
+- Search validation:
+  - `rg -n "100\\.116\\.103\\.78" scripts tests docs n8n/workflows README.md AGENTS.md`
+    - returned no matches
+- Focused validation:
+  - `python3 -m pytest -q tests/test_bridge_api_contract.py tests/test_phase5f_canonical_workflow_routes.py tests/phase1/test_rag_query_pytest.py tests/test_phase6_job_evaluator_pytest.py tests/phase1/test_channel_adapters_pytest.py tests/test_phase0_bootstrap_qdrant_pytest.py tests/test_phase0_connectivity_check_pytest.py`
+  - `python3 -m py_compile scripts/phase1/ingest_bridge_api.py scripts/phase1/bridge_routes_core.py scripts/phase1/bridge_routes_phase6.py`
+  - `python3 -m ruff check .`
+  - `python3 -m mypy`
+- Full regression:
+  - `python3 -m pytest tests/ -q`
+    - `229 passed`
+
+### Results
+
+- The public repo no longer exposes the prior private Tailnet IP in tracked source, workflow artifacts, or reviewer-facing docs.
+- Reviewer-visible Phase 1 and Phase 6 logic now has direct regression coverage instead of relying only on indirect flows.
+- Shared helper duplication was reduced without changing external API behavior.
+- The bridge API keeps the same `/v1/*` contract while route registration is now split out of the former single large route block.
+
 ## 2026-03-13 - Package boundaries and shared module APIs cleaned up
 
 ### What was executed

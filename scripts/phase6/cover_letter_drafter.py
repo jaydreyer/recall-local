@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import os
 import re
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -16,16 +15,16 @@ from scripts.phase6.job_evaluator import (  # noqa: PLC2701
     _load_runtime_settings,
 )
 from scripts.phase6.job_repository import get_job
+from scripts.shared_strings import slugify
+from scripts.shared_time import now_iso
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return now_iso()
 
 
 def _slugify(value: str) -> str:
-    lowered = value.strip().lower()
-    cleaned = re.sub(r"[^a-z0-9]+", "-", lowered)
-    return cleaned.strip("-") or "job"
+    return slugify(value, fallback="job")
 
 
 def _draft_prompt(*, job: dict[str, Any], resume_text: str) -> str:

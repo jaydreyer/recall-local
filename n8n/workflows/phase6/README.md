@@ -21,7 +21,7 @@ Purpose: build Phase 6B job-discovery workflows in n8n without JSON imports, usi
 1. Bridge reachable from n8n:
 
 ```text
-http://100.116.103.78:8090
+http://localhost:8090
 ```
 
 If n8n and bridge share a Docker network, `http://recall-ingest-bridge:8090` can also work.

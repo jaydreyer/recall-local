@@ -23,6 +23,8 @@ from scripts.phase6 import storage
 from scripts.phase6.company_profiler import list_tracked_company_configs
 from scripts.phase6.job_dedup import check_job_duplicate
 from scripts.phase6.setup_collections import COLLECTION_JOBS
+from scripts.shared_strings import slugify
+from scripts.shared_time import now_iso
 
 ROOT = Path(__file__).resolve().parents[2]
 JOB_SEARCH_CONFIG = ROOT / "config" / "job_search.json"
@@ -45,7 +47,7 @@ JOBSPY_SITES = ["indeed", "glassdoor", "zip_recruiter"]
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return now_iso()
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -59,10 +61,7 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def _slug(value: Any) -> str:
-    cleaned = "".join(char if char.isalnum() else "-" for char in str(value or "").strip().lower())
-    while "--" in cleaned:
-        cleaned = cleaned.replace("--", "-")
-    return cleaned.strip("-")
+    return slugify(value, fallback="")
 
 
 def _norm(value: Any) -> str:

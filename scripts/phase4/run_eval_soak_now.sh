@@ -39,7 +39,7 @@ Options:
 Examples:
   run_eval_soak_now.sh
   run_eval_soak_now.sh --iterations 7 --delay-seconds 10 --suite both
-  run_eval_soak_now.sh --n8n-host http://100.116.103.78:5678 --iterations 5
+  run_eval_soak_now.sh --n8n-host http://localhost:5678 --iterations 5
 EOF
 }
 

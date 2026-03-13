@@ -45,6 +45,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "scripts/eval/run_job_fit_golden.py" = ["E402"]
 "scripts/phase1/ingest_bridge_api.py" = ["B008", "E402", "I001"]
+"scripts/phase1/bridge_routes_core.py" = ["B008"]
 "scripts/phase1/ingest_from_payload.py" = ["E402"]
 "scripts/phase1/ingestion_pipeline.py" = ["E402"]
 "scripts/phase1/retrieval.py" = ["E402"]
@@ -68,6 +69,8 @@ files = [
   "scripts/llm_client.py",
   "scripts/phase1/group_model.py",
   "scripts/phase1/ingestion_pipeline.py",
+  "scripts/phase1/rag_query.py",
+  "scripts/phase6/job_evaluator.py",
   "tests/test_llm_client_pytest.py",
   "tests/phase1/test_group_model_pytest.py",
   "tests/phase1/test_ingestion_pipeline_pytest.py",

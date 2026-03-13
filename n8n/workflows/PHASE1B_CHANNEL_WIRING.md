@@ -34,7 +34,7 @@ Node sequence:
 `HTTP Request` settings:
 
 - Method: `POST`
-- URL: `={{ ($env.RECALL_BRIDGE_BASE_URL || 'http://100.116.103.78:8090') + '/v1/ingestions' }}`
+- URL: `={{ ($env.RECALL_BRIDGE_BASE_URL || 'http://localhost:8090') + '/v1/ingestions' }}`
 - Send Body: `true`
 - Body Content Type: `JSON`
 - JSON Body: `={{ Object.assign({}, ($json.body || $json), { channel: 'webhook' }) }}`
@@ -65,7 +65,7 @@ Node sequence:
 `HTTP Request` settings:
 
 - Method: `POST`
-- URL: `={{ ($env.RECALL_BRIDGE_BASE_URL || 'http://100.116.103.78:8090') + '/v1/ingestions' }}`
+- URL: `={{ ($env.RECALL_BRIDGE_BASE_URL || 'http://localhost:8090') + '/v1/ingestions' }}`
 - Send Body: `true`
 - Body Content Type: `JSON`
 - JSON Body:

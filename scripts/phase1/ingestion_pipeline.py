@@ -15,7 +15,6 @@ import sys
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import IO, Any, Iterable
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
@@ -39,6 +38,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.phase1.group_model import DEFAULT_GROUP, normalize_group
+from scripts.shared_qdrant import create_qdrant_client
+from scripts.shared_time import now_iso
 
 HEADING_RE = re.compile(r"^(#{1,6}\s+.+|[A-Z][A-Z0-9 _:/-]{4,})$")
 TRACKING_QUERY_KEYS = {
@@ -560,10 +561,7 @@ def _load_encoder():
 def qdrant_client_from_env(host_url: str):
     qdrant_module = _require_module("qdrant_client", "pip install -r requirements.txt")
     QdrantClient = qdrant_module.QdrantClient
-    parsed = urlparse(host_url)
-    if parsed.scheme:
-        return QdrantClient(url=host_url)
-    return QdrantClient(host=host_url, port=6333)
+    return create_qdrant_client(host_url, client_cls=QdrantClient)
 
 
 def _build_qdrant_points(
@@ -945,7 +943,7 @@ def _reader_proxy_url(url: str) -> str:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return now_iso()
 
 
 def parse_args() -> argparse.Namespace:

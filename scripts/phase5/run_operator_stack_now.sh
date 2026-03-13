@@ -41,7 +41,7 @@ Examples:
   run_operator_stack_now.sh up --recreate --preflight
   run_operator_stack_now.sh status
   run_operator_stack_now.sh logs recall-ingest-bridge
-  run_operator_stack_now.sh preflight --bridge-url http://100.116.103.78:8090 --n8n-host http://100.116.103.78:5678
+  run_operator_stack_now.sh preflight --bridge-url http://localhost:8090 --n8n-host http://localhost:5678
 HELP
 }
 

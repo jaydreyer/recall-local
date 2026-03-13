@@ -9,14 +9,15 @@ import re
 import threading
 import time
 import uuid
-from datetime import datetime, timezone
-from typing import Any
+from collections.abc import Sequence
+from typing import Any, cast
 
 import httpx
 
 from scripts.phase1.ingestion_pipeline import qdrant_client_from_env
 from scripts.phase6 import storage
 from scripts.phase6.setup_collections import COLLECTION_JOBS, COLLECTION_RESUME
+from scripts.shared_time import now_iso
 
 
 class MalformedResponseError(RuntimeError):
@@ -138,7 +139,7 @@ SKILL_NOISE_TOKENS = {
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return now_iso()
 
 
 def queue_job_evaluations(
@@ -434,7 +435,8 @@ def _escalation_reasons(*, evaluation: dict[str, Any], settings: dict[str, Any])
     threshold_gaps = int(settings.get("escalate_threshold_gaps", 2) or 0)
     threshold_words = int(settings.get("escalate_threshold_rationale_words", 20) or 0)
 
-    gaps = evaluation.get("gaps") if isinstance(evaluation.get("gaps"), list) else []
+    raw_gaps = evaluation.get("gaps")
+    gaps: list[Any] = raw_gaps if isinstance(raw_gaps, list) else []
     rationale = str(evaluation.get("score_rationale") or "").strip()
     rationale_words = len([word for word in rationale.split() if word])
 
@@ -893,7 +895,8 @@ def _normalize_gaps(raw: Any) -> list[dict[str, Any]]:
         if severity not in ALLOWED_SEVERITY:
             severity = "moderate"
 
-        recommendations_raw = item.get("recommendations") if isinstance(item.get("recommendations"), list) else []
+        raw_recommendations = item.get("recommendations")
+        recommendations_raw: list[Any] = raw_recommendations if isinstance(raw_recommendations, list) else []
         recommendations: list[dict[str, str]] = []
         for rec in recommendations_raw:
             if isinstance(rec, str):
@@ -995,9 +998,10 @@ def _ground_evaluation_to_context(
     grounded["matching_skills"] = matching_skills
     grounded["gaps"] = gaps
     scorecard = grounded.get("scorecard") if isinstance(grounded.get("scorecard"), dict) else {}
-    if all(field in scorecard for field in SCORECARD_FIELDS):
+    typed_scorecard = cast(dict[str, int], scorecard)
+    if all(field in typed_scorecard for field in SCORECARD_FIELDS):
         grounded["fit_score"] = _compute_fit_score(
-            scorecard=scorecard,
+            scorecard=typed_scorecard,
             matching_skills=matching_skills,
             gaps=gaps,
         )
@@ -1010,7 +1014,7 @@ def _normalized_blob(value: Any) -> str:
     return f" {normalized} "
 
 
-def _blob_contains_any(blob: str, needles: tuple[str, ...]) -> bool:
+def _blob_contains_any(blob: str, needles: Sequence[str]) -> bool:
     return any(str(needle).lower() in blob for needle in needles)
 
 

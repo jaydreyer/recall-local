@@ -46,7 +46,7 @@ return [
 
 - Node type: `HTTP Request`
 - Method: `POST`
-- URL: `http://100.116.103.78:8090/v1/job-discovery-runs`
+- URL: `http://localhost:8090/v1/job-discovery-runs`
 - Send body: `JSON`
 - JSON body expression: `={{ $json }}`
 - Response format: `JSON`
@@ -70,7 +70,7 @@ Expected response fields:
 
 - Node type: `HTTP Request`
 - Method: `POST`
-- URL: `http://100.116.103.78:5678/webhook/recall-job-evaluate`
+- URL: `http://localhost:5678/webhook/recall-job-evaluate`
 - Send body: `JSON`
 - JSON body:
 

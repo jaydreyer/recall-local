@@ -4,19 +4,16 @@
 from __future__ import annotations
 
 import os
-from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams
 
+from scripts.shared_qdrant import create_qdrant_client
+
 
 def qdrant_client_from_env() -> QdrantClient:
-    host_url = os.getenv("QDRANT_HOST", "http://localhost:6333")
-    parsed = urlparse(host_url)
-    if parsed.scheme:
-        return QdrantClient(url=host_url)
-    return QdrantClient(host=host_url, port=6333)
+    return create_qdrant_client(os.getenv("QDRANT_HOST"), client_cls=QdrantClient)
 
 
 def main() -> None:
