@@ -44,6 +44,97 @@ SCORECARD_WEIGHTS = {
     "seniority_alignment": 0.14,
     "communication_alignment": 0.14,
 }
+REQUIREMENT_GAP_HINTS = (
+    {
+        "label": "Pre-sales demo delivery",
+        "job_keywords": ("demo", "demos", "proof-of-concept", "proof of concept", "poc"),
+        "resume_keywords": ("demo", "demos", "proof-of-concept", "proof of concept", "technical presentation"),
+        "severity": "moderate",
+    },
+    {
+        "label": "Quota-carrying ownership",
+        "job_keywords": ("quota", "quota-carrying", "quota carrying"),
+        "resume_keywords": ("carried quota", "quota attainment", "quota ownership", "quota-carrying seller"),
+        "severity": "critical",
+    },
+    {
+        "label": "Commercial closing and sales cycle ownership",
+        "job_keywords": ("closing", "close new business", "sales cycle", "sales cycles", "full-cycle", "negotiate", "negotiation", "commercial terms"),
+        "resume_keywords": ("closed deals", "owned sales cycle", "negotiated contracts", "full-cycle sales", "carried commercial pipeline"),
+        "severity": "critical",
+    },
+    {
+        "label": "Account management and renewals",
+        "job_keywords": ("renewal", "renewals", "account manager", "account management", "technical account manager", "tam", "strategic customer relationships"),
+        "resume_keywords": ("owned renewals", "renewal book", "account management", "managed named accounts"),
+        "severity": "moderate",
+    },
+    {
+        "label": "Cloud architecture",
+        "job_keywords": ("cloud architecture", "aws", "azure", "gcp"),
+        "resume_keywords": ("cloud architecture", "aws", "azure", "gcp"),
+        "severity": "minor",
+    },
+    {
+        "label": "Go backend engineering",
+        "job_keywords": ("golang", " in go ", " go "),
+        "resume_keywords": ("golang", "built services in go", "go microservice", "production go backend"),
+        "severity": "critical",
+    },
+    {
+        "label": "Kubernetes / container orchestration",
+        "job_keywords": ("kubernetes", "k8s", "container orchestration"),
+        "resume_keywords": ("production kubernetes", "operated kubernetes", "k8s cluster", "container orchestration"),
+        "severity": "moderate",
+    },
+)
+REQUIREMENT_MATCH_HINTS = (
+    {
+        "label": "Solutions architecture",
+        "job_keywords": ("architecture", "architectures", "implementation programs", "deployment planning"),
+        "resume_keywords": ("api developer experience", "platform adoption", "rollout planning", "implementation", "architecture"),
+        "evidence": "Background includes platform adoption, implementation planning, and API ecosystem design.",
+    },
+    {
+        "label": "Customer and stakeholder partnership",
+        "job_keywords": ("customer stakeholders", "customer relationships", "stakeholders", "account teams"),
+        "resume_keywords": ("stakeholder", "cross-functional", "product, engineering", "customer-facing", "executive"),
+        "evidence": "Background includes cross-functional stakeholder partnership and customer-facing technical communication.",
+    },
+    {
+        "label": "Technical problem solving",
+        "job_keywords": ("technical recommendations", "technical problem solving", "architectures", "issue resolution"),
+        "resume_keywords": ("technical", "api enablement", "platform", "engineering organizations", "problem solving"),
+        "evidence": "Background includes technical enablement, platform problem solving, and collaboration with engineering teams.",
+    },
+)
+GENERIC_GAP_PATTERNS = (
+    "leadership",
+    "more experience",
+    "direct ownership of a named tam title",
+    "infrastructure specialization",
+)
+SKILL_NOISE_TOKENS = {
+    "a",
+    "an",
+    "and",
+    "background",
+    "capability",
+    "capabilities",
+    "domain",
+    "expertise",
+    "experience",
+    "experiences",
+    "for",
+    "in",
+    "knowledge",
+    "of",
+    "skill",
+    "skills",
+    "the",
+    "using",
+    "with",
+}
 
 
 def _now_iso() -> str:
@@ -196,6 +287,7 @@ def evaluate_job(*, job_id: str, settings: dict[str, Any]) -> dict[str, Any]:
         settings=settings,
         retry_mode=model_mode,
     )
+    evaluation = _ground_evaluation_to_context(job=job, resume_text=resume_text, evaluation=evaluation)
 
     escalation_reasons = _escalation_reasons(evaluation=evaluation, settings=settings) if model_mode == "local" else []
     escalated = model_mode == "local" and bool(escalation_reasons)
@@ -208,6 +300,7 @@ def evaluate_job(*, job_id: str, settings: dict[str, Any]) -> dict[str, Any]:
             settings=settings,
             retry_mode="cloud",
         )
+        cloud_eval = _ground_evaluation_to_context(job=job, resume_text=resume_text, evaluation=cloud_eval)
         evaluation = _merge_evaluations(local_eval=evaluation, cloud_eval=cloud_eval)
         evaluation["evaluation_model"] = "cloud_escalated"
     else:
@@ -282,6 +375,7 @@ def parse_evaluation(response_text: str) -> dict[str, Any]:
 
     matching_skills = _normalize_matching_skills(data.get("matching_skills"))
     gaps = _normalize_gaps(data.get("gaps"))
+    matching_skills, gaps = _resolve_signal_conflicts(matching_skills=matching_skills, gaps=gaps)
     scorecard = _normalize_scorecard(data.get("scorecard"))
     fit_score = _compute_fit_score(scorecard=scorecard, matching_skills=matching_skills, gaps=gaps)
     raw_model_fit_score = None
@@ -437,6 +531,11 @@ def _build_evaluation_prompt(*, job: dict[str, Any], resume_text: str) -> str:
         "65-79 means plausible fit with meaningful ramp. "
         "45-64 means stretch. Below 45 means weak fit.\n"
         "Be specific about missing skills and provide practical recommendations.\n\n"
+        "Consistency rules:\n"
+        "- Do NOT list the same competency in both matching_skills and gaps.\n"
+        "- If the resume shows meaningful evidence for a competency, keep it only in matching_skills.\n"
+        "- Only include a gap when the resume lacks clear evidence for that exact competency.\n"
+        "- Avoid vague gaps like 'more experience' when you can name the exact platform, workflow, or domain.\n\n"
         "Return ONLY valid JSON:\n"
         "{\n"
         '  "scorecard": {\n'
@@ -683,18 +782,26 @@ def _normalize_matching_skills(raw: Any) -> list[dict[str, str]]:
         raise MalformedResponseError("matching_skills must be a list")
 
     normalized: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
     for item in raw:
         if isinstance(item, str):
             skill = item.strip()
             if skill:
-                normalized.append({"skill": skill, "evidence": ""})
+                normalized_item = {"skill": skill, "evidence": ""}
+                signature = (_canonical_signal_key(skill), "")
+                if signature not in seen:
+                    normalized.append(normalized_item)
+                    seen.add(signature)
             continue
         if not isinstance(item, dict):
             continue
         skill = str(item.get("skill") or item.get("name") or "").strip()
         evidence = str(item.get("evidence") or item.get("proof") or "").strip()
         if skill:
-            normalized.append({"skill": skill, "evidence": evidence})
+            signature = (_canonical_signal_key(skill), evidence.strip().lower())
+            if signature not in seen:
+                normalized.append({"skill": skill, "evidence": evidence})
+                seen.add(signature)
     return normalized
 
 
@@ -745,17 +852,21 @@ def _normalize_gaps(raw: Any) -> list[dict[str, Any]]:
         raise MalformedResponseError("gaps must be a list")
 
     normalized: list[dict[str, Any]] = []
+    seen: set[str] = set()
     for item in raw:
         if isinstance(item, str):
             gap = item.strip()
             if gap:
-                normalized.append(
-                    {
-                        "gap": gap,
-                        "severity": "moderate",
-                        "recommendations": [],
-                    }
-                )
+                canonical_gap = _canonical_signal_key(gap)
+                if canonical_gap not in seen:
+                    normalized.append(
+                        {
+                            "gap": gap,
+                            "severity": "moderate",
+                            "recommendations": [],
+                        }
+                    )
+                    seen.add(canonical_gap)
             continue
 
         if not isinstance(item, dict):
@@ -803,6 +914,10 @@ def _normalize_gaps(raw: Any) -> list[dict[str, Any]]:
                 }
             )
 
+        canonical_gap = _canonical_signal_key(gap)
+        if canonical_gap in seen:
+            continue
+
         normalized.append(
             {
                 "gap": gap,
@@ -810,8 +925,146 @@ def _normalize_gaps(raw: Any) -> list[dict[str, Any]]:
                 "recommendations": recommendations,
             }
         )
+        seen.add(canonical_gap)
 
     return normalized
+
+
+def _ground_evaluation_to_context(
+    *,
+    job: dict[str, Any],
+    resume_text: str,
+    evaluation: dict[str, Any],
+) -> dict[str, Any]:
+    grounded = dict(evaluation)
+    matching_skills = list(grounded.get("matching_skills") or [])
+    gaps = list(grounded.get("gaps") or [])
+    description_blob = _normalized_blob(job.get("description"))
+    resume_blob = _normalized_blob(resume_text)
+
+    explicit_hints: list[dict[str, Any]] = []
+    for hint in REQUIREMENT_GAP_HINTS:
+        if not _blob_contains_any(description_blob, hint["job_keywords"]):
+            continue
+        if _blob_contains_any(resume_blob, hint["resume_keywords"]):
+            continue
+        if any(_signals_overlap(match.get("skill"), hint["label"]) for match in matching_skills):
+            continue
+        if any(_signals_overlap(gap.get("gap"), hint["label"]) for gap in gaps):
+            continue
+        explicit_hints.append(
+            {
+                "gap": hint["label"],
+                "severity": hint["severity"],
+                "recommendations": [],
+            }
+        )
+
+    if explicit_hints:
+        filtered_gaps: list[dict[str, Any]] = []
+        for gap in gaps:
+            gap_name = str(gap.get("gap") or "")
+            if _is_generic_gap(gap_name) and not _gap_grounded_in_description(gap_name, description_blob):
+                continue
+            filtered_gaps.append(gap)
+        gaps = explicit_hints + filtered_gaps
+
+    for hint in REQUIREMENT_MATCH_HINTS:
+        if not _blob_contains_any(description_blob, hint["job_keywords"]):
+            continue
+        if not _blob_contains_any(resume_blob, hint["resume_keywords"]):
+            continue
+        if any(_signals_overlap(match.get("skill"), hint["label"]) for match in matching_skills):
+            continue
+        matching_skills.append({"skill": hint["label"], "evidence": hint["evidence"]})
+
+    matching_skills, gaps = _resolve_signal_conflicts(matching_skills=matching_skills, gaps=gaps)
+    grounded["matching_skills"] = matching_skills
+    grounded["gaps"] = gaps
+    scorecard = grounded.get("scorecard") if isinstance(grounded.get("scorecard"), dict) else {}
+    if all(field in scorecard for field in SCORECARD_FIELDS):
+        grounded["fit_score"] = _compute_fit_score(
+            scorecard=scorecard,
+            matching_skills=matching_skills,
+            gaps=gaps,
+        )
+    return grounded
+
+
+def _normalized_blob(value: Any) -> str:
+    text = str(value or "").lower()
+    normalized = re.sub(r"\s+", " ", text)
+    return f" {normalized} "
+
+
+def _blob_contains_any(blob: str, needles: tuple[str, ...]) -> bool:
+    return any(str(needle).lower() in blob for needle in needles)
+
+
+def _is_generic_gap(value: Any) -> bool:
+    normalized = _canonical_signal_key(value)
+    return any(pattern in normalized for pattern in GENERIC_GAP_PATTERNS)
+
+
+def _gap_grounded_in_description(value: Any, description_blob: str) -> bool:
+    canonical = _canonical_signal_key(value)
+    if not canonical:
+        return False
+    tokens = canonical.split()
+    meaningful = [token for token in tokens if len(token) > 2]
+    return sum(1 for token in meaningful if f" {token} " in description_blob) >= min(2, len(meaningful))
+
+
+def _canonical_signal_key(value: Any) -> str:
+    tokens = [
+        token
+        for token in re.findall(r"[a-z0-9]+", str(value or "").lower())
+        if token and token not in SKILL_NOISE_TOKENS
+    ]
+    if not tokens:
+        return ""
+    return " ".join(tokens)
+
+
+def _signals_overlap(left: Any, right: Any) -> bool:
+    left_key = _canonical_signal_key(left)
+    right_key = _canonical_signal_key(right)
+    if not left_key or not right_key:
+        return False
+    if left_key == right_key:
+        return True
+
+    left_tokens = left_key.split()
+    right_tokens = right_key.split()
+    if len(left_tokens) == 1 and left_tokens[0] in right_tokens:
+        return True
+    if len(right_tokens) == 1 and right_tokens[0] in left_tokens:
+        return True
+    if len(left_tokens) >= 2 and all(token in right_tokens for token in left_tokens):
+        return True
+    if len(right_tokens) >= 2 and all(token in left_tokens for token in right_tokens):
+        return True
+    return False
+
+
+def _resolve_signal_conflicts(
+    *,
+    matching_skills: list[dict[str, str]],
+    gaps: list[dict[str, Any]],
+) -> tuple[list[dict[str, str]], list[dict[str, Any]]]:
+    evidence_backed_matches: list[dict[str, str]] = [
+        item for item in matching_skills if str(item.get("evidence") or "").strip()
+    ]
+    if not evidence_backed_matches or not gaps:
+        return matching_skills, gaps
+
+    filtered_gaps: list[dict[str, Any]] = []
+    for gap in gaps:
+        gap_name = gap.get("gap")
+        if any(_signals_overlap(match.get("skill"), gap_name) for match in evidence_backed_matches):
+            continue
+        filtered_gaps.append(gap)
+    return matching_skills, filtered_gaps
 
 
 def _store_evaluation(*, job_id: str, evaluation: dict[str, Any]) -> None:

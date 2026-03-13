@@ -81,6 +81,187 @@ class Phase6CEvaluatorObservationTests(unittest.TestCase):
         recommendation = parsed["gaps"][0]["recommendations"][0]
         self.assertEqual(recommendation["url"], "https://kodekloud.com/courses/kubernetes-for-developers/")
 
+    def test_parse_evaluation_removes_gap_that_duplicates_evidenced_matching_skill(self) -> None:
+        parsed = job_evaluator.parse_evaluation(
+            """
+            {
+              "scorecard": {
+                "role_alignment": 4,
+                "technical_alignment": 4,
+                "domain_alignment": 4,
+                "seniority_alignment": 4,
+                "communication_alignment": 5
+              },
+              "score_rationale": "Strong alignment with customer-facing AI deployment work.",
+              "matching_skills": [
+                {
+                  "skill": "Generative AI (ChatGPT)",
+                  "evidence": "Built a custom GPT replacing a $50K recruiter workflow."
+                }
+              ],
+              "gaps": [
+                {
+                  "gap": "Generative AI (ChatGPT) experience",
+                  "severity": "moderate",
+                  "recommendations": []
+                },
+                {
+                  "gap": "Pre-sales demos",
+                  "severity": "moderate",
+                  "recommendations": []
+                }
+              ]
+            }
+            """
+        )
+
+        self.assertEqual(len(parsed["matching_skills"]), 1)
+        self.assertEqual(len(parsed["gaps"]), 1)
+        self.assertEqual(parsed["gaps"][0]["gap"], "Pre-sales demos")
+
+    def test_parse_evaluation_dedupes_matching_skills_and_gaps_by_canonical_label(self) -> None:
+        parsed = job_evaluator.parse_evaluation(
+            """
+            {
+              "scorecard": {
+                "role_alignment": 4,
+                "technical_alignment": 4,
+                "domain_alignment": 3,
+                "seniority_alignment": 4,
+                "communication_alignment": 4
+              },
+              "score_rationale": "Solid fit with one notable execution gap.",
+              "matching_skills": [
+                {"skill": "API strategy", "evidence": "Led API governance"},
+                {"skill": "API strategy experience", "evidence": "Led API governance"}
+              ],
+              "gaps": [
+                {"gap": "Kubernetes", "severity": "moderate", "recommendations": []},
+                {"gap": "Kubernetes experience", "severity": "minor", "recommendations": []}
+              ]
+            }
+            """
+        )
+
+        self.assertEqual(len(parsed["matching_skills"]), 1)
+        self.assertEqual(parsed["matching_skills"][0]["skill"], "API strategy")
+        self.assertEqual(len(parsed["gaps"]), 1)
+        self.assertEqual(parsed["gaps"][0]["gap"], "Kubernetes")
+
+    def test_ground_evaluation_replaces_generic_gap_with_explicit_requirement_gap(self) -> None:
+        evaluation = {
+            "fit_score": 75,
+            "raw_model_fit_score": None,
+            "scorecard": {
+                "role_alignment": 4,
+                "technical_alignment": 4,
+                "domain_alignment": 5,
+                "seniority_alignment": 3,
+                "communication_alignment": 5,
+            },
+            "scoring_version": "rubric_v1",
+            "score_rationale": "Strong fit with one notable gap.",
+            "matching_skills": [
+                {"skill": "API governance", "evidence": "Led API governance"},
+                {"skill": "Developer workflows", "evidence": "Managed developer portal"},
+            ],
+            "gaps": [
+                {"gap": "Leadership experience", "severity": "critical", "recommendations": []},
+            ],
+            "application_tips": "",
+            "cover_letter_angle": "",
+        }
+
+        grounded = job_evaluator._ground_evaluation_to_context(  # noqa: SLF001
+            job={
+                "title": "Solutions Engineer",
+                "company": "Postman",
+                "location": "Remote - US",
+                "description": "Lead technical discovery, run product demos, and support proof-of-concept delivery for enterprise customers.",
+            },
+            resume_text="API governance, developer experience, and stakeholder enablement background.",
+            evaluation=evaluation,
+        )
+
+        gaps = [item["gap"] for item in grounded["gaps"]]
+        self.assertIn("Pre-sales demo delivery", gaps)
+        self.assertNotIn("Leadership experience", gaps)
+        self.assertGreaterEqual(grounded["fit_score"], 79)
+
+    def test_ground_evaluation_adds_missing_backend_requirement_gaps(self) -> None:
+        evaluation = {
+            "fit_score": 47,
+            "raw_model_fit_score": None,
+            "scorecard": {
+                "role_alignment": 3,
+                "technical_alignment": 2,
+                "domain_alignment": 2,
+                "seniority_alignment": 2,
+                "communication_alignment": 4,
+            },
+            "scoring_version": "rubric_v1",
+            "score_rationale": "Stretch fit with backend gaps.",
+            "matching_skills": [
+                {"skill": "API governance", "evidence": "Worked with engineering teams"},
+            ],
+            "gaps": [
+                {"gap": "infrastructure specialization", "severity": "moderate", "recommendations": []},
+            ],
+            "application_tips": "",
+            "cover_letter_angle": "",
+        }
+
+        grounded = job_evaluator._ground_evaluation_to_context(  # noqa: SLF001
+            job={
+                "title": "Senior Backend Engineer",
+                "company": "Glean",
+                "location": "Remote - US",
+                "description": "Build distributed services in Go and improve Kubernetes-based infrastructure reliability.",
+            },
+            resume_text="Strong API governance, stakeholder communication, and developer enablement background.",
+            evaluation=evaluation,
+        )
+
+        gaps = [item["gap"] for item in grounded["gaps"]]
+        self.assertIn("Go backend engineering", gaps)
+        self.assertIn("Kubernetes / container orchestration", gaps)
+
+    def test_ground_evaluation_adds_requirement_aligned_matching_skill_hints(self) -> None:
+        evaluation = {
+            "fit_score": 90,
+            "raw_model_fit_score": None,
+            "scorecard": {
+                "role_alignment": 5,
+                "technical_alignment": 5,
+                "domain_alignment": 4,
+                "seniority_alignment": 4,
+                "communication_alignment": 5,
+            },
+            "scoring_version": "rubric_v1",
+            "score_rationale": "Strong fit for customer deployment work.",
+            "matching_skills": [
+                {"skill": "API integration", "evidence": "Managed API developer experience"},
+            ],
+            "gaps": [],
+            "application_tips": "",
+            "cover_letter_angle": "",
+        }
+
+        grounded = job_evaluator._ground_evaluation_to_context(  # noqa: SLF001
+            job={
+                "title": "AI Deployment Engineer",
+                "company": "OpenAI",
+                "location": "Remote - US",
+                "description": "Partner with account teams, guide implementation programs, review architectures, and support customer stakeholders.",
+            },
+            resume_text="Guided platform adoption, implementation planning, cross-functional stakeholder work, and executive customer communication.",
+            evaluation=evaluation,
+        )
+
+        skills = [item["skill"] for item in grounded["matching_skills"]]
+        self.assertIn("Solutions architecture", skills)
+        self.assertIn("Customer and stakeholder partnership", skills)
+
     def test_parse_with_retry_uses_strict_prompt_after_malformed_json(self) -> None:
         with (
             patch(

@@ -36,6 +36,8 @@ This folder is the source of truth for what has been planned, implemented, and c
 - `../n8n/workflows/payload_examples/rag_query_learning_payload_example.json`: Sample Workflow 02 payload for `mode=learning` with learning-focused `filter_tags`.
 - `../n8n/workflows/payload_examples/rag_query_hybrid_payload_example.json`: Sample Workflow 02 payload using Phase 3B `hybrid` retrieval + reranker options.
 - `../scripts/eval/job_search_eval_cases.json`: Dedicated job-search eval suite for shared eval harness.
+- `../scripts/eval/golden_sets/job_fit_golden_v1.json`: Versioned Phase 6 job-fit calibration cases for evaluator quality checks.
+- `../scripts/eval/run_job_fit_golden.py`: Phase 6 golden runner for score-band and signal-quality checks against synthetic representative roles.
 - `../scripts/eval/learning_eval_cases.json`: Dedicated learning-mode eval suite for shared eval harness.
 - `../prompts/job_search_coach.md`: Workflow 02 job-search prompt profile used by `mode=job-search`.
 - `../prompts/learning_coach.md`: Workflow 02 learning prompt profile used by `mode=learning`.

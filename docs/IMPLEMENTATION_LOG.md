@@ -1,5 +1,60 @@
 # Recall.local Implementation Log
 
+## 2026-03-13 - Job-fit golden calibration lane added
+
+### What was executed
+
+- Added a versioned Phase 6 golden set in:
+  - [/Users/jaydreyer/projects/recall-local/scripts/eval/golden_sets/job_fit_golden_v1.json](/Users/jaydreyer/projects/recall-local/scripts/eval/golden_sets/job_fit_golden_v1.json)
+  - contains representative synthetic job-fit calibration cases spanning strong-fit, good-fit, mixed-fit, and stretch-fit roles
+- Added a dedicated golden runner in:
+  - [/Users/jaydreyer/projects/recall-local/scripts/eval/run_job_fit_golden.py](/Users/jaydreyer/projects/recall-local/scripts/eval/run_job_fit_golden.py)
+  - evaluates each case against the Phase 6 evaluator prompt/parser path
+  - checks score bands plus required/forbidden matching-skill and gap terms
+  - writes JSON artifacts under `data/artifacts/evals/job-fit-golden`
+- Added regression coverage in:
+  - [/Users/jaydreyer/projects/recall-local/tests/test_phase6_job_fit_golden.py](/Users/jaydreyer/projects/recall-local/tests/test_phase6_job_fit_golden.py)
+
+### Validation
+
+- Local validation:
+  - `python3 -m unittest tests.test_phase6_job_fit_golden tests.test_phase6c_evaluation_observation`
+  - `python3 -m py_compile scripts/eval/run_job_fit_golden.py`
+- Local model-run note:
+  - `python3 scripts/eval/run_job_fit_golden.py --max-cases 1 --dry-run`
+  - failed on this Mac because `http://localhost:11434/api/generate` returned `404`; the runner is intended to be executed where the Ollama runtime is actually available
+
+### Results
+
+- Recall.local now has a repeatable calibration lane for Phase 6 evaluator quality instead of relying only on ad hoc spot checks.
+- Future prompt/parser changes can be judged against explicit fit expectations for representative target roles.
+
+## 2026-03-13 - Evaluation signal consistency hardening
+
+### What was executed
+
+- Tightened Phase 6 evaluation prompt guidance in:
+  - [/Users/jaydreyer/projects/recall-local/scripts/phase6/job_evaluator.py](/Users/jaydreyer/projects/recall-local/scripts/phase6/job_evaluator.py)
+  - added explicit consistency rules so the model should not place the same competency in both `matching_skills` and `gaps`
+- Hardened parser-side evaluation cleanup in:
+  - [/Users/jaydreyer/projects/recall-local/scripts/phase6/job_evaluator.py](/Users/jaydreyer/projects/recall-local/scripts/phase6/job_evaluator.py)
+  - dedupes repeated skills/gaps by canonical label
+  - removes contradiction cases where an evidence-backed matching skill overlaps the same named gap
+- Added regression coverage in:
+  - [/Users/jaydreyer/projects/recall-local/tests/test_phase6c_evaluation_observation.py](/Users/jaydreyer/projects/recall-local/tests/test_phase6c_evaluation_observation.py)
+  - covers duplicated skills/gaps and match-vs-gap contradiction cleanup
+
+### Validation
+
+- Local validation:
+  - `python3 -m unittest tests.test_phase6c_evaluation_observation`
+  - `python3 -m py_compile scripts/phase6/job_evaluator.py`
+
+### Results
+
+- Phase 6 evaluations should now surface cleaner matching-skill and gap lists when the model produces overlapping signals.
+- The dashboard and notifications should be less likely to present obviously contradictory fit narratives for the same role.
+
 ## 2026-03-13 - Server-backed job search for dashboard triage
 
 ### What was executed
