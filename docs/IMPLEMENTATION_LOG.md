@@ -1,5 +1,106 @@
 # Recall.local Implementation Log
 
+## 2026-03-13 - README testing narrative and Phase 0/4 regression coverage added
+
+### What was executed
+
+- Expanded the public repo overview in:
+  - [/Users/jaydreyer/projects/recall-local/README.md](/Users/jaydreyer/projects/recall-local/README.md)
+  - added a reviewer-facing testing strategy section
+  - documented the current measured baseline (`182` tests, `49.62%` coverage)
+  - linked the highest-signal test files for maintainability review
+- Added direct Phase 0 regression coverage in:
+  - [/Users/jaydreyer/projects/recall-local/tests/test_phase0_bootstrap_sqlite_pytest.py](/Users/jaydreyer/projects/recall-local/tests/test_phase0_bootstrap_sqlite_pytest.py)
+  - verifies the SQLite bootstrap creates the expected schema and prints the expected summary
+- Added direct Phase 4 regression coverage in:
+  - [/Users/jaydreyer/projects/recall-local/tests/test_phase4_summarize_eval_trend_pytest.py](/Users/jaydreyer/projects/recall-local/tests/test_phase4_summarize_eval_trend_pytest.py)
+  - covers failure-reason normalization
+  - covers missing-result error shaping
+  - covers Markdown summary rendering
+
+### Validation
+
+- Local validation:
+  - `python3 -m pytest -q tests/test_phase0_bootstrap_sqlite_pytest.py tests/test_phase4_summarize_eval_trend_pytest.py`
+
+### Results
+
+- The public README now explains the testing story instead of leaving reviewers to infer it from CI and scattered test files.
+- Phase 0 and Phase 4 no longer look entirely untested from a quick repo scan.
+
+## 2026-03-13 - Pytest fixtures, coverage reporting, and missing-module tests added
+
+### What was executed
+
+- Added shared pytest fixtures in:
+  - [/Users/jaydreyer/projects/recall-local/tests/conftest.py](/Users/jaydreyer/projects/recall-local/tests/conftest.py)
+  - centralizes temporary SQLite and vault setup for newer tests
+- Added pytest configuration in:
+  - [/Users/jaydreyer/projects/recall-local/pyproject.toml](/Users/jaydreyer/projects/recall-local/pyproject.toml)
+  - standardizes test discovery and output for `pytest`
+- Added coverage reporting and a minimum coverage gate in CI in:
+  - [/Users/jaydreyer/projects/recall-local/.github/workflows/quality_checks.yml](/Users/jaydreyer/projects/recall-local/.github/workflows/quality_checks.yml)
+  - installs `pytest-cov`
+  - runs suite coverage against `scripts/`
+  - fails CI if total measured coverage drops below `25%`
+- Added focused pytest coverage for previously untested modules in:
+  - [/Users/jaydreyer/projects/recall-local/tests/test_phase6_storage_pytest.py](/Users/jaydreyer/projects/recall-local/tests/test_phase6_storage_pytest.py)
+  - [/Users/jaydreyer/projects/recall-local/tests/test_phase6_job_dedup_pytest.py](/Users/jaydreyer/projects/recall-local/tests/test_phase6_job_dedup_pytest.py)
+  - [/Users/jaydreyer/projects/recall-local/tests/test_phase6_cover_letter_drafter_pytest.py](/Users/jaydreyer/projects/recall-local/tests/test_phase6_cover_letter_drafter_pytest.py)
+  - [/Users/jaydreyer/projects/recall-local/tests/test_phase3_backup_restore_state_pytest.py](/Users/jaydreyer/projects/recall-local/tests/test_phase3_backup_restore_state_pytest.py)
+- Added an integration-style test that crosses the Phase 1 bridge and Phase 6 draft generation path in:
+  - [/Users/jaydreyer/projects/recall-local/tests/test_phase1_phase6_cover_letter_flow_pytest.py](/Users/jaydreyer/projects/recall-local/tests/test_phase1_phase6_cover_letter_flow_pytest.py)
+  - exercises the actual FastAPI route plus the real Phase 6 drafter function with patched model/data dependencies
+- Added parameterized pytest coverage patterns for normalization and helper behavior where table-driven tests improve clarity.
+
+### Validation
+
+- Local validation:
+  - `python3 -m pytest -q tests/test_phase6_storage_pytest.py tests/test_phase6_job_dedup_pytest.py tests/test_phase6_cover_letter_drafter_pytest.py tests/test_phase3_backup_restore_state_pytest.py tests/test_phase1_phase6_cover_letter_flow_pytest.py`
+  - `python3 -m pytest tests/ -q --cov=scripts --cov-report=term-missing --cov-fail-under=25`
+    - `182 passed`
+    - `TOTAL coverage: 49.62%`
+
+### Results
+
+- The repo now has a shared pytest fixture layer instead of requiring every new test file to hand-roll the same temp resource setup.
+- CI now reports and enforces measured Python coverage rather than treating test execution as binary pass/fail only.
+- Several reviewer-visible "zero-test" modules now have direct regression coverage, and the suite includes at least one cross-module request flow instead of only isolated helper tests.
+
+## 2026-03-13 - Reviewer-facing README/API/design docs and algorithm commentary added
+
+### What was executed
+
+- Added a public top-level repo overview in:
+  - [/Users/jaydreyer/projects/recall-local/README.md](/Users/jaydreyer/projects/recall-local/README.md)
+  - gives recruiters and interviewers a direct landing page with architecture, API, and status links
+- Added reviewer-focused API documentation in:
+  - [/Users/jaydreyer/projects/recall-local/docs/Recall_local_API_Reference.md](/Users/jaydreyer/projects/recall-local/docs/Recall_local_API_Reference.md)
+  - explicitly surfaces the existing FastAPI docs at `/docs`, `/redoc`, and `/openapi.json`
+  - summarizes the collection-first resource model and key endpoint groups
+- Added a concise design rationale document in:
+  - [/Users/jaydreyer/projects/recall-local/docs/Recall_local_Design_Decisions.md](/Users/jaydreyer/projects/recall-local/docs/Recall_local_Design_Decisions.md)
+  - explains local-first runtime, dual memory, the thin bridge API, layered retrieval, and local-first evaluation with escalation
+- Updated the docs index in:
+  - [/Users/jaydreyer/projects/recall-local/docs/README.md](/Users/jaydreyer/projects/recall-local/docs/README.md)
+  - elevates the new reviewer-facing entrypoints near the top
+- Added docstrings and algorithm comments in:
+  - [/Users/jaydreyer/projects/recall-local/scripts/phase1/retrieval.py](/Users/jaydreyer/projects/recall-local/scripts/phase1/retrieval.py)
+  - [/Users/jaydreyer/projects/recall-local/scripts/phase6/job_evaluator.py](/Users/jaydreyer/projects/recall-local/scripts/phase6/job_evaluator.py)
+  - clarifies how hybrid ranking, heuristic reranking, and batch evaluation/error isolation work
+
+### Validation
+
+- Local validation:
+  - `python3 -m py_compile scripts/phase1/retrieval.py`
+  - `python3 -m py_compile scripts/phase6/job_evaluator.py`
+
+### Results
+
+- The repo now has a clear public landing page instead of relying on phase docs as the first reviewer touchpoint.
+- The FastAPI bridge’s existing OpenAPI/Swagger surfaces are now explicitly documented and discoverable.
+- The most inspection-heavy ranking and scoring helpers are easier to understand without reverse-engineering the full implementation.
+
 ## 2026-03-13 - Production assert removed and Ruff/pre-commit scaffolding added
 
 ### What was executed

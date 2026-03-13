@@ -322,6 +322,12 @@ def _import_llm_client():
 
 
 def _apply_hybrid_ranking(chunks: list[RetrievedChunk], *, query: str, alpha: float) -> list[RetrievedChunk]:
+    """Blend dense vector similarity with sparse token overlap for final ranking.
+
+    The dense score gives broad semantic recall. The sparse score restores some
+    exact-term precision, which matters for quoted titles and high-signal
+    keywords. `alpha` controls the balance between those two signals.
+    """
     if not chunks:
         return []
 
@@ -331,7 +337,11 @@ def _apply_hybrid_ranking(chunks: list[RetrievedChunk], *, query: str, alpha: fl
 
     for index, item in enumerate(chunks):
         chunk_tokens = _tokenize(f"{item.title} {item.text}")
+        # Sparse overlap intentionally stays simple and deterministic so it can
+        # complement embeddings without introducing another opaque model stage.
         sparse_score = _token_overlap_score(query_tokens, chunk_tokens)
+        # Hybrid score keeps dense recall as the anchor, then nudges results up
+        # or down based on lexical agreement with the query.
         hybrid_score = (alpha * dense_norms[index]) + ((1.0 - alpha) * sparse_score)
         item.sparse_score = sparse_score
         item.hybrid_score = hybrid_score
@@ -354,6 +364,12 @@ def _apply_heuristic_reranker(
     reranker_weight: float,
     title_hints: list[str] | None = None,
 ) -> list[RetrievedChunk]:
+    """Apply a lightweight lexical reranker on top of vector or hybrid recall.
+
+    This stage is intentionally heuristic rather than model-based: it improves
+    precision for exact phrases and likely title matches while keeping runtime
+    cheap and easy to reason about during debugging.
+    """
     if not chunks:
         return []
 
@@ -369,11 +385,16 @@ def _apply_heuristic_reranker(
 
         token_overlap = _jaccard(query_token_set, item_token_set)
         phrase_overlap = _jaccard(query_bigrams, item_bigrams) if query_bigrams else 0.0
+        # Token overlap preserves general lexical similarity; bigrams reward
+        # phrase continuity so exact multi-word intent is not washed out.
         lexical_relevance = (0.7 * token_overlap) + (0.3 * phrase_overlap)
         title_match_score = _title_match_score(item=item, title_hints=normalized_title_hints)
         item.title_match_score = title_match_score
         lexical_with_title = lexical_relevance if title_match_score <= 0 else max(lexical_relevance, title_match_score)
         base_score = item.score
+        # The reranker blends the existing retrieval score with lexical
+        # precision. Exact title signals get an extra boost because they tend to
+        # indicate the user is targeting a specific document, not a theme.
         rerank_score = ((1.0 - reranker_weight) * base_score) + (reranker_weight * lexical_with_title)
         if title_match_score > 0:
             rerank_score += 0.35 * title_match_score

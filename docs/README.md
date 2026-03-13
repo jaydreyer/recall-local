@@ -2,9 +2,20 @@
 
 This folder is the source of truth for what has been planned, implemented, and currently running.
 
+## Public Reviewer Entrypoints
+
+- `../README.md`: Top-level public overview for recruiters, interviewers, and repo reviewers.
+- `Recall_local_Architecture_Diagram.md`: Fast visual architecture walkthrough.
+- `Recall_local_Design_Decisions.md`: Concise explanation of why the system is structured this way.
+- `Recall_local_API_Reference.md`: Reviewer-facing FastAPI guide, including Swagger/OpenAPI locations.
+- `IMPLEMENTATION_LOG.md`: Chronological evidence of shipped work and validation.
+- `ENVIRONMENT_INVENTORY.md`: Current runtime and environment snapshot.
+
 ## Core Documents
 
 - `Recall_local_PRD.md`: Product requirements and architecture intent.
+- `Recall_local_Design_Decisions.md`: Reviewer-focused summary of the major architectural tradeoffs.
+- `Recall_local_API_Reference.md`: Reviewer-facing API overview and OpenAPI guide.
 - `Recall_local_Phase0_Guide.md`: Phase 0 implementation instructions.
 - `Recall_local_Phase1_Guide.md`: Phase 1 kickoff implementation and runbook.
 - `Recall_local_Phase1D_Eval_Guide.md`: Eval harness runbook and troubleshooting protocol.

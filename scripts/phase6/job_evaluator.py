@@ -232,6 +232,13 @@ def _run_job_eval_background(*, run_id: str, job_ids: list[str], settings: dict[
 
 
 def _evaluate_jobs(*, job_ids: list[str], settings: dict[str, Any]) -> dict[str, Any]:
+    """Evaluate a batch of jobs and keep per-job failures isolated.
+
+    The batch API is intentionally resilient: one malformed job or model error
+    should not abort the whole run. Each result row preserves either the full
+    evaluation payload or the captured error so dashboards and operators can see
+    partial progress instead of an all-or-nothing failure.
+    """
     rows: list[dict[str, Any]] = []
     evaluated = 0
     failed = 0
@@ -251,6 +258,8 @@ def _evaluate_jobs(*, job_ids: list[str], settings: dict[str, Any]) -> dict[str,
             evaluated += 1
         except Exception as exc:  # noqa: BLE001
             failed += 1
+            # Persist the error so repeated failures are visible in follow-up
+            # triage even when the caller only sees the summarized batch result.
             _store_error(job_id=job_id, error_message=str(exc))
             rows.append(
                 {
@@ -289,6 +298,8 @@ def evaluate_job(*, job_id: str, settings: dict[str, Any]) -> dict[str, Any]:
     )
     evaluation = _ground_evaluation_to_context(job=job, resume_text=resume_text, evaluation=evaluation)
 
+    # Local-first is the default posture. We only pay the cloud cost when the
+    # local result looks uncertain enough to justify escalation.
     escalation_reasons = _escalation_reasons(evaluation=evaluation, settings=settings) if model_mode == "local" else []
     escalated = model_mode == "local" and bool(escalation_reasons)
 
@@ -318,6 +329,8 @@ def evaluate_job(*, job_id: str, settings: dict[str, Any]) -> dict[str, Any]:
         escalated=escalated,
         escalation_reasons=escalation_reasons,
     )
+    # Preserve both raw and computed scoring details so reviewers can separate
+    # model output from rubric normalization during debugging or calibration.
     evaluation["observation"]["scoring"] = {
         "version": evaluation.get("scoring_version") or "rubric_v1",
         "scorecard": evaluation.get("scorecard") or {},

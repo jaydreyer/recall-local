@@ -44,6 +44,7 @@ def _norm(value: Any) -> str:
 def _normalize_company(value: Any) -> str:
     lowered = _norm(value)
     lowered = re.sub(r"\b(inc\.?|llc|ltd\.?|corp\.?|corporation|co\.?|pbc)\b", "", lowered)
+    lowered = re.sub(r"[.,]+", " ", lowered)
     lowered = re.sub(r"\s+", " ", lowered)
     return lowered.strip()
 
