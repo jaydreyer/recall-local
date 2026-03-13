@@ -112,11 +112,11 @@ After=network.target docker.service
 [Service]
 Type=simple
 User=jaydreyer
-WorkingDirectory=/home/jaydreyer/recall-local
-ExecStart=/home/jaydreyer/recall-local/.venv/bin/python scripts/transcribe/audio_watcher.py
+WorkingDirectory=<server-repo-root>
+ExecStart=<server-repo-root>/.venv/bin/python scripts/transcribe/audio_watcher.py
 Restart=on-failure
 RestartSec=10
-Environment=PATH=/home/jaydreyer/recall-local/.venv/bin:/usr/local/bin:/usr/bin
+Environment=PATH=<server-repo-root>/.venv/bin:/usr/local/bin:/usr/bin
 
 [Install]
 WantedBy=multi-user.target
@@ -128,7 +128,7 @@ Also support running directly for testing: `python scripts/transcribe/audio_watc
 
 Create an n8n workflow that accepts audio file uploads and triggers the pipeline.
 
-**Webhook endpoint:** `POST http://192.168.68.93:5678/webhook/recall-transcribe`
+**Webhook endpoint:** `POST http://<ai-lab-lan-ip>:5678/webhook/recall-transcribe`
 
 **n8n workflow nodes:**
 

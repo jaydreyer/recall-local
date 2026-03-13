@@ -6,9 +6,9 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
+from scripts.phase1 import retrieval
 from scripts.phase1.ingest_from_payload import payload_to_requests
 from scripts.phase1.ingestion_pipeline import IngestRequest, _build_qdrant_points
-from scripts.phase1 import retrieval
 
 
 class _FakePointStruct:

@@ -19,19 +19,19 @@ Purpose: record Phase 3 completion status, evidence, and residual follow-up item
 ## Completion evidence
 
 1. 3A operator artifacts:
-   - `/home/jaydreyer/recall-local/scripts/phase3/run_ingest_manifest_now.sh`
-   - `/home/jaydreyer/recall-local/scripts/phase3/run_query_mode_now.sh`
-   - `/home/jaydreyer/recall-local/scripts/phase3/run_all_evals_now.sh`
+   - `<server-repo-root>/scripts/phase3/run_ingest_manifest_now.sh`
+   - `<server-repo-root>/scripts/phase3/run_query_mode_now.sh`
+   - `<server-repo-root>/scripts/phase3/run_all_evals_now.sh`
 2. 3B experiment evidence:
-   - `/home/jaydreyer/recall-local/data/artifacts/evals/phase3b/20260224T015231Z_comparison.md`
-   - `/home/jaydreyer/recall-local/data/artifacts/evals/phase3b/20260224T015231Z_baseline_vector.json`
-   - `/home/jaydreyer/recall-local/data/artifacts/evals/phase3b/20260224T015231Z_candidate_hybrid.json`
+   - `<server-repo-root>/data/artifacts/evals/phase3b/20260224T015231Z_comparison.md`
+   - `<server-repo-root>/data/artifacts/evals/phase3b/20260224T015231Z_baseline_vector.json`
+   - `<server-repo-root>/data/artifacts/evals/phase3b/20260224T015231Z_candidate_hybrid.json`
 3. 3C recovery evidence:
-   - `/home/jaydreyer/recall-local/data/artifacts/backups/phase3c/phase3c_recovery_smoke_20260224/restore_report_20260224T021026Z.json`
-   - `/home/jaydreyer/recall-local/data/artifacts/evals/20260224T021109Z_eac89989ae1446b5b80fd669699dc157.md`
+   - `<server-repo-root>/data/artifacts/backups/phase3c/phase3c_recovery_smoke_20260224/restore_report_20260224T021026Z.json`
+   - `<server-repo-root>/data/artifacts/evals/20260224T021109Z_eac89989ae1446b5b80fd669699dc157.md`
 4. 3C portfolio package evidence:
-   - `/home/jaydreyer/recall-local/data/artifacts/portfolio/phase3c/20260224T021251Z/portfolio_bundle.md`
-   - `/home/jaydreyer/recall-local/data/artifacts/portfolio/phase3c/20260224T021251Z/bundle_summary.json`
+   - `<server-repo-root>/data/artifacts/portfolio/phase3c/20260224T021251Z/portfolio_bundle.md`
+   - `<server-repo-root>/data/artifacts/portfolio/phase3c/20260224T021251Z/bundle_summary.json`
 
 ## Key outcomes
 

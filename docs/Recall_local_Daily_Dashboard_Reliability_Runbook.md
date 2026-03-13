@@ -8,7 +8,7 @@ The page shell can load while the board stays empty when startup requests are to
 
 Typical symptoms:
 
-- `http://100.116.103.78:3001/` renders chrome but no jobs or companies
+- `http://<ai-lab-tailnet-ip>:3001/` renders chrome but no jobs or companies
 - browser console shows `504 Gateway Time-out` on `/v1/companies`, `/v1/job-gaps`, or `/v1/llm-settings`
 - browser console shows `ERR_CONTENT_LENGTH_MISMATCH` on very large `/v1/jobs` responses
 
@@ -86,7 +86,7 @@ These are a safety net, not the primary fix. The main protection is lighter star
 
 ```bash
 ssh ai-lab '
-  cd /home/jaydreyer/recall-local/docker &&
+  cd <server-repo-root>/docker &&
   ./validate-stack.sh
 '
 ```
@@ -113,14 +113,14 @@ PY
 
 ```bash
 ssh ai-lab '
-  cd /home/jaydreyer/recall-local &&
+  cd <server-repo-root> &&
   ./scripts/phase6/run_dashboard_smoke.sh http://localhost:8090
 '
 ```
 
 ### Browser-level checks
 
-Open `http://100.116.103.78:3001/` and confirm:
+Open `http://<ai-lab-tailnet-ip>:3001/` and confirm:
 
 1. `Jobs` tab shows roles without waiting on `Companies` or `Skill Gaps`
 2. reload uses cached content immediately while refresh happens in the background

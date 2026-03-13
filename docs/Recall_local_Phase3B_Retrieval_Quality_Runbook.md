@@ -13,10 +13,10 @@ Purpose: run retrieval quality experiments with optional hybrid retrieval, optio
    - global retrieval overrides (`--retrieval-mode`, `--hybrid-alpha`, `--enable-reranker`, `--reranker-weight`)
    - optional semantic scoring lane for cases with `expected_answer`
 3. Phase 3B experiment scripts:
-   - `/Users/jaydreyer/projects/recall-local/scripts/eval/run_phase3b_retrieval_experiment.sh`
-   - `/Users/jaydreyer/projects/recall-local/scripts/phase3/run_retrieval_experiment_now.sh`
+   - `<repo-root>/scripts/eval/run_phase3b_retrieval_experiment.sh`
+   - `<repo-root>/scripts/phase3/run_retrieval_experiment_now.sh`
 4. Versioned golden set starter:
-   - `/Users/jaydreyer/projects/recall-local/scripts/eval/golden_sets/learning_golden_v1.json`
+   - `<repo-root>/scripts/eval/golden_sets/learning_golden_v1.json`
 
 ## Workflow 02 retrieval controls
 
@@ -34,7 +34,7 @@ Payload fields (CLI/webhook):
 
 Reference payload file:
 
-- `/Users/jaydreyer/projects/recall-local/n8n/workflows/payload_examples/rag_query_hybrid_payload_example.json`
+- `<repo-root>/n8n/workflows/payload_examples/rag_query_hybrid_payload_example.json`
 
 Defaults remain unchanged unless you opt in:
 
@@ -44,7 +44,7 @@ Defaults remain unchanged unless you opt in:
 ## Run one candidate query (manual)
 
 ```bash
-/Users/jaydreyer/projects/recall-local/scripts/phase3/run_query_mode_now.sh \
+<repo-root>/scripts/phase3/run_query_mode_now.sh \
   --mode learning \
   --retrieval-mode hybrid \
   --hybrid-alpha 0.65 \
@@ -55,7 +55,7 @@ Defaults remain unchanged unless you opt in:
 ## Run baseline vs candidate experiment
 
 ```bash
-/Users/jaydreyer/projects/recall-local/scripts/phase3/run_retrieval_experiment_now.sh
+<repo-root>/scripts/phase3/run_retrieval_experiment_now.sh
 ```
 
 Default experiment behavior:
@@ -74,14 +74,14 @@ Enable in experiment:
 ```bash
 RECALL_PHASE3B_SEMANTIC_SCORE=true \
 RECALL_PHASE3B_SEMANTIC_MIN_SCORE=0.65 \
-/Users/jaydreyer/projects/recall-local/scripts/phase3/run_retrieval_experiment_now.sh
+<repo-root>/scripts/phase3/run_retrieval_experiment_now.sh
 ```
 
 To enforce semantic threshold as pass/fail in direct eval runs:
 
 ```bash
-python3 /Users/jaydreyer/projects/recall-local/scripts/eval/run_eval.py \
-  --cases-file /Users/jaydreyer/projects/recall-local/scripts/eval/golden_sets/learning_golden_v1.json \
+python3 <repo-root>/scripts/eval/run_eval.py \
+  --cases-file <repo-root>/scripts/eval/golden_sets/learning_golden_v1.json \
   --backend webhook \
   --webhook-url http://localhost:5678/webhook/recall-query \
   --semantic-score \

@@ -2,6 +2,8 @@
 
 This folder is the source of truth for what has been planned, implemented, and currently running.
 
+Public-repo note: prefer repo-relative paths and placeholder host details when docs would otherwise expose a personal machine layout or private infrastructure identifiers.
+
 ## Public Reviewer Entrypoints
 
 - `../README.md`: Top-level public overview for recruiters, interviewers, and repo reviewers.
@@ -114,4 +116,4 @@ For every meaningful setup or implementation change:
 
 1. Add a new dated entry in `IMPLEMENTATION_LOG.md`.
 2. Update `ENVIRONMENT_INVENTORY.md` if the live state changed.
-3. Include exact file paths, hostnames, ports, and commands where useful.
+3. Prefer repo-relative paths and placeholder host details in shareable docs; keep exact commands only where they materially improve reproducibility.

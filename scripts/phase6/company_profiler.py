@@ -6,12 +6,12 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
-import os
 
 from scripts.phase6 import storage
 

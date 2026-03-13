@@ -71,7 +71,7 @@ Use $context-kickoff, then <task>. Update docs as you go.
 
 A reusable package is provided at:
 
-- `/Users/jaydreyer/projects/recall-local/docs/context-kickoff-kit/`
+- `<repo-root>/docs/context-kickoff-kit/`
 
 It includes a sanitized skill folder ready to copy into `~/.codex/skills/context-kickoff`.
 

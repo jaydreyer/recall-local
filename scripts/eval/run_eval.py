@@ -902,9 +902,9 @@ def _cosine_similarity(left: list[float], right: list[float]) -> float:
     if not left or not right or len(left) != len(right):
         raise ValueError("Embedding vectors must be non-empty and equal length.")
 
-    dot = sum(l * r for l, r in zip(left, right))
-    left_norm = sum(l * l for l in left) ** 0.5
-    right_norm = sum(r * r for r in right) ** 0.5
+    dot = sum(left_value * right_value for left_value, right_value in zip(left, right, strict=True))
+    left_norm = sum(left_value * left_value for left_value in left) ** 0.5
+    right_norm = sum(right_value * right_value for right_value in right) ** 0.5
     if left_norm == 0.0 or right_norm == 0.0:
         raise ValueError("Embedding vectors must have non-zero norm.")
     return dot / (left_norm * right_norm)

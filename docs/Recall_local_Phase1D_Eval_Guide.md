@@ -5,11 +5,11 @@ Purpose: run citation/latency regression checks for Workflow 02 and persist resu
 ## Deliverables
 
 - Eval runner:
-  - `/Users/jaydreyer/projects/recall-local/scripts/eval/run_eval.py`
+  - `<repo-root>/scripts/eval/run_eval.py`
 - Default eval cases (10 checks):
-  - `/Users/jaydreyer/projects/recall-local/scripts/eval/eval_cases.json`
+  - `<repo-root>/scripts/eval/eval_cases.json`
 - Eval report artifacts:
-  - `/Users/jaydreyer/projects/recall-local/data/artifacts/evals/`
+  - `<repo-root>/data/artifacts/evals/`
 - SQLite table:
   - `eval_results`
 
@@ -18,7 +18,7 @@ Purpose: run citation/latency regression checks for Workflow 02 and persist resu
 From ai-lab host (recommended):
 
 ```bash
-python3 /home/jaydreyer/recall-local/scripts/eval/run_eval.py \
+python3 <server-repo-root>/scripts/eval/run_eval.py \
   --backend webhook \
   --webhook-url http://localhost:5678/webhook/recall-query \
   --top-k 5 \
@@ -29,9 +29,9 @@ python3 /home/jaydreyer/recall-local/scripts/eval/run_eval.py \
 From MacBook against ai-lab:
 
 ```bash
-python3 /Users/jaydreyer/projects/recall-local/scripts/eval/run_eval.py \
+python3 <repo-root>/scripts/eval/run_eval.py \
   --backend webhook \
-  --webhook-url http://100.116.103.78:5678/webhook/recall-query \
+  --webhook-url http://<ai-lab-tailnet-ip>:5678/webhook/recall-query \
   --top-k 5 \
   --min-score 0.15 \
   --max-retries 1
@@ -40,9 +40,9 @@ python3 /Users/jaydreyer/projects/recall-local/scripts/eval/run_eval.py \
 Quick smoke (first 2 cases, no writes):
 
 ```bash
-python3 /Users/jaydreyer/projects/recall-local/scripts/eval/run_eval.py \
+python3 <repo-root>/scripts/eval/run_eval.py \
   --backend webhook \
-  --webhook-url http://100.116.103.78:5678/webhook/recall-query \
+  --webhook-url http://<ai-lab-tailnet-ip>:5678/webhook/recall-query \
   --max-cases 2 \
   --dry-run
 ```
@@ -98,7 +98,7 @@ curl -sS -X POST http://localhost:5678/webhook/recall-query \
 ## Host Scope Reminder
 
 - On ai-lab shell, `localhost` means ai-lab.
-- On MacBook shell, `localhost` means MacBook. Use `http://100.116.103.78:<port>` for ai-lab services.
+- On MacBook shell, `localhost` means MacBook. Use `http://<ai-lab-tailnet-ip>:<port>` for ai-lab services.
 
 ## Current Hardening Signal
 

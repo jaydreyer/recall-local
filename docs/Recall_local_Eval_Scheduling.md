@@ -4,20 +4,20 @@ Purpose: run automated Workflow 02 eval checks on a schedule and alert on regres
 
 ## Files
 
-- Runner: `/Users/jaydreyer/projects/recall-local/scripts/eval/scheduled_eval.sh`
-- Alert helper: `/Users/jaydreyer/projects/recall-local/scripts/eval/notify_regression.py`
-- Core harness: `/Users/jaydreyer/projects/recall-local/scripts/eval/run_eval.py`
+- Runner: `<repo-root>/scripts/eval/scheduled_eval.sh`
+- Alert helper: `<repo-root>/scripts/eval/notify_regression.py`
+- Core harness: `<repo-root>/scripts/eval/run_eval.py`
 
 ## Environment variables
 
 - `RECALL_EVAL_WEBHOOK_URL` (optional)
   - default: `${N8N_HOST:-http://localhost:5678}/webhook/recall-query`
 - `RECALL_EVAL_CORE_CASES_FILE` (optional)
-  - default: `/home/jaydreyer/recall-local/scripts/eval/eval_cases.json`
+  - default: `<server-repo-root>/scripts/eval/eval_cases.json`
 - `RECALL_EVAL_JOB_SEARCH_CASES_FILE` (optional)
-  - default: `/home/jaydreyer/recall-local/scripts/eval/job_search_eval_cases.json`
+  - default: `<server-repo-root>/scripts/eval/job_search_eval_cases.json`
 - `RECALL_EVAL_LEARNING_CASES_FILE` (optional)
-  - default: `/home/jaydreyer/recall-local/scripts/eval/learning_eval_cases.json`
+  - default: `<server-repo-root>/scripts/eval/learning_eval_cases.json`
 - `RECALL_EVAL_INCLUDE_LEARNING` (optional)
   - default: `false`
   - when `true`, scheduled runs include learning suite in addition to core + job-search.
@@ -31,12 +31,12 @@ Purpose: run automated Workflow 02 eval checks on a schedule and alert on regres
   - Slack/Teams-compatible incoming webhook URL.
   - If unset, regressions still fail the job and write logs, but no webhook is sent.
 - `RECALL_EVAL_LOG_DIR` (optional)
-  - default: `/home/jaydreyer/recall-local/data/artifacts/evals/scheduled`
+  - default: `<server-repo-root>/data/artifacts/evals/scheduled`
 
 ## Manual run
 
 ```bash
-/home/jaydreyer/recall-local/scripts/eval/scheduled_eval.sh
+<server-repo-root>/scripts/eval/scheduled_eval.sh
 ```
 
 ## Cron setup (ai-lab)
@@ -51,10 +51,10 @@ Add daily and weekly checks:
 
 ```cron
 # Daily at 09:00 UTC (core + job-search only)
-0 9 * * * N8N_HOST="http://localhost:5678" RECALL_ALERT_WEBHOOK_URL="https://hooks.slack.com/services/REPLACE_ME" /home/jaydreyer/recall-local/scripts/eval/scheduled_eval.sh >> /home/jaydreyer/recall-local/data/artifacts/evals/scheduled/cron.log 2>&1
+0 9 * * * N8N_HOST="http://localhost:5678" RECALL_ALERT_WEBHOOK_URL="https://hooks.slack.com/services/REPLACE_ME" <server-repo-root>/scripts/eval/scheduled_eval.sh >> <server-repo-root>/data/artifacts/evals/scheduled/cron.log 2>&1
 
 # Weekly Sunday at 09:15 UTC (include learning suite)
-15 9 * * 0 N8N_HOST="http://localhost:5678" RECALL_EVAL_INCLUDE_LEARNING="true" RECALL_ALERT_WEBHOOK_URL="https://hooks.slack.com/services/REPLACE_ME" /home/jaydreyer/recall-local/scripts/eval/scheduled_eval.sh >> /home/jaydreyer/recall-local/data/artifacts/evals/scheduled/cron.log 2>&1
+15 9 * * 0 N8N_HOST="http://localhost:5678" RECALL_EVAL_INCLUDE_LEARNING="true" RECALL_ALERT_WEBHOOK_URL="https://hooks.slack.com/services/REPLACE_ME" <server-repo-root>/scripts/eval/scheduled_eval.sh >> <server-repo-root>/data/artifacts/evals/scheduled/cron.log 2>&1
 ```
 
 ## Behavior

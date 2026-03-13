@@ -1,6 +1,6 @@
 # Recall.local - Phase 5 Checklists
 
-Source plan: `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Guide.md`
+Source plan: `<repo-root>/docs/Recall_local_Phase5_Guide.md`
 
 ## 5A. Bridge Platform Layer
 

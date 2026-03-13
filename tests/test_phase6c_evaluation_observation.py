@@ -3,8 +3,8 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from scripts.phase6 import job_evaluator, job_metadata_extractor, job_repository

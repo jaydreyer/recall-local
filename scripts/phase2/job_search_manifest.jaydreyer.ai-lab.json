@@ -9,70 +9,70 @@
   "items": [
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/Jay-Dreyer-Resume.docx",
+      "content": "<server-repo-root>/data/incoming/job-search/Jay-Dreyer-Resume.docx",
       "title": "Jay Dreyer Resume",
       "tags": ["job-search", "resume", "jay"],
       "source_key": "resume:jay:current"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/SE_Guide.docx",
+      "content": "<server-repo-root>/data/incoming/job-search/SE_Guide.docx",
       "title": "SE Guide",
       "tags": ["job-search", "reference", "se-guide"],
       "source_key": "reference:se-guide"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/AI_Career_Acceleration_Plan.md",
+      "content": "<server-repo-root>/data/incoming/job-search/AI_Career_Acceleration_Plan.md",
       "title": "AI Career Acceleration Plan",
       "tags": ["job-search", "reference", "career-plan"],
       "source_key": "reference:career-acceleration-plan"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/Recall_local_PRD.md",
+      "content": "<server-repo-root>/data/incoming/job-search/Recall_local_PRD.md",
       "title": "Recall.local PRD",
       "tags": ["job-search", "project", "recall-local"],
       "source_key": "project:recall-local:prd"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/Recall_local_PRD_Addendum_JobSearch.md",
+      "content": "<server-repo-root>/data/incoming/job-search/Recall_local_PRD_Addendum_JobSearch.md",
       "title": "Recall.local PRD Addendum Job Search",
       "tags": ["job-search", "project", "recall-local", "job-search-addendum"],
       "source_key": "project:recall-local:prd-addendum-job-search"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/agentic-ai-interview-questions.pdf",
+      "content": "<server-repo-root>/data/incoming/job-search/agentic-ai-interview-questions.pdf",
       "title": "Agentic AI Interview Questions",
       "tags": ["job-search", "interview", "agentic-ai"],
       "source_key": "reference:agentic-ai-interview-questions"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/multi-agentic-interview-que-latest.pdf",
+      "content": "<server-repo-root>/data/incoming/job-search/multi-agentic-interview-que-latest.pdf",
       "title": "Multi Agentic Interview Questions",
       "tags": ["job-search", "interview", "agentic-ai"],
       "source_key": "reference:multi-agentic-interview-questions"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/genai-interview-questions.pdf",
+      "content": "<server-repo-root>/data/incoming/job-search/genai-interview-questions.pdf",
       "title": "GenAI Interview Questions",
       "tags": ["job-search", "interview", "genai"],
       "source_key": "reference:genai-interview-questions"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/rag-with-code-advance-system-design-interview-guide.pdf",
+      "content": "<server-repo-root>/data/incoming/job-search/rag-with-code-advance-system-design-interview-guide.pdf",
       "title": "RAG With Code Advanced System Design Interview Guide",
       "tags": ["job-search", "interview", "rag", "system-design"],
       "source_key": "reference:rag-system-design-interview-guide"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/vector-embeddings-guide.pdf",
+      "content": "<server-repo-root>/data/incoming/job-search/vector-embeddings-guide.pdf",
       "title": "Vector Embeddings Guide",
       "tags": ["job-search", "reference", "embeddings", "rag"],
       "source_key": "reference:vector-embeddings-guide"

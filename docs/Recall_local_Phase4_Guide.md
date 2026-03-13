@@ -87,8 +87,8 @@ Create a low-risk operating loop where changes can be validated, shipped, and ve
 
 Operator UX expansion (dashboard, extension, and Obsidian integration) is now tracked in Phase 5 planning docs:
 
-1. `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Guide.md`
-2. `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase5_Checklists.md`
+1. `<repo-root>/docs/Recall_local_Phase5_Guide.md`
+2. `<repo-root>/docs/Recall_local_Phase5_Checklists.md`
 
 Phase 4 remains focused on reliability telemetry, CI/release guardrails, and maintenance hygiene.
 

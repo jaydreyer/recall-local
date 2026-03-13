@@ -24,15 +24,15 @@ Make architectural decisions in this phase with Phases 2 and 3 in mind. In parti
 |---|---|
 | Server | Ubuntu 24.04, AI home lab |
 | GPU | NVIDIA RTX 5060 Ti 16GB |
-| Python venv | `/home/jaydreyer/recall-local/.venv` |
-| Project root | `/home/jaydreyer/recall-local/` |
+| Python venv | `<server-repo-root>/.venv` |
+| Project root | `<server-repo-root>/` |
 | Existing LLM client | `llm_client.py` (not needed this phase, but don't conflict with it) |
 
 ---
 
 ## Dependencies to Install
 
-Install all of these in the existing venv (`/home/jaydreyer/recall-local/.venv`):
+Install all of these in the existing venv (`<server-repo-root>/.venv`):
 
 | Package | Purpose | Install |
 |---|---|---|

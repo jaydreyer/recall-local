@@ -20,12 +20,12 @@ Purpose: run and record one full Phase 2 rehearsal with a single timestamped log
 Use the helper script:
 
 ```bash
-/home/jaydreyer/recall-local/scripts/rehearsal/run_phase2_demo_rehearsal.sh
+<server-repo-root>/scripts/rehearsal/run_phase2_demo_rehearsal.sh
 ```
 
 The script writes a timestamped log under:
 
-- `/home/jaydreyer/recall-local/data/artifacts/rehearsals/`
+- `<server-repo-root>/data/artifacts/rehearsals/`
 
 It prints `LOG_FILE=...` at the end so you can copy the exact path into implementation notes.
 
@@ -33,10 +33,10 @@ It prints `LOG_FILE=...` at the end so you can copy the exact path into implemen
 
 ```bash
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
-LOG="/home/jaydreyer/recall-local/data/artifacts/rehearsals/${STAMP}_phase2_demo_rehearsal.log"
+LOG="<server-repo-root>/data/artifacts/rehearsals/${STAMP}_phase2_demo_rehearsal.log"
 N8N_HOST="${N8N_HOST:-http://localhost:5678}"
 WEBHOOK_URL="${RECALL_EVAL_WEBHOOK_URL:-${N8N_HOST%/}/webhook/recall-query}"
-mkdir -p /home/jaydreyer/recall-local/data/artifacts/rehearsals
+mkdir -p <server-repo-root>/data/artifacts/rehearsals
 exec > >(tee -a "$LOG") 2>&1
 
 echo "=== Phase 2 demo rehearsal start: $STAMP ==="
@@ -48,21 +48,21 @@ curl -sS http://localhost:5678/healthz || true
 # 2) Ingestion channels (same rehearsal)
 python3 - <<'PY' | curl -sS -X POST "http://localhost:8090/v1/ingestions?dry_run=true" -H "content-type: application/json" -d @-
 import json
-payload = json.load(open("/home/jaydreyer/recall-local/n8n/workflows/payload_examples/bookmarklet_ingest_payload_example.json", "r", encoding="utf-8"))
+payload = json.load(open("<server-repo-root>/n8n/workflows/payload_examples/bookmarklet_ingest_payload_example.json", "r", encoding="utf-8"))
 payload["channel"] = "bookmarklet"
 print(json.dumps(payload))
 PY
 
 python3 - <<'PY' | curl -sS -X POST "http://localhost:8090/v1/ingestions?dry_run=true" -H "content-type: application/json" -d @-
 import json
-payload = json.load(open("/home/jaydreyer/recall-local/n8n/workflows/payload_examples/gdoc_ingest_payload_example.json", "r", encoding="utf-8"))
+payload = json.load(open("<server-repo-root>/n8n/workflows/payload_examples/gdoc_ingest_payload_example.json", "r", encoding="utf-8"))
 payload["channel"] = "webhook"
 print(json.dumps(payload))
 PY
 
 curl -sS -X POST "http://localhost:8090/v1/meeting-action-items?dry_run=true" \
   -H "content-type: application/json" \
-  -d @/home/jaydreyer/recall-local/n8n/workflows/payload_examples/meeting_action_items_payload_example.json
+  -d @<server-repo-root>/n8n/workflows/payload_examples/meeting_action_items_payload_example.json
 
 # 3) RAG checks (default + job-search + learning)
 curl -sS -X POST "http://localhost:8090/v1/rag-queries?dry_run=true" \
@@ -78,18 +78,18 @@ curl -sS -X POST "http://localhost:8090/v1/rag-queries?dry_run=true" \
   -d '{"query":"Summarize RAG architecture tradeoffs for enterprise use.","mode":"learning","filter_tags":["learning","genai-docs"],"top_k":5,"min_score":0.2,"max_retries":0}'
 
 # 4) Eval gates
-python3 /home/jaydreyer/recall-local/scripts/eval/run_eval.py \
-  --cases-file /home/jaydreyer/recall-local/scripts/eval/eval_cases.json \
+python3 <server-repo-root>/scripts/eval/run_eval.py \
+  --cases-file <server-repo-root>/scripts/eval/eval_cases.json \
   --backend webhook \
   --webhook-url "$WEBHOOK_URL"
 
-python3 /home/jaydreyer/recall-local/scripts/eval/run_eval.py \
-  --cases-file /home/jaydreyer/recall-local/scripts/eval/job_search_eval_cases.json \
+python3 <server-repo-root>/scripts/eval/run_eval.py \
+  --cases-file <server-repo-root>/scripts/eval/job_search_eval_cases.json \
   --backend webhook \
   --webhook-url "$WEBHOOK_URL"
 
-python3 /home/jaydreyer/recall-local/scripts/eval/run_eval.py \
-  --cases-file /home/jaydreyer/recall-local/scripts/eval/learning_eval_cases.json \
+python3 <server-repo-root>/scripts/eval/run_eval.py \
+  --cases-file <server-repo-root>/scripts/eval/learning_eval_cases.json \
   --backend webhook \
   --webhook-url "$WEBHOOK_URL"
 
@@ -109,7 +109,7 @@ echo "LOG_FILE=$LOG"
 
 Add one entry to:
 
-- `/Users/jaydreyer/projects/recall-local/docs/IMPLEMENTATION_LOG.md`
+- `<repo-root>/docs/IMPLEMENTATION_LOG.md`
 
 Include:
 

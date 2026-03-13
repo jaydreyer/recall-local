@@ -22,6 +22,15 @@ Most AI portfolio projects are thin wrappers around a hosted API. Recall.local i
 - **Full-stack operations**: Not just inference &mdash; ingestion pipelines, hybrid retrieval, evaluation harnesses, backup/restore, dashboards, and workflow automation.
 - **Interview-ready**: Every design choice has a documented tradeoff. Every workflow has an eval. Every phase has a runbook.
 
+## Start Here
+
+If you're reviewing the repo for the first time, this is the fastest path to the interesting parts:
+
+1. Architecture and rationale: [ARCHITECTURE.md](ARCHITECTURE.md), [docs/Recall_local_Architecture_Diagram.md](docs/Recall_local_Architecture_Diagram.md), [docs/Recall_local_Design_Decisions.md](docs/Recall_local_Design_Decisions.md)
+2. API and runtime evidence: [docs/Recall_local_API_Reference.md](docs/Recall_local_API_Reference.md), [docs/ENVIRONMENT_INVENTORY.md](docs/ENVIRONMENT_INVENTORY.md), [docs/IMPLEMENTATION_LOG.md](docs/IMPLEMENTATION_LOG.md)
+3. Highest-signal backend code: [scripts/phase1/ingest_bridge_api.py](scripts/phase1/ingest_bridge_api.py), [scripts/phase1/ingestion_pipeline.py](scripts/phase1/ingestion_pipeline.py), [scripts/llm_client.py](scripts/llm_client.py), [scripts/phase6/job_evaluator.py](scripts/phase6/job_evaluator.py)
+4. Best tests to skim: [tests/test_bridge_api_contract.py](tests/test_bridge_api_contract.py), [tests/test_llm_client_pytest.py](tests/test_llm_client_pytest.py), [tests/phase1/test_ingest_bridge_api_pytest.py](tests/phase1/test_ingest_bridge_api_pytest.py)
+
 ---
 
 ## Architecture

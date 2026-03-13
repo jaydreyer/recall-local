@@ -6,7 +6,7 @@ Purpose: provide no-curl operator paths for daily ingestion, query, and eval loo
 
 This runbook covers:
 
-1. one-command operator wrappers in `/Users/jaydreyer/projects/recall-local/scripts/phase3/`
+1. one-command operator wrappers in `<repo-root>/scripts/phase3/`
 2. Open WebUI template payloads for Workflow 02 mode routing
 3. n8n form/webhook payload templates for bookmarklet ingestion and meeting extraction
 
@@ -15,7 +15,7 @@ This runbook covers:
 ### 1) Ingest manifest now
 
 ```bash
-/Users/jaydreyer/projects/recall-local/scripts/phase3/run_ingest_manifest_now.sh
+<repo-root>/scripts/phase3/run_ingest_manifest_now.sh
 ```
 
 Common options:
@@ -28,14 +28,14 @@ Common options:
 Examples:
 
 ```bash
-/Users/jaydreyer/projects/recall-local/scripts/phase3/run_ingest_manifest_now.sh --profile job-search
-/Users/jaydreyer/projects/recall-local/scripts/phase3/run_ingest_manifest_now.sh --profile learning --dry-run
+<repo-root>/scripts/phase3/run_ingest_manifest_now.sh --profile job-search
+<repo-root>/scripts/phase3/run_ingest_manifest_now.sh --profile learning --dry-run
 ```
 
 ### 2) Run one query mode now
 
 ```bash
-/Users/jaydreyer/projects/recall-local/scripts/phase3/run_query_mode_now.sh --mode default
+<repo-root>/scripts/phase3/run_query_mode_now.sh --mode default
 ```
 
 Common options:
@@ -50,14 +50,14 @@ Common options:
 Examples:
 
 ```bash
-/Users/jaydreyer/projects/recall-local/scripts/phase3/run_query_mode_now.sh --mode job-search --query "What should I emphasize for an OpenAI SE interview?"
-/Users/jaydreyer/projects/recall-local/scripts/phase3/run_query_mode_now.sh --mode learning --dry-run
+<repo-root>/scripts/phase3/run_query_mode_now.sh --mode job-search --query "What should I emphasize for an OpenAI SE interview?"
+<repo-root>/scripts/phase3/run_query_mode_now.sh --mode learning --dry-run
 ```
 
 ### 3) Run all eval suites now
 
 ```bash
-/Users/jaydreyer/projects/recall-local/scripts/phase3/run_all_evals_now.sh
+<repo-root>/scripts/phase3/run_all_evals_now.sh
 ```
 
 Common options:
@@ -112,13 +112,13 @@ Use these as request bodies when wiring Open WebUI tools/actions to Workflow 02 
 
 Use existing payload examples as canonical templates:
 
-- bookmarklet ingest: `/Users/jaydreyer/projects/recall-local/n8n/workflows/payload_examples/bookmarklet_ingest_payload_example.json`
-- meeting action extraction: `/Users/jaydreyer/projects/recall-local/n8n/workflows/payload_examples/meeting_action_items_payload_example.json`
+- bookmarklet ingest: `<repo-root>/n8n/workflows/payload_examples/bookmarklet_ingest_payload_example.json`
+- meeting action extraction: `<repo-root>/n8n/workflows/payload_examples/meeting_action_items_payload_example.json`
 - import-ready Phase 3A form workflows:
-  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase3a_bookmarklet_form_http.workflow.json`
-  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/phase3a_meeting_action_form_http.workflow.json`
+  - `<repo-root>/n8n/workflows/phase3a_bookmarklet_form_http.workflow.json`
+  - `<repo-root>/n8n/workflows/phase3a_meeting_action_form_http.workflow.json`
 - wiring runbook:
-  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/PHASE3A_OPERATOR_FORMS_WIRING.md`
+  - `<repo-root>/n8n/workflows/PHASE3A_OPERATOR_FORMS_WIRING.md`
 
 Recommended form mappings:
 
@@ -129,4 +129,4 @@ Recommended form mappings:
 
 1. Run one wrapper from each category (`ingest`, `query`, `eval`) without modifying JSON files.
 2. Confirm query wrapper returns Workflow 02 JSON with `audit.mode`.
-3. Confirm eval wrapper writes scheduled logs under `/Users/jaydreyer/projects/recall-local/data/artifacts/evals/scheduled/`.
+3. Confirm eval wrapper writes scheduled logs under `<repo-root>/data/artifacts/evals/scheduled/`.

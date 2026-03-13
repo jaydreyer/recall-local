@@ -7,7 +7,7 @@
   "items": [
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/jay_resume.pdf",
+      "content": "<server-repo-root>/data/incoming/job-search/jay_resume.pdf",
       "title": "Jay Resume",
       "tags": ["job-search", "resume"],
       "source_key": "resume:jay:current"

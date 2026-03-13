@@ -3,11 +3,11 @@
 
 from __future__ import annotations
 
+import os
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
-import os
-import re
 from typing import Any
 
 from scripts.llm_client import embed

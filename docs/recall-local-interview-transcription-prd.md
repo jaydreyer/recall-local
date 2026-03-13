@@ -115,8 +115,8 @@ These are confirmed details Codex should use when wiring into the existing codeb
 - The transcription post-processing step should use `llm_client.generate()` for transcript cleanup and metadata extraction.
 
 **Python environment:**
-- Server venv: `/home/jaydreyer/recall-local/.venv`
-- Mac workspace: `/Users/jaydreyer/projects/recall-local/.venv` (currently missing — Codex should create it if running locally)
+- Server venv: `<server-repo-root>/.venv`
+- Mac workspace: `<repo-root>/.venv` (currently missing — Codex should create it if running locally)
 
 | Package | Purpose | Install |
 |---|---|---|

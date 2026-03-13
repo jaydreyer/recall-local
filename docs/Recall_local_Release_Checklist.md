@@ -63,7 +63,7 @@ scripts/phase4/run_repo_hygiene_check.sh
 
 6. Run the manual chat QA pass in:
 
-- `/Users/jaydreyer/projects/recall-local/docs/Recall_local_RAG_UI_QA_Checklist.md`
+- `<repo-root>/docs/Recall_local_RAG_UI_QA_Checklist.md`
 
 7. If the release changes RAG retrieval, prompts, validation, or model selection, run the model bakeoff and save the artifact path:
 
@@ -79,15 +79,15 @@ Always sync local updates before any ai-lab restart/curl/n8n validation:
 rsync -avz --delete \
   -e "ssh -i ~/.ssh/codex_ai_lab" \
   --exclude '.git/' \
-  /Users/jaydreyer/projects/recall-local/ \
-  jaydreyer@100.116.103.78:/home/jaydreyer/recall-local/
+  <repo-root>/ \
+  jaydreyer@<ai-lab-tailnet-ip>:<server-repo-root>/
 ```
 
 Then spot-check remote content before runtime troubleshooting:
 
 ```bash
-ssh -i ~/.ssh/codex_ai_lab jaydreyer@100.116.103.78 \
-  "cd /home/jaydreyer/recall-local && rg -n 'run_eval_soak_now|run_repo_hygiene_check|quality-checks' scripts .github/workflows"
+ssh -i ~/.ssh/codex_ai_lab jaydreyer@<ai-lab-tailnet-ip> \
+  "cd <server-repo-root> && rg -n 'run_eval_soak_now|run_repo_hygiene_check|quality-checks' scripts .github/workflows"
 ```
 
 If full `--delete` sync encounters permission errors under runtime-owned artifact folders, run targeted sync for changed code/docs paths and re-run the same `rg` spot-check.
@@ -137,7 +137,7 @@ scripts/phase3/run_service_preflight_now.sh
 5. If data integrity is impacted, run restore workflow with latest known-good backup:
 
 ```bash
-scripts/phase3/run_restore_now.sh --backup-dir /home/jaydreyer/recall-local/data/artifacts/backups/phase3c/<backup_name> --replace-collection
+scripts/phase3/run_restore_now.sh --backup-dir <server-repo-root>/data/artifacts/backups/phase3c/<backup_name> --replace-collection
 ```
 
 6. Re-run core eval gate and archive evidence artifact path in release notes.

@@ -14,133 +14,133 @@
   "items": [
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/activation-functions-cheatsheet.pdf",
+      "content": "<server-repo-root>/data/incoming/job-search/activation-functions-cheatsheet.pdf",
       "title": "Activation Functions Cheatsheet",
       "tags": ["learning", "genai-docs", "math", "ml-fundamentals"],
       "source_key": "learning:genieincodebottle:activation-functions-cheatsheet"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/advance-rag-decision-flow-chart.pdf",
+      "content": "<server-repo-root>/data/incoming/job-search/advance-rag-decision-flow-chart.pdf",
       "title": "Advanced RAG Decision Flow Chart",
       "tags": ["learning", "genai-docs", "rag", "system-design"],
       "source_key": "learning:genieincodebottle:advance-rag-decision-flow-chart"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/ai-patterns.pdf",
+      "content": "<server-repo-root>/data/incoming/job-search/ai-patterns.pdf",
       "title": "AI Patterns",
       "tags": ["learning", "genai-docs", "patterns", "architecture"],
       "source_key": "learning:genieincodebottle:ai-patterns"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/ai-roles-important-topics.pdf",
+      "content": "<server-repo-root>/data/incoming/job-search/ai-roles-important-topics.pdf",
       "title": "AI Roles Important Topics",
       "tags": ["learning", "genai-docs", "roles", "career"],
       "source_key": "learning:genieincodebottle:ai-roles-important-topics"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/ai_ml_roadmap.pdf",
+      "content": "<server-repo-root>/data/incoming/job-search/ai_ml_roadmap.pdf",
       "title": "AI and ML Roadmap",
       "tags": ["learning", "genai-docs", "roadmap", "ml-fundamentals"],
       "source_key": "learning:genieincodebottle:ai-ml-roadmap"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/essential-terms-genai.pdf",
+      "content": "<server-repo-root>/data/incoming/job-search/essential-terms-genai.pdf",
       "title": "Essential Terms GenAI",
       "tags": ["learning", "genai-docs", "terminology", "genai"],
       "source_key": "learning:genieincodebottle:essential-terms-genai"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/genai_enterprise_prod_check_list.pdf",
+      "content": "<server-repo-root>/data/incoming/job-search/genai_enterprise_prod_check_list.pdf",
       "title": "GenAI Enterprise Production Checklist",
       "tags": ["learning", "genai-docs", "production", "enterprise"],
       "source_key": "learning:genieincodebottle:genai-enterprise-prod-checklist"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/genai-project-lifecycle.pdf",
+      "content": "<server-repo-root>/data/incoming/job-search/genai-project-lifecycle.pdf",
       "title": "GenAI Project Lifecycle",
       "tags": ["learning", "genai-docs", "project-lifecycle", "delivery"],
       "source_key": "learning:genieincodebottle:genai-project-lifecycle"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/genai-tech-stacks.pdf",
+      "content": "<server-repo-root>/data/incoming/job-search/genai-tech-stacks.pdf",
       "title": "GenAI Tech Stacks",
       "tags": ["learning", "genai-docs", "tech-stack", "architecture"],
       "source_key": "learning:genieincodebottle:genai-tech-stacks"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/genai-with-aws-cloud.pdf",
+      "content": "<server-repo-root>/data/incoming/job-search/genai-with-aws-cloud.pdf",
       "title": "GenAI with AWS Cloud",
       "tags": ["learning", "genai-docs", "cloud", "aws"],
       "source_key": "learning:genieincodebottle:genai-with-aws-cloud"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/genai-with-azure-cloud.pdf",
+      "content": "<server-repo-root>/data/incoming/job-search/genai-with-azure-cloud.pdf",
       "title": "GenAI with Azure Cloud",
       "tags": ["learning", "genai-docs", "cloud", "azure"],
       "source_key": "learning:genieincodebottle:genai-with-azure-cloud"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/genai-with-vertexai.pdf",
+      "content": "<server-repo-root>/data/incoming/job-search/genai-with-vertexai.pdf",
       "title": "GenAI with Vertex AI",
       "tags": ["learning", "genai-docs", "cloud", "gcp"],
       "source_key": "learning:genieincodebottle:genai-with-vertexai"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/handling-latency-in-multi-agentic-systems.pdf",
+      "content": "<server-repo-root>/data/incoming/job-search/handling-latency-in-multi-agentic-systems.pdf",
       "title": "Handling Latency in Multi-Agentic Systems",
       "tags": ["learning", "genai-docs", "agents", "latency"],
       "source_key": "learning:genieincodebottle:handling-latency-in-multi-agentic-systems"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/llm-embeddings-vectordb-comparison-guide.pdf",
+      "content": "<server-repo-root>/data/incoming/job-search/llm-embeddings-vectordb-comparison-guide.pdf",
       "title": "LLM Embeddings Vector DB Comparison Guide",
       "tags": ["learning", "genai-docs", "embeddings", "vector-db"],
       "source_key": "learning:genieincodebottle:llm-embeddings-vectordb-comparison-guide"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/llm_fundamentals.pdf",
+      "content": "<server-repo-root>/data/incoming/job-search/llm_fundamentals.pdf",
       "title": "LLM Fundamentals",
       "tags": ["learning", "genai-docs", "llm", "fundamentals"],
       "source_key": "learning:genieincodebottle:llm-fundamentals"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/llm_providers.pdf",
+      "content": "<server-repo-root>/data/incoming/job-search/llm_providers.pdf",
       "title": "LLM Providers",
       "tags": ["learning", "genai-docs", "llm", "providers"],
       "source_key": "learning:genieincodebottle:llm-providers"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/ml-reference-guide.pdf",
+      "content": "<server-repo-root>/data/incoming/job-search/ml-reference-guide.pdf",
       "title": "ML Reference Guide",
       "tags": ["learning", "genai-docs", "ml", "reference"],
       "source_key": "learning:genieincodebottle:ml-reference-guide"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/rag-reference-topics.pdf",
+      "content": "<server-repo-root>/data/incoming/job-search/rag-reference-topics.pdf",
       "title": "RAG Reference Topics",
       "tags": ["learning", "genai-docs", "rag", "reference"],
       "source_key": "learning:genieincodebottle:rag-reference-topics"
     },
     {
       "type": "file",
-      "content": "/home/jaydreyer/recall-local/data/incoming/job-search/vector-embeddings-guide.pdf",
+      "content": "<server-repo-root>/data/incoming/job-search/vector-embeddings-guide.pdf",
       "title": "Vector Embeddings Guide",
       "tags": ["learning", "genai-docs", "embeddings", "rag"],
       "source_key": "learning:genieincodebottle:vector-embeddings-guide"

@@ -7,7 +7,7 @@ import os
 from contextlib import contextmanager, nullcontext
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
-from typing import Any, Iterator, Mapping, Optional
+from typing import Any, Iterator, Mapping
 
 _REQUEST_ID_CTX: ContextVar[str | None] = ContextVar("recall_request_id", default=None)
 

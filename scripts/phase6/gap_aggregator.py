@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 import logging
+import math
 import os
 import re
 import time
@@ -433,10 +433,10 @@ def _cosine_similarity(left: list[float], right: list[float]) -> float:
     dot = 0.0
     left_norm = 0.0
     right_norm = 0.0
-    for a, b in zip(left, right):
-        dot += a * b
-        left_norm += a * a
-        right_norm += b * b
+    for left_value, right_value in zip(left, right, strict=True):
+        dot += left_value * right_value
+        left_norm += left_value * left_value
+        right_norm += right_value * right_value
 
     if left_norm <= 0 or right_norm <= 0:
         return 0.0

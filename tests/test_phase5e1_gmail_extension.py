@@ -7,7 +7,6 @@ import json
 import unittest
 from pathlib import Path
 
-
 ROOT_DIR = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = ROOT_DIR / "chrome-extension" / "manifest.json"
 GMAIL_SCRIPT_PATH = ROOT_DIR / "chrome-extension" / "gmail.js"

@@ -2,6 +2,8 @@
 
 Last updated: 2026-03-12
 
+Public-repo note: host-specific paths, IPs, and hostnames are intentionally generalized with placeholders so the document stays shareable without losing operational meaning.
+
 ## Decision Snapshot
 
 - Delivery mode: **Approach B** from Phase 0 guide.
@@ -10,14 +12,14 @@ Last updated: 2026-03-12
 ## GitHub
 
 - Repository: [https://github.com/jaydreyer/recall-local](https://github.com/jaydreyer/recall-local)
-- Visibility: `PRIVATE`
+- Visibility goal: public reviewer-facing repository
 - Default branch: `main`
 
 ## Runtime Host (`ai-lab`)
 
 - SSH user: `jaydreyer`
-- Tailscale address: `100.116.103.78`
-- Repo path: `/home/jaydreyer/recall-local`
+- Tailscale address: `<ai-lab-tailnet-ip>`
+- Repo path: `<server-repo-root>`
 
 ## Active Services (current known baseline)
 
@@ -31,23 +33,23 @@ Last updated: 2026-03-12
 - `recall-mkdocs` container: `0.0.0.0:8100->8000`
 - `recall-ui` container: `0.0.0.0:8170->80` (verified running on ai-lab via `scripts/phase5/run_operator_stack_now.sh up` on 2026-02-26)
 - `recall-daily-dashboard` container: `0.0.0.0:3001->80` (verified running on ai-lab via `docker compose -f docker/docker-compose.yml up -d --build daily-dashboard` on 2026-03-04)
-- `recall-daily-dashboard` HTTP check: `GET/HEAD http://100.116.103.78:3001` -> `200` after Phase 6D deploy validation on 2026-03-06
+- `recall-daily-dashboard` HTTP check: `GET/HEAD http://<ai-lab-tailnet-ip>:3001` -> `200` after Phase 6D deploy validation on 2026-03-06
 - dashboard smoke endpoint:
   - `GET http://localhost:8090/v1/dashboard-checks`
 - dashboard smoke wrapper:
-  - `/home/jaydreyer/recall-local/scripts/phase6/run_dashboard_smoke.sh`
+  - `<server-repo-root>/scripts/phase6/run_dashboard_smoke.sh`
 
 ## Data and Storage
 
-- Incoming documents: `/home/jaydreyer/recall-local/data/incoming`
-- Processed documents: `/home/jaydreyer/recall-local/data/processed`
-- Artifacts: `/home/jaydreyer/recall-local/data/artifacts`
-- SQLite DB: `/home/jaydreyer/recall-local/data/recall.db`
-- Vault sync state DB (Phase 5C): `/home/jaydreyer/recall-local/data/vault_sync_state.db`
-- Daily full-backup root: `/home/jaydreyer/recall-local/data/artifacts/backups/daily_full`
+- Incoming documents: `<server-repo-root>/data/incoming`
+- Processed documents: `<server-repo-root>/data/processed`
+- Artifacts: `<server-repo-root>/data/artifacts`
+- SQLite DB: `<server-repo-root>/data/recall.db`
+- Vault sync state DB (Phase 5C): `<server-repo-root>/data/vault_sync_state.db`
+- Daily full-backup root: `<server-repo-root>/data/artifacts/backups/daily_full`
 - Daily backup schedule on `ai-lab`: `2:15 AM` America/Chicago via cron
 - Daily backup retention: `14` days
-- Daily backup manual verification snapshot: `/home/jaydreyer/recall-local/data/artifacts/backups/daily_full/manual_verify_20260306T2006Z`
+- Daily backup manual verification snapshot: `<server-repo-root>/data/artifacts/backups/daily_full/manual_verify_20260306T2006Z`
 - Daily backup coverage:
   - logical SQLite + all Qdrant collections export
   - raw Qdrant Docker volume snapshot
@@ -64,7 +66,7 @@ Last updated: 2026-03-12
 - Distance metric: cosine
 - Live state (ai-lab, 2026-03-06 after Phase 6D restore):
   - Phase 6 collections were recreated with `python3 scripts/phase6/setup_collections.py`.
-  - `recall_resume` was reseeded from `/home/jaydreyer/obsidian-vault/career/Jay-Dreyer-Resume.md`.
+  - `recall_resume` was reseeded from `<vault-root>/career/Jay-Dreyer-Resume.md`.
   - `recall_jobs` was repopulated from career-page discovery and later expanded with additional live discovery passes.
   - Current live bridge stats on 2026-03-07:
     - `total_jobs=984`
@@ -89,7 +91,7 @@ Last updated: 2026-03-12
   - `job_count=97`
   - source mix: `jobs.ashbyhq.com/openai/...` plus one preserved LinkedIn posting
   - operator backup of the pre-reseed OpenAI slice:
-    - `/home/jaydreyer/recall-local/backups/20260307T-openai-reseed/openai_jobs.pre-reseed.json`
+    - `<server-repo-root>/backups/20260307T-openai-reseed/openai_jobs.pre-reseed.json`
 
 ## LLM Runtime
 
@@ -112,11 +114,11 @@ Last updated: 2026-03-12
   - enabled only when Langfuse env vars are present
 - Canonical operator checks:
   - dashboard data readiness:
-    - `/home/jaydreyer/recall-local/scripts/phase6/run_dashboard_smoke.sh`
+    - `<server-repo-root>/scripts/phase6/run_dashboard_smoke.sh`
   - consolidated operator observability:
-    - `/home/jaydreyer/recall-local/scripts/phase6/run_ops_observability_check.sh`
+    - `<server-repo-root>/scripts/phase6/run_ops_observability_check.sh`
   - cron wrapper:
-    - `/home/jaydreyer/recall-local/scripts/phase6/run_ops_observability_cron.sh`
+    - `<server-repo-root>/scripts/phase6/run_ops_observability_cron.sh`
 - Optional uptime alert env:
   - `RECALL_UPTIME_ALERT_WEBHOOK_URL`
   - `RECALL_UPTIME_ALERT_TELEGRAM_BOT_TOKEN`
@@ -131,7 +133,7 @@ Last updated: 2026-03-12
   - `HONEYCOMB_DATASET`
   - `HONEYCOMB_API_ENDPOINT`
 - Observability artifacts:
-  - `/home/jaydreyer/recall-local/data/artifacts/observability`
+  - `<server-repo-root>/data/artifacts/observability`
 
 ## Cloud Providers
 
@@ -215,12 +217,12 @@ Last updated: 2026-03-12
     - before vault env+mount wiring, `GET /v1/vault-files` returned `400 validation_failed` (invalid default vault path).
     - after vault env+mount wiring, `GET /v1/vault-files` returns `HTTP 200` (empty tree when vault has no notes).
   - bridge container runtime env (ai-lab compose):
-    - `RECALL_VAULT_PATH=/home/jaydreyer/obsidian-vault`
+    - `RECALL_VAULT_PATH=<vault-root>`
     - `RECALL_VAULT_DEBOUNCE_SEC=5`
     - `RECALL_VAULT_EXCLUDE_DIRS=_attachments,.obsidian,.trash,recall-artifacts`
     - `RECALL_VAULT_WRITE_BACK=false`
   - bridge compose mount (ai-lab):
-    - `/home/jaydreyer/obsidian-vault:/home/jaydreyer/obsidian-vault`
+    - `<vault-root>:<vault-root>`
 - Optional auth:
   - `RECALL_API_KEY` enforces `X-API-Key` header when set.
 - Rate limiting env vars:
@@ -255,7 +257,7 @@ Last updated: 2026-03-12
 ## Hostname/Port Scope Rule
 
 - `localhost` always means the current machine/container.
-- From MacBook, use `http://100.116.103.78:<port>` for ai-lab services.
+- From MacBook, use `http://<ai-lab-tailnet-ip>:<port>` for ai-lab services.
 - From ai-lab shell, use `http://localhost:<port>` for host-published services.
 
 ## Phase Status
@@ -265,7 +267,7 @@ Last updated: 2026-03-12
 - Phase 2: complete (`2A`-`2C` done; meeting pipeline + domain retrieval/evals operational)
 - Phase 3: complete (`3A` operator wrappers/forms, `3B` retrieval-quality track, `3C` ops hardening + portfolio bundle validated on ai-lab on 2026-02-24)
 - Phase 5: complete (`5A`-`5E.1` implementation complete and `5F` hardening/closeout validated, including canonical-only API cutover, coverage gate, operator entrypoint, demo runner evidence, auth/rate-limit verification, and completion checklist closure on 2026-02-26)
-- Phase 6A: complete (foundation routes live on ai-lab, `recall_jobs`/`recall_resume` created, resume version `2` ingested from `/home/jaydreyer/obsidian-vault/career/Jay-Dreyer-Resume.md`, and Daily Dashboard serving on port `3001` as of 2026-03-04)
+- Phase 6A: complete (foundation routes live on ai-lab, `recall_jobs`/`recall_resume` created, resume version `2` ingested from `<vault-root>/career/Jay-Dreyer-Resume.md`, and Daily Dashboard serving on port `3001` as of 2026-03-04)
 - Phase 6B: complete (job discovery runner, n8n workflow exports, and OpenAI Ashby migration shipped and validated on ai-lab)
 - Phase 6C: complete (evaluation, Telegram notification, observation telemetry, and Workflow 3 runtime path validated on ai-lab)
 - Phase 6D: complete (daily dashboard implementation, deploy validation, cache warming, recovery UX, and operator smoke path live on ai-lab)

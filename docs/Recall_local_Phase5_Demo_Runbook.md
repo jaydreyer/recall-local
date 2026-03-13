@@ -3,7 +3,7 @@
 Purpose: run a single Phase `5F` demo script that records evidence for all required demo lanes.
 
 Entrypoint script:
-- `/Users/jaydreyer/projects/recall-local/scripts/phase5/run_phase5_demo_now.sh`
+- `<repo-root>/scripts/phase5/run_phase5_demo_now.sh`
 
 Covered lanes:
 1. dashboard ingest/query
@@ -16,20 +16,20 @@ Covered lanes:
 Show help:
 
 ```bash
-/Users/jaydreyer/projects/recall-local/scripts/phase5/run_phase5_demo_now.sh --help
+<repo-root>/scripts/phase5/run_phase5_demo_now.sh --help
 ```
 
 Dry-run mode (default):
 
 ```bash
-/Users/jaydreyer/projects/recall-local/scripts/phase5/run_phase5_demo_now.sh
+<repo-root>/scripts/phase5/run_phase5_demo_now.sh
 ```
 
 Dry-run mode against ai-lab bridge:
 
 ```bash
-/Users/jaydreyer/projects/recall-local/scripts/phase5/run_phase5_demo_now.sh \
-  --bridge-url http://100.116.103.78:8090 \
+<repo-root>/scripts/phase5/run_phase5_demo_now.sh \
+  --bridge-url http://<ai-lab-tailnet-ip>:8090 \
   --mode dry-run \
   --eval-suite both
 ```
@@ -37,7 +37,7 @@ Dry-run mode against ai-lab bridge:
 Live mode with API key and strict eval pass requirement:
 
 ```bash
-/Users/jaydreyer/projects/recall-local/scripts/phase5/run_phase5_demo_now.sh \
+<repo-root>/scripts/phase5/run_phase5_demo_now.sh \
   --mode live \
   --api-key "$RECALL_API_KEY" \
   --eval-suite both \
@@ -47,7 +47,7 @@ Live mode with API key and strict eval pass requirement:
 Enable Gmail browser smoke harness in extension lane:
 
 ```bash
-/Users/jaydreyer/projects/recall-local/scripts/phase5/run_phase5_demo_now.sh \
+<repo-root>/scripts/phase5/run_phase5_demo_now.sh \
   --run-extension-browser-smoke
 ```
 

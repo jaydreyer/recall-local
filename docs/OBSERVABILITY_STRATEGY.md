@@ -270,7 +270,7 @@ Cron-friendly wrapper:
 Recommended ai-lab cron baseline:
 
 ```cron
-*/10 * * * * cd /home/jaydreyer/recall-local && /home/jaydreyer/recall-local/scripts/phase6/run_ops_observability_cron.sh >> /home/jaydreyer/recall-local/data/artifacts/observability/cron.log 2>&1
+*/10 * * * * cd <server-repo-root> && <server-repo-root>/scripts/phase6/run_ops_observability_cron.sh >> <server-repo-root>/data/artifacts/observability/cron.log 2>&1
 ```
 
 That is intentionally lightweight. It does not replace richer synthetic monitoring later, but it gives a real operator-facing uptime and alerting loop now.
@@ -359,12 +359,12 @@ If this work starts before the rest of the product is complete, use this order:
 
 ## Related Files
 
-- `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py`
-- `/Users/jaydreyer/projects/recall-local/scripts/llm_client.py`
-- `/Users/jaydreyer/projects/recall-local/scripts/eval/run_eval.py`
-- `/Users/jaydreyer/projects/recall-local/scripts/phase6/job_discovery_runner.py`
-- `/Users/jaydreyer/projects/recall-local/scripts/phase6/run_ops_observability_check.sh`
-- `/Users/jaydreyer/projects/recall-local/ui/dashboard/src/api.js`
-- `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/api.js`
-- `/Users/jaydreyer/projects/recall-local/docs/Recall_local_PRD.md`
-- `/Users/jaydreyer/projects/recall-local/docs/IMPLEMENTATION_LOG.md`
+- `<repo-root>/scripts/phase1/ingest_bridge_api.py`
+- `<repo-root>/scripts/llm_client.py`
+- `<repo-root>/scripts/eval/run_eval.py`
+- `<repo-root>/scripts/phase6/job_discovery_runner.py`
+- `<repo-root>/scripts/phase6/run_ops_observability_check.sh`
+- `<repo-root>/ui/dashboard/src/api.js`
+- `<repo-root>/ui/daily-dashboard/src/api.js`
+- `<repo-root>/docs/Recall_local_PRD.md`
+- `<repo-root>/docs/IMPLEMENTATION_LOG.md`

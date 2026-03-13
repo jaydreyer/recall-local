@@ -32,7 +32,7 @@ Phase 3 is an extension phase. Phase 2 remains the hard gate for core scope comp
    - bookmarklet ingestion
    - meeting action extraction
 3. Helper scripts for common operations (no payload editing):
-   - `/Users/jaydreyer/projects/recall-local/scripts/rehearsal/run_phase2_demo_rehearsal.sh` (already present; keep current)
+   - `<repo-root>/scripts/rehearsal/run_phase2_demo_rehearsal.sh` (already present; keep current)
    - add small wrappers for "ingest manifest now", "run all evals now", "run one query mode now"
 4. Docs refresh for operator flow:
    - where to click, where artifacts land, and fallback CLI commands.

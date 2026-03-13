@@ -4,7 +4,7 @@ Purpose: explain what was tuned in the RAG system, why it mattered, and where th
 
 For manual validation through the dashboard UI, use:
 
-- `/Users/jaydreyer/projects/recall-local/docs/Recall_local_RAG_UI_QA_Checklist.md`
+- `<repo-root>/docs/Recall_local_RAG_UI_QA_Checklist.md`
 
 ## Scope
 
@@ -39,10 +39,10 @@ This project did not fine-tune model weights. It tuned the RAG system through:
 
 ### Files
 
-- `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingestion_pipeline.py`
-- `/Users/jaydreyer/projects/recall-local/scripts/phase2/ingest_job_search_manifest.py`
-- `/Users/jaydreyer/projects/recall-local/scripts/phase2/job_search_manifest.jaydreyer.ai-lab.json`
-- `/Users/jaydreyer/projects/recall-local/scripts/phase2/learning_manifest.genieincodebottle.ai-lab.json`
+- `<repo-root>/scripts/phase1/ingestion_pipeline.py`
+- `<repo-root>/scripts/phase2/ingest_job_search_manifest.py`
+- `<repo-root>/scripts/phase2/job_search_manifest.jaydreyer.ai-lab.json`
+- `<repo-root>/scripts/phase2/learning_manifest.genieincodebottle.ai-lab.json`
 
 ## 2) Retrieval scope and lane isolation
 
@@ -63,9 +63,9 @@ This project did not fine-tune model weights. It tuned the RAG system through:
 
 ### Files
 
-- `/Users/jaydreyer/projects/recall-local/scripts/phase1/retrieval.py`
-- `/Users/jaydreyer/projects/recall-local/scripts/phase1/rag_query.py`
-- `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py`
+- `<repo-root>/scripts/phase1/retrieval.py`
+- `<repo-root>/scripts/phase1/rag_query.py`
+- `<repo-root>/scripts/phase1/ingest_bridge_api.py`
 
 ## 3) Prompt profile tuning
 
@@ -83,9 +83,9 @@ This project did not fine-tune model weights. It tuned the RAG system through:
 
 ### Files
 
-- `/Users/jaydreyer/projects/recall-local/prompts/workflow_02_rag_answer.md`
-- `/Users/jaydreyer/projects/recall-local/prompts/job_search_coach.md`
-- `/Users/jaydreyer/projects/recall-local/prompts/learning_coach.md`
+- `<repo-root>/prompts/workflow_02_rag_answer.md`
+- `<repo-root>/prompts/job_search_coach.md`
+- `<repo-root>/prompts/learning_coach.md`
 
 ## 4) Deterministic guardrails
 
@@ -102,7 +102,7 @@ This project did not fine-tune model weights. It tuned the RAG system through:
 
 ### Files
 
-- `/Users/jaydreyer/projects/recall-local/scripts/phase1/rag_query.py`
+- `<repo-root>/scripts/phase1/rag_query.py`
 
 ## 5) Reliability hardening
 
@@ -119,8 +119,8 @@ This project did not fine-tune model weights. It tuned the RAG system through:
 
 ### Files
 
-- `/Users/jaydreyer/projects/recall-local/scripts/llm_client.py`
-- `/Users/jaydreyer/projects/recall-local/scripts/eval/scheduled_eval.sh`
+- `<repo-root>/scripts/llm_client.py`
+- `<repo-root>/scripts/eval/scheduled_eval.sh`
 
 ## 6) Evaluation tuning and gates
 
@@ -139,10 +139,10 @@ This project did not fine-tune model weights. It tuned the RAG system through:
 
 ### Files
 
-- `/Users/jaydreyer/projects/recall-local/scripts/eval/run_eval.py`
-- `/Users/jaydreyer/projects/recall-local/scripts/eval/job_search_eval_cases.json`
-- `/Users/jaydreyer/projects/recall-local/scripts/eval/learning_eval_cases.json`
-- `/Users/jaydreyer/projects/recall-local/scripts/eval/scheduled_eval.sh`
+- `<repo-root>/scripts/eval/run_eval.py`
+- `<repo-root>/scripts/eval/job_search_eval_cases.json`
+- `<repo-root>/scripts/eval/learning_eval_cases.json`
+- `<repo-root>/scripts/eval/scheduled_eval.sh`
 
 ## 6A) Current local model recommendation
 
@@ -176,25 +176,25 @@ Short version:
 Job-search lane check:
 
 ```bash
-python3 /home/jaydreyer/recall-local/scripts/eval/run_eval.py \
-  --cases-file /home/jaydreyer/recall-local/scripts/eval/job_search_eval_cases.json \
+python3 <server-repo-root>/scripts/eval/run_eval.py \
+  --cases-file <server-repo-root>/scripts/eval/job_search_eval_cases.json \
   --backend webhook \
-  --webhook-url http://100.116.103.78:5678/webhook/recall-query
+  --webhook-url http://<ai-lab-tailnet-ip>:5678/webhook/recall-query
 ```
 
 Learning lane check:
 
 ```bash
-python3 /home/jaydreyer/recall-local/scripts/eval/run_eval.py \
-  --cases-file /home/jaydreyer/recall-local/scripts/eval/learning_eval_cases.json \
+python3 <server-repo-root>/scripts/eval/run_eval.py \
+  --cases-file <server-repo-root>/scripts/eval/learning_eval_cases.json \
   --backend webhook \
-  --webhook-url http://100.116.103.78:5678/webhook/recall-query
+  --webhook-url http://<ai-lab-tailnet-ip>:5678/webhook/recall-query
 ```
 
 Scheduled all-suite check:
 
 ```bash
-/home/jaydreyer/recall-local/scripts/eval/scheduled_eval.sh
+<server-repo-root>/scripts/eval/scheduled_eval.sh
 ```
 
 ## 9) Future tuning workflow
@@ -228,7 +228,7 @@ Use this order when quality drops:
 
 - Adjust:
   - prompt profile (`job_search_coach.md` or `learning_coach.md`)
-  - deterministic guards in `/Users/jaydreyer/projects/recall-local/scripts/phase1/rag_query.py`
+  - deterministic guards in `<repo-root>/scripts/phase1/rag_query.py`
 - Validate with:
   - required-term checks in eval output (`required_terms_ok`)
 
@@ -271,4 +271,4 @@ If a change hurts reliability:
 3. restart bridge if runtime code changed
 4. rerun failing suite to confirm recovery
 5. log the failed experiment in:
-   - `/Users/jaydreyer/projects/recall-local/docs/IMPLEMENTATION_LOG.md`
+   - `<repo-root>/docs/IMPLEMENTATION_LOG.md`

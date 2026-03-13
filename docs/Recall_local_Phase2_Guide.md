@@ -6,8 +6,8 @@ Purpose: execute Phase 2 as a demo-ready hardening pass after Phase 1 completion
 
 Deliver a reliable end-to-end demo flow that adds meeting action extraction, stronger ingestion coverage, domain-scoped RAG personas, observability, and polished artifact/audit visibility.
 
-Source of truth: `/Users/jaydreyer/projects/recall-local/docs/Recall_local_PRD.md` (Phase 2 section).
-Execution checklist: `/Users/jaydreyer/projects/recall-local/docs/Recall_local_Phase2_Checklists.md`.
+Source of truth: `<repo-root>/docs/Recall_local_PRD.md` (Phase 2 section).
+Execution checklist: `<repo-root>/docs/Recall_local_Phase2_Checklists.md`.
 
 ## Phase 2 sub-phases
 
@@ -60,23 +60,23 @@ Execution checklist: `/Users/jaydreyer/projects/recall-local/docs/Recall_local_P
 ## 2A Core Interfaces (implemented)
 
 - Runner script:
-  - `/Users/jaydreyer/projects/recall-local/scripts/phase2/meeting_action_items.py`
+  - `<repo-root>/scripts/phase2/meeting_action_items.py`
 - Payload runner:
-  - `/Users/jaydreyer/projects/recall-local/scripts/phase2/meeting_from_payload.py`
+  - `<repo-root>/scripts/phase2/meeting_from_payload.py`
 - HTTP bridge endpoints:
   - `/v1/meeting-action-items` (canonical)
   - `/meeting/action-items` (alias)
   - `/meeting/actions` (alias)
   - `/query/meeting` (alias)
 - Prompt templates:
-  - `/Users/jaydreyer/projects/recall-local/prompts/workflow_03_meeting_extract.md`
-  - `/Users/jaydreyer/projects/recall-local/prompts/workflow_03_meeting_extract_retry.md`
+  - `<repo-root>/prompts/workflow_03_meeting_extract.md`
+  - `<repo-root>/prompts/workflow_03_meeting_extract_retry.md`
 - Payload example:
-  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/payload_examples/meeting_action_items_payload_example.json`
+  - `<repo-root>/n8n/workflows/payload_examples/meeting_action_items_payload_example.json`
 - n8n wiring runbook:
-  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/PHASE2A_WORKFLOW03_WIRING.md`
+  - `<repo-root>/n8n/workflows/PHASE2A_WORKFLOW03_WIRING.md`
 - bridge verification helper:
-  - `/Users/jaydreyer/projects/recall-local/scripts/phase2/verify_workflow03_bridge.py`
+  - `<repo-root>/scripts/phase2/verify_workflow03_bridge.py`
 
 Initial contract behavior:
 - returns validated structured JSON
@@ -87,21 +87,21 @@ Initial contract behavior:
 ## 2B Ingestion controls (implemented)
 
 - Unified webhook normalization now supports bookmarklet + gdoc-friendly payloads and preserves tags:
-  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/channel_adapters.py`
-  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_from_payload.py`
+  - `<repo-root>/scripts/phase1/channel_adapters.py`
+  - `<repo-root>/scripts/phase1/ingest_from_payload.py`
 - Source-based replacement controls for mutable sources:
   - request fields: `replace_existing` (boolean), `source_key` (stable key)
   - canonical source identity persisted to Qdrant payload field `source_identity`
   - replacement activity exposed in ingestion result fields (`replace_existing`, `replaced_points`, `replacement_status`)
-  - implementation: `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingestion_pipeline.py`
+  - implementation: `<repo-root>/scripts/phase1/ingestion_pipeline.py`
 - Bridge route supports bookmarklet path directly:
   - `/v1/ingestions` (canonical, with `channel=bookmarklet`)
   - `/ingest/bookmarklet` (alias)
-  - implementation: `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py`
+  - implementation: `<repo-root>/scripts/phase1/ingest_bridge_api.py`
 - Phase 2B payload/runbook assets:
-  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/payload_examples/bookmarklet_ingest_payload_example.json`
-  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/payload_examples/gdoc_ingest_payload_example.json`
-  - `/Users/jaydreyer/projects/recall-local/n8n/workflows/PHASE1B_CHANNEL_WIRING.md`
+  - `<repo-root>/n8n/workflows/payload_examples/bookmarklet_ingest_payload_example.json`
+  - `<repo-root>/n8n/workflows/payload_examples/gdoc_ingest_payload_example.json`
+  - `<repo-root>/n8n/workflows/PHASE1B_CHANNEL_WIRING.md`
 
 Operational rule for job-search corpus:
 - `job-search` tag is mandatory at ingestion time.
@@ -113,34 +113,34 @@ Operational rule for job-search corpus:
   - payload field: `filter_tags` (array or comma-separated string)
   - retrieval filter behavior: when present, Qdrant query restricts results to matching tags
   - implementation:
-    - `/Users/jaydreyer/projects/recall-local/scripts/phase1/retrieval.py`
-    - `/Users/jaydreyer/projects/recall-local/scripts/phase1/rag_query.py`
-    - `/Users/jaydreyer/projects/recall-local/scripts/phase1/rag_from_payload.py`
-    - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py`
+    - `<repo-root>/scripts/phase1/retrieval.py`
+    - `<repo-root>/scripts/phase1/rag_query.py`
+    - `<repo-root>/scripts/phase1/rag_from_payload.py`
+    - `<repo-root>/scripts/phase1/ingest_bridge_api.py`
 - Workflow 02 prompt mode now supports:
-  - `mode=default` -> `/Users/jaydreyer/projects/recall-local/prompts/workflow_02_rag_answer.md`
-  - `mode=job-search` -> `/Users/jaydreyer/projects/recall-local/prompts/job_search_coach.md`
-  - `mode=learning` -> `/Users/jaydreyer/projects/recall-local/prompts/learning_coach.md`
+  - `mode=default` -> `<repo-root>/prompts/workflow_02_rag_answer.md`
+  - `mode=job-search` -> `<repo-root>/prompts/job_search_coach.md`
+  - `mode=learning` -> `<repo-root>/prompts/learning_coach.md`
 - Workflow 02 response/audit now includes:
   - `sources[].tags`
   - `audit.mode`
   - `audit.filter_tags`
   - `audit.prompt_profile`
 - Job-search eval suite added to shared harness:
-  - `/Users/jaydreyer/projects/recall-local/scripts/eval/job_search_eval_cases.json`
-  - `/Users/jaydreyer/projects/recall-local/scripts/eval/run_eval.py`
+  - `<repo-root>/scripts/eval/job_search_eval_cases.json`
+  - `<repo-root>/scripts/eval/run_eval.py`
   - includes checks for required source tags and required grounding terms
 - Scheduled eval runner now executes both suites:
-  - core: `/Users/jaydreyer/projects/recall-local/scripts/eval/eval_cases.json`
-  - job-search: `/Users/jaydreyer/projects/recall-local/scripts/eval/job_search_eval_cases.json`
-  - script: `/Users/jaydreyer/projects/recall-local/scripts/eval/scheduled_eval.sh`
+  - core: `<repo-root>/scripts/eval/eval_cases.json`
+  - job-search: `<repo-root>/scripts/eval/job_search_eval_cases.json`
+  - script: `<repo-root>/scripts/eval/scheduled_eval.sh`
 - Optional Langfuse instrumentation hooks added in LLM client:
-  - `/Users/jaydreyer/projects/recall-local/scripts/llm_client.py`
+  - `<repo-root>/scripts/llm_client.py`
   - enabled with `RECALL_LANGFUSE_ENABLED=true` and Langfuse keys
   - trace metadata includes workflow/mode context when passed by callers (for example Workflow 02)
 - Batch ingest helper for job-search corpus (reduces repeated curl usage):
-  - `/Users/jaydreyer/projects/recall-local/scripts/phase2/ingest_job_search_manifest.py`
-  - manifest template: `/Users/jaydreyer/projects/recall-local/scripts/phase2/job_search_manifest.example.json`
+  - `<repo-root>/scripts/phase2/ingest_job_search_manifest.py`
+  - manifest template: `<repo-root>/scripts/phase2/job_search_manifest.example.json`
   - optional CLI flag `--ensure-tag` for explicit tag enforcement when desired
 
 ## Risks and guardrails

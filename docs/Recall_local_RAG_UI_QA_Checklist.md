@@ -24,7 +24,7 @@ The chat UI should do these jobs well:
 
 - Use the live `Recall Chat` UI against the current `ai-lab` stack.
 - Before a manual UI pass, run the scripted smoke suite when retrieval/generation behavior changed:
-  - `/Users/jaydreyer/projects/recall-local/scripts/eval/run_chat_quality_smoke.sh`
+  - `<repo-root>/scripts/eval/run_chat_quality_smoke.sh`
 - For learning/PDF cases, set:
   - `Tag Filter`: `learning,genai-docs`
   - `Tag Match`: `all (AND)`

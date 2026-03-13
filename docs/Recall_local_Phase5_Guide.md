@@ -3,9 +3,9 @@
 Purpose: convert the current operator-heavy system into a frictionless daily-use product with dashboard UI, Chrome capture, Obsidian sync, and production guardrails.
 
 Source inputs:
-- `/Users/jaydreyer/projects/recall-local/docs/phase5-implementation-brief.md`
-- `/Users/jaydreyer/projects/recall-local/docs/scaffolds/recall-dashboard.jsx`
-- `/Users/jaydreyer/projects/recall-local/docs/scaffolds/recall-chrome-popup.jsx`
+- `<repo-root>/docs/phase5-implementation-brief.md`
+- `<repo-root>/docs/scaffolds/recall-dashboard.jsx`
+- `<repo-root>/docs/scaffolds/recall-chrome-popup.jsx`
 
 ## Phase 5 goal
 

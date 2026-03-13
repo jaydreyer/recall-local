@@ -12,7 +12,7 @@ import sqlite3
 import sys
 import threading
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -23,7 +23,6 @@ if str(ROOT) not in sys.path:
 
 from scripts.phase1.group_model import DEFAULT_GROUP, normalize_group  # noqa: E402
 from scripts.phase1.ingestion_pipeline import IngestRequest, ingest_request  # noqa: E402
-
 
 DEFAULT_VAULT_PATH = "~/obsidian-vault"
 DEFAULT_EXCLUDE_DIRS = ".obsidian,.trash,_attachments,recall-artifacts"
