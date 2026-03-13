@@ -252,7 +252,10 @@ The practical uptime path is now:
 1. Run `scripts/phase6/run_ops_observability_check.sh`
 2. Write a JSON artifact under `data/artifacts/observability`
 3. Exit non-zero on failure
-4. Optionally send alerts when these env vars are present:
+4. Treat `GET /v1/dashboard-checks` as a two-stage probe:
+   - first try the full check, including skill gaps
+   - if that times out, retry once with `include_gaps=false` so transient gap aggregation spikes do not page the operator as a full dashboard outage
+5. Optionally send alerts when these env vars are present:
    - `RECALL_UPTIME_ALERT_WEBHOOK_URL`
    - `RECALL_UPTIME_ALERT_TELEGRAM_BOT_TOKEN`
    - `RECALL_UPTIME_ALERT_TELEGRAM_CHAT_ID`
@@ -271,6 +274,14 @@ Recommended ai-lab cron baseline:
 ```
 
 That is intentionally lightweight. It does not replace richer synthetic monitoring later, but it gives a real operator-facing uptime and alerting loop now.
+
+The important nuance is that the uptime monitor is now opinionated about what counts as a page-worthy failure:
+
+- bridge health failure: alert
+- dashboard jobs/companies readiness failure: alert
+- chat/RAG probe failure: alert
+- UI reachability failure: alert
+- one-off slow full dashboard check caused only by gap aggregation: retry once without gaps before alerting
 
 ## Honeycomb Status
 

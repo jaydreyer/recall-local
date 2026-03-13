@@ -62,6 +62,13 @@ def fetch_json(url, *, method="GET", payload=None, timeout=60):
         }
 
 
+def build_url(base, *, include_gaps=None):
+    if include_gaps is None:
+        return base
+    separator = "&" if "?" in base else "?"
+    return f"{base}{separator}include_gaps={'true' if include_gaps else 'false'}"
+
+
 def fetch_text(url, *, timeout=30):
     request = urllib.request.Request(url, headers={"Accept": "text/html"}, method="GET")
     with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -109,18 +116,37 @@ checks.append(
 
 
 def dashboard_check():
-    payload = fetch_json(f"{bridge_base}/v1/dashboard-checks", timeout=60)
-    body = payload["body"]
-    if str(body.get("status") or "").lower() != "ok":
-        raise RuntimeError(f"dashboard-checks status={body.get('status')!r}")
-    if int((body.get("jobs") or {}).get("count") or 0) <= 0:
-        raise RuntimeError("dashboard-checks reported no jobs")
-    if int((body.get("companies") or {}).get("count") or 0) <= 0:
-        raise RuntimeError("dashboard-checks reported no companies")
-    gaps = body.get("gaps") or {}
-    if gaps and str(gaps.get("status") or "").lower() != "ok":
-        raise RuntimeError(f"dashboard-checks gaps status={gaps.get('status')!r}")
-    return {"endpoint": f"{bridge_base}/v1/dashboard-checks", **payload}
+    endpoint = f"{bridge_base}/v1/dashboard-checks"
+    attempts = (
+        {"include_gaps": True, "timeout": 60, "label": "full"},
+        {"include_gaps": False, "timeout": 30, "label": "core"},
+    )
+    failures: list[str] = []
+
+    for index, attempt in enumerate(attempts):
+        include_gaps = attempt["include_gaps"]
+        url = build_url(endpoint, include_gaps=include_gaps)
+        try:
+            payload = fetch_json(url, timeout=attempt["timeout"])
+            body = payload["body"]
+            if str(body.get("status") or "").lower() != "ok":
+                raise RuntimeError(f"dashboard-checks status={body.get('status')!r}")
+            if int((body.get("jobs") or {}).get("count") or 0) <= 0:
+                raise RuntimeError("dashboard-checks reported no jobs")
+            if int((body.get("companies") or {}).get("count") or 0) <= 0:
+                raise RuntimeError("dashboard-checks reported no companies")
+            gaps = body.get("gaps") or {}
+            if include_gaps and gaps and str(gaps.get("status") or "").lower() != "ok":
+                raise RuntimeError(f"dashboard-checks gaps status={gaps.get('status')!r}")
+            result = {"endpoint": url, **payload, "include_gaps": include_gaps}
+            if index > 0:
+                result["fallback_used"] = True
+                result["fallback_reason"] = failures[-1] if failures else "dashboard-checks retry"
+            return result
+        except Exception as exc:  # noqa: BLE001
+            failures.append(f"{attempt['label']} attempt failed: {exc}")
+
+    raise RuntimeError("; ".join(failures))
 
 
 checks.append(run_check("dashboard_checks", dashboard_check))

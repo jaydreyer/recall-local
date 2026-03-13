@@ -40,6 +40,9 @@ Typical symptoms:
   - `GET /v1/dashboard-checks`
 - Operator smoke wrapper:
   - `scripts/phase6/run_dashboard_smoke.sh`
+- Ops uptime wrapper:
+  - `scripts/phase6/run_ops_observability_check.sh`
+  - retries `GET /v1/dashboard-checks` once with `include_gaps=false` if the full dashboard check times out
 - UI cache keys:
   - `daily-dashboard-jobs-snapshot-v1`
   - `daily-dashboard-gap-snapshot-v1`
@@ -131,10 +134,13 @@ Open `http://100.116.103.78:3001/` and confirm:
 1. Check browser console for `504` and `ERR_CONTENT_LENGTH_MISMATCH`.
 2. Verify direct bridge endpoints on `:8090` still return data.
 3. Run `scripts/phase6/run_dashboard_smoke.sh` against the bridge and inspect the `dashboard-checks` payload.
-4. If direct bridge is healthy, inspect `recall-daily-dashboard` nginx logs.
-5. Compare the requested dashboard payload sizes and confirm the client is still using:
+4. If the uptime monitor alerted on `dashboard_checks: timed out`, inspect the latest observability artifact first:
+   - if it shows `include_gaps=false` and `fallback_used=true`, the alert was avoided and only the full gaps-inclusive pass was slow
+   - if both attempts failed, treat it as a real dashboard readiness issue
+5. If direct bridge is healthy, inspect `recall-daily-dashboard` nginx logs.
+6. Compare the requested dashboard payload sizes and confirm the client is still using:
    - jobs `view=summary`
    - companies `include_jobs=false`
    - lazy loading for gaps/settings
-6. Check the `cache_warmer` section in `GET /v1/dashboard-checks` for stale completion times or the last warm-up error.
-7. Only after that consider increasing proxy timeouts or investigating bridge performance.
+7. Check the `cache_warmer` section in `GET /v1/dashboard-checks` for stale completion times or the last warm-up error.
+8. Only after that consider increasing proxy timeouts or investigating bridge performance.
