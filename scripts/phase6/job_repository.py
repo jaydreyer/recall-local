@@ -46,6 +46,54 @@ def _normalize_observation(value: Any) -> dict[str, Any]:
     return {}
 
 
+def _flatten_search_value(value: Any) -> list[str]:
+    if value in (None, ""):
+        return []
+    if isinstance(value, str):
+        text = value.strip()
+        return [text] if text else []
+    if isinstance(value, (int, float, bool)):
+        return [str(value)]
+    if isinstance(value, dict):
+        parts: list[str] = []
+        for item in value.values():
+            parts.extend(_flatten_search_value(item))
+        return parts
+    if isinstance(value, (list, tuple, set)):
+        parts: list[str] = []
+        for item in value:
+            parts.extend(_flatten_search_value(item))
+        return parts
+    return [str(value)]
+
+
+def _matches_search(job: dict[str, Any], query: str) -> bool:
+    normalized_query = str(query or "").strip().lower()
+    if not normalized_query:
+        return True
+
+    haystack = " ".join(
+        _flatten_search_value(
+            [
+                job.get("title"),
+                job.get("company"),
+                job.get("company_normalized"),
+                job.get("location"),
+                job.get("source"),
+                job.get("search_query"),
+                job.get("score_rationale"),
+                job.get("matching_skills"),
+                job.get("gaps"),
+                job.get("application_tips"),
+                job.get("cover_letter_angle"),
+                job.get("notes"),
+                job.get("observation"),
+            ]
+        )
+    ).lower()
+    return normalized_query in haystack
+
+
 def _to_slug(value: str) -> str:
     lowered = value.strip().lower()
     cleaned = "".join(char if char.isalnum() else "-" for char in lowered)
@@ -153,6 +201,7 @@ def list_jobs(
     max_score: int = 100,
     company_tier: int | None = None,
     source: str | None = None,
+    search: str | None = None,
     title_query: str | None = None,
     sort: str = "fit_score",
     order: str = "desc",
@@ -166,7 +215,9 @@ def list_jobs(
     if normalized_status == "all":
         normalized_status = ""
     normalized_source = str(source or "").strip().lower()
+    normalized_search = str(search or "").strip().lower()
     normalized_title_query = str(title_query or "").strip().lower()
+    effective_search = normalized_search or normalized_title_query
 
     filtered: list[dict[str, Any]] = []
     for item in records:
@@ -179,7 +230,7 @@ def list_jobs(
             continue
         if normalized_source and str(item.get("source", "")).strip().lower() != normalized_source:
             continue
-        if normalized_title_query and normalized_title_query not in str(item.get("title", "")).lower():
+        if effective_search and not _matches_search(item, effective_search):
             continue
         filtered.append(item)
 

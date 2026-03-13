@@ -1,5 +1,37 @@
 # Recall.local Implementation Log
 
+## 2026-03-13 - Server-backed job search for dashboard triage
+
+### What was executed
+
+- Expanded Phase 6 job filtering in:
+  - [/Users/jaydreyer/projects/recall-local/scripts/phase6/job_repository.py](/Users/jaydreyer/projects/recall-local/scripts/phase6/job_repository.py)
+  - added a multi-field `search` filter for `list_jobs(...)`
+  - search now matches across title, company, location, source, search query, evaluation rationale, matching skills, gaps, notes, and observation metadata
+  - preserved `title_query` as a fallback so older callers still behave sensibly
+- Extended the jobs collection endpoint in:
+  - [/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py](/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py)
+  - `GET /v1/jobs` now accepts optional `search`
+- Wired the Daily Dashboard jobs deck to the server-backed filter in:
+  - [/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/api.js](/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/api.js)
+  - [/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/hooks/useJobs.js](/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/hooks/useJobs.js)
+  - [/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/JobsCommandCenter.jsx](/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/JobsCommandCenter.jsx)
+  - the "Search live roles" box now drives API filtering instead of only searching the already loaded client-side slice
+- Added regression coverage in:
+  - [/Users/jaydreyer/projects/recall-local/tests/test_bridge_api_contract.py](/Users/jaydreyer/projects/recall-local/tests/test_bridge_api_contract.py)
+  - [/Users/jaydreyer/projects/recall-local/tests/test_phase6_job_repository.py](/Users/jaydreyer/projects/recall-local/tests/test_phase6_job_repository.py)
+
+### Validation
+
+- Local validation:
+  - `python3 -m unittest tests.test_bridge_api_contract tests.test_phase6_job_repository`
+  - `npm run build` in `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard`
+
+### Results
+
+- Dashboard triage now has a better chance of surfacing the right role when searching by company name, location, gap language, or notes instead of only exact title text.
+- The jobs search behavior now better matches the UI promise of searching across the live board rather than just the visible client-side subset.
+
 ## 2026-03-13 - Job-alert smoke coverage + ai-lab vault path fix
 
 ### What was executed

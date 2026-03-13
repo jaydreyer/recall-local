@@ -132,6 +132,9 @@ function buildJobQuery(filters) {
   if (filters.company_tier) {
     params.set('company_tier', String(filters.company_tier))
   }
+  if (filters.search) {
+    params.set('search', filters.search)
+  }
   if (filters.view) {
     params.set('view', String(filters.view))
   }

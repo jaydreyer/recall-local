@@ -172,22 +172,6 @@ function laneJobs(jobs, lane) {
   return jobs.filter((job) => laneForJob(job) === lane)
 }
 
-function matchesQuery(job, query) {
-  const haystack = [
-    job.title,
-    job.company,
-    job.location,
-    job.search_query,
-    topMatch(job),
-    topGap(job),
-    job.cover_letter_angle,
-    job.application_tips,
-  ]
-    .join(' ')
-    .toLowerCase()
-  return haystack.includes(query)
-}
-
 function LaneButton({ lane, label, count, active, onClick }) {
   return (
     <button type="button" className={active ? 'lane-button active' : 'lane-button'} onClick={() => onClick(lane)}>
@@ -285,9 +269,8 @@ export default function JobsCommandCenter({ jobsState, settings, onOpenSettings,
 
   const visibleJobs = useMemo(() => {
     const base = laneJobs(jobs, activeLane)
-    const filtered = query ? base.filter((job) => matchesQuery(job, query)) : base
-    return filtered.slice(0, 24)
-  }, [activeLane, jobs, query])
+    return base.slice(0, 24)
+  }, [activeLane, jobs])
 
   const selectedJob = jobsState.selectedJob
   const isInitialLoad = jobsState.loading && jobs.length === 0 && !jobsState.lastLoadedAt
@@ -313,6 +296,12 @@ export default function JobsCommandCenter({ jobsState, settings, onOpenSettings,
       jobsState.setFilter('scoreRange', 'all')
     }
   }, [])
+
+  useEffect(() => {
+    if (jobsState.filters.search !== query) {
+      jobsState.setFilter('search', query)
+    }
+  }, [query, jobsState.filters.search])
 
   useEffect(() => {
     if (heroJob && jobsState.selectedJobId !== heroJob.jobId) {
@@ -396,7 +385,7 @@ export default function JobsCommandCenter({ jobsState, settings, onOpenSettings,
             type="text"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search title, company, location, gaps, or notes..."
+            placeholder="Search all roles by title, company, location, gaps, or notes..."
           />
         </label>
 

@@ -687,6 +687,20 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(response.json()["workflow"], "workflow_06a_jobs")
         self.assertIsNone(mocked.call_args.kwargs["status"])
 
+    def test_phase6_jobs_endpoint_passes_multi_field_search_query(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        with patch("scripts.phase1.ingest_bridge_api.phase6_list_jobs", return_value={"total": 0, "limit": 50, "offset": 0, "items": []}) as mocked:
+            with build_client(env) as client:
+                response = client.get("/v1/jobs?search=openai%20remote%20demos&limit=5")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["workflow"], "workflow_06a_jobs")
+        self.assertEqual(mocked.call_args.kwargs["search"], "openai remote demos")
+
     def test_phase6_jobs_endpoint_accepts_summary_view(self) -> None:
         env = {
             "RECALL_API_KEY": "",

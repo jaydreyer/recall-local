@@ -2083,6 +2083,13 @@ def create_app() -> FastAPI:
         max_score: int = Query(100, ge=0, le=100, description="Maximum fit score."),
         company_tier: Optional[int] = Query(None, ge=1, le=3, description="Optional company tier filter."),
         source: Optional[str] = Query(None, description="Optional source filter."),
+        search: Optional[str] = Query(
+            None,
+            description=(
+                "Optional fuzzy search across title, company, location, evaluation notes, match/gap text, "
+                "and other dashboard-facing job fields."
+            ),
+        ),
         title_query: Optional[str] = Query(None, description="Optional fuzzy title search."),
         sort: str = Query("fit_score", description="Sort field: fit_score, discovered_at, company."),
         order: str = Query("desc", description="Sort order: asc, desc."),
@@ -2152,6 +2159,7 @@ def create_app() -> FastAPI:
                 max_score=max_score,
                 company_tier=company_tier,
                 source=normalized_source,
+                search=search,
                 title_query=title_query,
                 sort=normalized_sort,
                 order=normalized_order,
