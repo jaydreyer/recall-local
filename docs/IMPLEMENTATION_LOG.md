@@ -1,5 +1,24 @@
 # Recall.local Implementation Log
 
+## 2026-03-13 - Public repo ignore rules tightened
+
+### What was executed
+
+- Expanded ignore coverage in:
+  - [/Users/jaydreyer/projects/recall-local/.gitignore](/Users/jaydreyer/projects/recall-local/.gitignore)
+  - added broad `.env` and `docker/.env.*` secret patterns while preserving `*.example` files
+  - added common local artifact patterns for `.coverage`, `htmlcov/`, `*.egg-info/`, `.idea/`, `.vscode/`, `*.pem`, `*.key`, and `*.cert`
+
+### Validation
+
+- Local validation:
+  - `git ls-files` confirms `.pytest_cache/` and `.codex-artifacts/` are not tracked
+  - `git ls-files` confirms only `docker/.env.example` is tracked among env-style files
+
+### Results
+
+- The repo is better protected against accidental commits of local secrets, IDE state, coverage artifacts, and certificate material.
+
 ## 2026-03-13 - Python packaging metadata, dev dependencies, and lock files added
 
 ### What was executed

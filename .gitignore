@@ -5,17 +5,27 @@ data/artifacts/*
 !data/**/.gitkeep
 
 # Environment files with secrets
+.env
+.env.*
+!.env.example
 docker/.env
+docker/.env.*
+!docker/.env.example
 
 # Python
 __pycache__/
 *.pyc
 .venv/
 .pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
 
 # Frontend
 node_modules/
 dist/
+.idea/
+.vscode/
 
 # n8n local data (runtime state, not workflow exports)
 n8n/data/
@@ -28,3 +38,8 @@ n8n/data/
 .DS_Store
 .claude/
 .codex-artifacts/
+
+# Certificates / keys
+*.pem
+*.key
+*.cert
