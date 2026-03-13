@@ -17,13 +17,21 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import IO, Any, Iterable
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 try:
     from dotenv import load_dotenv
 except ModuleNotFoundError:
-    def load_dotenv(*_args, **_kwargs):  # type: ignore[no-redef]
+    def load_dotenv(
+        dotenv_path: str | os.PathLike[str] | None = None,
+        stream: IO[str] | None = None,
+        verbose: bool = False,
+        override: bool = False,
+        interpolate: bool = True,
+        encoding: str | None = "utf-8",
+    ) -> bool:
+        _ = (dotenv_path, stream, verbose, override, interpolate, encoding)
         return False
 
 ROOT = Path(__file__).resolve().parents[2]

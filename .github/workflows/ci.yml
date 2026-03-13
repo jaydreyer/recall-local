@@ -1,0 +1,47 @@
+name: ci
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  lint-type-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: |
+          python -m ruff check \
+            scripts/llm_client.py \
+            scripts/phase1/group_model.py \
+            scripts/phase1/ingestion_pipeline.py \
+            tests/test_llm_client_pytest.py \
+            tests/phase1/test_group_model_pytest.py \
+            tests/phase1/test_ingestion_pipeline_pytest.py \
+            tests/phase1/test_ingest_bridge_api_pytest.py
+
+      - name: Type check
+        run: python -m mypy
+
+      - name: Test
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python -m pytest
