@@ -33,6 +33,53 @@ def build_client(env_updates: dict[str, str]) -> Iterator[TestClient]:
 
 
 class BridgeApiContractTests(unittest.TestCase):
+    def test_cors_defaults_to_no_cross_origin_access_when_unset(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+            "RECALL_API_CORS_ORIGINS": "",
+        }
+        with build_client(env) as client:
+            response = client.options(
+                "/v1/healthz",
+                headers={
+                    "Origin": "http://localhost:3001",
+                    "Access-Control-Request-Method": "GET",
+                },
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn("access-control-allow-origin", response.headers)
+
+    def test_cors_allows_configured_origin_only(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+            "RECALL_API_CORS_ORIGINS": "http://localhost:3001,http://localhost:8170",
+        }
+        with build_client(env) as client:
+            allowed = client.options(
+                "/v1/healthz",
+                headers={
+                    "Origin": "http://localhost:3001",
+                    "Access-Control-Request-Method": "GET",
+                },
+            )
+            blocked = client.options(
+                "/v1/healthz",
+                headers={
+                    "Origin": "http://evil.example",
+                    "Access-Control-Request-Method": "GET",
+                },
+            )
+
+        self.assertEqual(allowed.status_code, 200)
+        self.assertEqual(allowed.headers.get("access-control-allow-origin"), "http://localhost:3001")
+        self.assertEqual(blocked.status_code, 400)
+        self.assertNotIn("access-control-allow-origin", blocked.headers)
+
     def test_healthz_sets_request_id_header_and_echoes_incoming_id(self) -> None:
         env = {
             "RECALL_API_KEY": "",

@@ -585,7 +585,8 @@ def parse_args() -> argparse.Namespace:
 def _load_transcript(args: argparse.Namespace) -> str:
     if args.transcript is not None:
         return args.transcript
-    assert args.transcript_file is not None
+    if args.transcript_file is None:
+        raise ValueError("Either transcript or transcript_file is required.")
     return Path(args.transcript_file).read_text(encoding="utf-8").strip()
 
 

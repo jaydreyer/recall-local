@@ -88,7 +88,7 @@ ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".docx", ".txt", ".md", ".html", ".eml"}
 DEFAULT_ACTIVITY_LIMIT = 25
 DEFAULT_RECENT_EVAL_RUNS = 5
 DEFAULT_EVAL_RUN_TIMEOUT_SECONDS = 900
-DEFAULT_CORS_ORIGINS = "*"
+DEFAULT_CORS_ORIGINS = ""
 CANONICAL_GROUP_ENUM = list(CANONICAL_GROUPS)
 PHASE6_JOB_STATUSES = {"new", "evaluated", "applied", "dismissed", "expired", "error"}
 PHASE6_JOB_SOURCES = {"jobspy", "adzuna", "serpapi", "career_page", "chrome_extension"}
@@ -4342,11 +4342,11 @@ def _read_positive_int_env(name: str, default_value: int) -> int:
 def _cors_origins_from_env() -> list[str]:
     raw = os.getenv("RECALL_API_CORS_ORIGINS", DEFAULT_CORS_ORIGINS).strip()
     if not raw:
-        return [DEFAULT_CORS_ORIGINS]
+        return []
     if raw == "*":
         return ["*"]
     origins = [value.strip() for value in raw.split(",") if value.strip()]
-    return origins or [DEFAULT_CORS_ORIGINS]
+    return origins
 
 
 def _error_response(

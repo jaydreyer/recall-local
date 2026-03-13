@@ -1,5 +1,70 @@
 # Recall.local Implementation Log
 
+## 2026-03-13 - Production assert removed and Ruff/pre-commit scaffolding added
+
+### What was executed
+
+- Replaced a production `assert` in:
+  - [/Users/jaydreyer/projects/recall-local/scripts/phase2/meeting_action_items.py](/Users/jaydreyer/projects/recall-local/scripts/phase2/meeting_action_items.py)
+  - `_load_transcript(...)` now raises `ValueError` when neither transcript input is provided
+- Added repo-level Ruff configuration in:
+  - [/Users/jaydreyer/projects/recall-local/pyproject.toml](/Users/jaydreyer/projects/recall-local/pyproject.toml)
+  - sets a shared baseline for import sorting and core lint checks
+- Added pre-commit scaffolding in:
+  - [/Users/jaydreyer/projects/recall-local/.pre-commit-config.yaml](/Users/jaydreyer/projects/recall-local/.pre-commit-config.yaml)
+  - wires `ruff-check --fix` and `ruff-format`
+- Updated the repo-local git hook in:
+  - [/Users/jaydreyer/projects/recall-local/.githooks/pre-commit](/Users/jaydreyer/projects/recall-local/.githooks/pre-commit)
+  - keeps the `.env` guard
+  - runs `pre-commit` automatically when it is installed locally
+- Added regression coverage in:
+  - [/Users/jaydreyer/projects/recall-local/tests/test_phase2_meeting_action_items_cli.py](/Users/jaydreyer/projects/recall-local/tests/test_phase2_meeting_action_items_cli.py)
+
+### Validation
+
+- Local validation:
+  - `python3 -m unittest tests.test_phase2_meeting_action_items_cli`
+  - `python3 -m py_compile scripts/phase2/meeting_action_items.py`
+  - `bash .githooks/pre-commit` with no staged files
+
+### Results
+
+- The meeting action items CLI no longer relies on `assert` for required runtime input validation.
+- The repo now has a standard Ruff/pre-commit path available for future cleanup and enforcement work.
+
+## 2026-03-13 - Bridge secure defaults and CI dependency scanning tightened
+
+### What was executed
+
+- Tightened bridge CORS defaults in:
+  - [/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py](/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_bridge_api.py)
+  - removed the wildcard fallback so unset `RECALL_API_CORS_ORIGINS` now means no browser cross-origin access by default
+- Updated explicit example bridge origins in:
+  - [/Users/jaydreyer/projects/recall-local/docker/.env.example](/Users/jaydreyer/projects/recall-local/docker/.env.example)
+  - example now lists known local and ai-lab dashboard/UI origins instead of `*`
+- Added a repo-local pre-commit guard in:
+  - [/Users/jaydreyer/projects/recall-local/.githooks/pre-commit](/Users/jaydreyer/projects/recall-local/.githooks/pre-commit)
+  - blocks staging `.env` and `.env.*` files
+  - local repo configured with `git config core.hooksPath .githooks`
+- Added Python dependency vulnerability scanning to CI in:
+  - [/Users/jaydreyer/projects/recall-local/.github/workflows/quality_checks.yml](/Users/jaydreyer/projects/recall-local/.github/workflows/quality_checks.yml)
+  - installs and runs `pip-audit` against `requirements.txt`
+- Added regression coverage for restrictive CORS behavior in:
+  - [/Users/jaydreyer/projects/recall-local/tests/test_bridge_api_contract.py](/Users/jaydreyer/projects/recall-local/tests/test_bridge_api_contract.py)
+
+### Validation
+
+- Local validation:
+  - `python3 -m unittest tests.test_bridge_api_contract`
+  - `python3 -m py_compile scripts/phase1/ingest_bridge_api.py`
+  - `bash .githooks/pre-commit` with no staged files
+
+### Results
+
+- The bridge is no longer permissive to all browser origins by default.
+- The local repo now has a guardrail against accidental `.env` commits.
+- CI will fail earlier when pinned Python dependencies have known vulnerabilities.
+
 ## 2026-03-13 - Python direct dependencies pinned and dashboard builds lockfile-enforced
 
 ### What was executed

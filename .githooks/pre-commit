@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+staged_files="$(git diff --cached --name-only --diff-filter=ACMR)"
+
+if [[ -z "${staged_files}" ]]; then
+  exit 0
+fi
+
+blocked_patterns=(
+  '(^|/)\.env$'
+)
+
+allowed_patterns=(
+  '(^|/)\.env\.example$'
+)
+
+while IFS= read -r path; do
+  [[ -z "${path}" ]] && continue
+  allowed=false
+  for pattern in "${allowed_patterns[@]}"; do
+    if [[ "${path}" =~ ${pattern} ]]; then
+      allowed=true
+      break
+    fi
+  done
+  if [[ "${allowed}" == true ]]; then
+    continue
+  fi
+  for pattern in "${blocked_patterns[@]}"; do
+    if [[ "${path}" =~ ${pattern} ]]; then
+      echo "pre-commit: refusing to commit environment file '${path}'." >&2
+      echo "Remove it from the index or move the values into a template/example file." >&2
+      exit 1
+    fi
+  done
+done <<< "${staged_files}"
+
+if command -v pre-commit >/dev/null 2>&1; then
+  mapfile -t staged_file_array <<< "${staged_files}"
+  exec pre-commit run --hook-stage pre-commit --files "${staged_file_array[@]}"
+fi

@@ -65,6 +65,11 @@ jobs:
           python -m pip install "pytest<9" --break-system-packages
           python -m pytest tests/ -v --tb=short
 
+      - name: Dependency vulnerability scan
+        run: |
+          python -m pip install pip-audit --break-system-packages
+          python -m pip_audit -r requirements.txt
+
       - name: Wrapper smoke checks
         run: |
           set -euo pipefail
