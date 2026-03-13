@@ -26,3 +26,4 @@ n8n/data/
 # OS
 .DS_Store
 .claude/
+.codex-artifacts/
