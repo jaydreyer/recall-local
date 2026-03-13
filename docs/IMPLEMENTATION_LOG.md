@@ -1,5 +1,32 @@
 # Recall.local Implementation Log
 
+## 2026-03-13 - Python direct dependencies pinned and dashboard builds lockfile-enforced
+
+### What was executed
+
+- Pinned direct Python bridge/runtime dependencies in:
+  - [/Users/jaydreyer/projects/recall-local/requirements.txt](/Users/jaydreyer/projects/recall-local/requirements.txt)
+  - aligned direct versions to the package set currently running in the live `recall-ingest-bridge` container on `ai-lab`
+- Switched dashboard Docker builds to lockfile-enforced installs in:
+  - [/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/Dockerfile](/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/Dockerfile)
+  - [/Users/jaydreyer/projects/recall-local/ui/dashboard/Dockerfile](/Users/jaydreyer/projects/recall-local/ui/dashboard/Dockerfile)
+  - replaced `npm install` with `npm ci`
+- Synced the updated files to `ai-lab` and spot-checked remote contents.
+
+### Validation
+
+- Local validation:
+  - verified every entry in `requirements.txt` is exact-pinned with `==`
+  - `npm run build` in `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard`
+  - `npm run build` in `/Users/jaydreyer/projects/recall-local/ui/dashboard`
+- Validation note:
+  - `python3 -m pip install --dry-run -r requirements.txt` was attempted, but the system `pip` on this Mac does not support `--dry-run`
+
+### Results
+
+- Future bridge rebuilds should be more reproducible because direct Python dependency drift is reduced.
+- Future dashboard image builds now honor committed npm lockfiles instead of resolving fresh dependency trees.
+
 ## 2026-03-13 - Dashboard and Telegram evaluation summaries polished
 
 ### What was executed
