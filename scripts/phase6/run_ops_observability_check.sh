@@ -14,23 +14,26 @@ NOTIFY_ON_SUCCESS="${RECALL_UPTIME_NOTIFY_ON_SUCCESS:-false}"
 
 mkdir -p "$ARTIFACT_DIR"
 
-python3 - "$BRIDGE_BASE_URL" "$DASHBOARD_URL" "$CHAT_UI_URL" "$ARTIFACT_DIR" "$API_KEY" "$ALERT_WEBHOOK_URL" "$ALERT_TELEGRAM_TOKEN" "$ALERT_TELEGRAM_CHAT_ID" "$NOTIFY_ON_SUCCESS" <<'PY'
+python3 - "$ROOT_DIR" "$BRIDGE_BASE_URL" "$DASHBOARD_URL" "$CHAT_UI_URL" "$ARTIFACT_DIR" "$API_KEY" "$ALERT_WEBHOOK_URL" "$ALERT_TELEGRAM_TOKEN" "$ALERT_TELEGRAM_CHAT_ID" "$NOTIFY_ON_SUCCESS" <<'PY'
 import json
 import pathlib
+import sqlite3
 import sys
 import urllib.request
+import urllib.parse
 from datetime import datetime, timezone
 
 
-bridge_base = sys.argv[1].rstrip("/")
-dashboard_url = sys.argv[2].rstrip("/")
-chat_ui_url = sys.argv[3].rstrip("/")
-artifact_dir = pathlib.Path(sys.argv[4])
-api_key = sys.argv[5].strip()
-alert_webhook_url = sys.argv[6].strip()
-alert_telegram_token = sys.argv[7].strip()
-alert_telegram_chat_id = sys.argv[8].strip()
-notify_on_success = sys.argv[9].strip().lower() in {"1", "true", "yes", "on"}
+root_dir = pathlib.Path(sys.argv[1]).resolve()
+bridge_base = sys.argv[2].rstrip("/")
+dashboard_url = sys.argv[3].rstrip("/")
+chat_ui_url = sys.argv[4].rstrip("/")
+artifact_dir = pathlib.Path(sys.argv[5])
+api_key = sys.argv[6].strip()
+alert_webhook_url = sys.argv[7].strip()
+alert_telegram_token = sys.argv[8].strip()
+alert_telegram_chat_id = sys.argv[9].strip()
+notify_on_success = sys.argv[10].strip().lower() in {"1", "true", "yes", "on"}
 
 timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 artifact_path = artifact_dir / f"{timestamp}_ops_observability_check.json"
@@ -67,6 +70,18 @@ def build_url(base, *, include_gaps=None):
         return base
     separator = "&" if "?" in base else "?"
     return f"{base}{separator}include_gaps={'true' if include_gaps else 'false'}"
+
+
+def build_n8n_webhook_base(bridge_url):
+    parsed = urllib.parse.urlparse(bridge_url)
+    port = parsed.port
+    if port == 8090:
+        netloc = parsed.netloc.rsplit(":", 1)[0] + ":5678"
+    elif port is None:
+        netloc = f"{parsed.netloc}:5678"
+    else:
+        netloc = parsed.netloc
+    return urllib.parse.urlunparse((parsed.scheme or "http", netloc, "", "", "", ""))
 
 
 def fetch_text(url, *, timeout=30):
@@ -150,6 +165,93 @@ def dashboard_check():
 
 
 checks.append(run_check("dashboard_checks", dashboard_check))
+
+
+def job_alert_workflow_check():
+    db_path = root_dir / "n8n" / "database.sqlite"
+    if not db_path.exists():
+        return {
+            "database": str(db_path),
+            "skipped": True,
+            "reason": "n8n database not present on this host",
+        }
+
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        workflow_row = cur.execute(
+            "SELECT active, nodes FROM workflow_entity WHERE id = ?",
+            ("9DEQqfD8JA5PCiVP",),
+        ).fetchone()
+        if workflow_row is None:
+            raise RuntimeError("Workflow 3 not found in n8n database")
+
+        active, nodes_json = workflow_row
+        if int(active or 0) != 1:
+            raise RuntimeError("Workflow 3 is not active")
+
+        nodes = json.loads(nodes_json)
+
+        send_node = next((node for node in nodes if node.get("name") == "Send Telegram Alert"), None)
+        if send_node is None:
+            raise RuntimeError("Send Telegram Alert node missing")
+        if send_node.get("type") != "n8n-nodes-base.telegram":
+            raise RuntimeError(f"Send Telegram Alert node type={send_node.get('type')!r}")
+
+        telegram_credential = ((send_node.get("credentials") or {}).get("telegramApi") or {})
+        if str(telegram_credential.get("id") or "") != "6aWx4DnLbVi8JlGU":
+            raise RuntimeError("Workflow 3 is not bound to the expected Telegram credential")
+
+        aggregator_row = cur.execute(
+            "SELECT nodes FROM workflow_entity WHERE id = ?",
+            ("cWHLi1plI5siWP8X",),
+        ).fetchone()
+        if aggregator_row is None:
+            raise RuntimeError("Job Board Aggregator workflow missing")
+
+        aggregator_nodes = json.loads(aggregator_row[0])
+        trigger_node = next(
+            (node for node in aggregator_nodes if node.get("name") in {"Trigger Evaluation Workflow", "Queue Evaluation Run"}),
+            None,
+        )
+        if trigger_node is None:
+            raise RuntimeError("Aggregator evaluation handoff node missing")
+        trigger_url = str(((trigger_node.get("parameters") or {}).get("url")) or "")
+        if "/webhook/recall-job-evaluate" not in trigger_url:
+            raise RuntimeError("Aggregator is not handing off to Workflow 3 webhook")
+    finally:
+        conn.close()
+
+    probe_payload = {"job_ids": ["job_smoke_nonexistent"], "wait": True}
+    n8n_base = build_n8n_webhook_base(bridge_base)
+    probe_response = fetch_json(
+        f"{n8n_base}/webhook/recall-job-evaluate",
+        method="POST",
+        payload=probe_payload,
+        timeout=45,
+    )
+    body = probe_response["body"]
+    if str(body.get("status") or "").lower() != "completed":
+        raise RuntimeError(f"job alert webhook status={body.get('status')!r}")
+    if int(body.get("notifications_sent") or 0) != 0:
+        raise RuntimeError("job alert smoke unexpectedly sent a notification")
+
+    return {
+        "database": str(db_path),
+        "endpoint": f"{n8n_base}/webhook/recall-job-evaluate",
+        "credential": telegram_credential,
+        "aggregator_handoff_url": trigger_url,
+        "probe": {
+            "status_code": probe_response["status_code"],
+            "run_id": body.get("run_id"),
+            "status": body.get("status"),
+            "high_fit_count": body.get("high_fit_count"),
+            "notifications_sent": body.get("notifications_sent"),
+        },
+    }
+
+
+checks.append(run_check("job_alert_workflow", job_alert_workflow_check))
 
 
 def rag_probe():

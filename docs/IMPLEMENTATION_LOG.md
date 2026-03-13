@@ -1,5 +1,50 @@
 # Recall.local Implementation Log
 
+## 2026-03-13 - Job-alert smoke coverage + ai-lab vault path fix
+
+### What was executed
+
+- Extended the consolidated operator check in:
+  - [/Users/jaydreyer/projects/recall-local/scripts/phase6/run_ops_observability_check.sh](/Users/jaydreyer/projects/recall-local/scripts/phase6/run_ops_observability_check.sh)
+  - added `job_alert_workflow` validation that:
+    - verifies Workflow 3 is active in n8n SQLite
+    - verifies `Send Telegram Alert` is still a credential-bound Telegram node
+    - verifies the active aggregator hands off to `recall-job-evaluate`
+    - performs a non-alerting webhook probe with a fake job id so the path is exercised without spamming Telegram
+- Fixed the live ai-lab bridge vault runtime path by updating:
+  - [/Users/jaydreyer/projects/recall-local/docker/docker-compose.yml](/Users/jaydreyer/projects/recall-local/docker/docker-compose.yml)
+  - [/Users/jaydreyer/projects/recall-local/docker/.env.example](/Users/jaydreyer/projects/recall-local/docker/.env.example)
+  - changes:
+    - explicit bridge mount: `/home/jaydreyer/obsidian-vault:/home/jaydreyer/obsidian-vault:ro`
+    - explicit bridge env: `RECALL_VAULT_PATH=/home/jaydreyer/obsidian-vault`
+- Synced the updated files to ai-lab and performed required remote spot-checks before restart/verification.
+- Recreated only `recall-ingest-bridge` under Compose project `recall`.
+
+### Validation
+
+- Local validation:
+  - `bash -n scripts/phase6/run_ops_observability_check.sh`
+- ai-lab validation:
+  - `cd /home/jaydreyer/recall-local/docker && ./validate-stack.sh` before and after bridge recreate
+  - `./scripts/phase6/run_ops_observability_check.sh http://localhost:8090 http://localhost:3001 http://localhost:8170`
+    - artifact: `/home/jaydreyer/recall-local/data/artifacts/observability/20260313T144608Z_ops_observability_check.json`
+    - checks passed:
+      - `bridge_health`
+      - `dashboard_checks`
+      - `job_alert_workflow`
+      - `rag_probe`
+      - `daily_dashboard_ui`
+      - `recall_chat_ui`
+  - `./scripts/phase6/run_dashboard_smoke.sh http://localhost:8090` returned `ok`
+  - direct bridge vault probe:
+    - `GET http://localhost:8090/v1/vault-files` returned `200`
+    - reported `vault_path=/home/jaydreyer/obsidian-vault`
+
+### Results
+
+- Future regressions in the Phase 6 Telegram alert path should now be caught by the standard ops observability run without sending noisy test alerts.
+- The Recall dashboard vault error is fixed on ai-lab: the bridge no longer falls back to `/root/obsidian-vault`, and vault endpoints now load against the real mirrored Obsidian vault.
+
 ## 2026-03-13 - Phase 6C Telegram delivery restoration on ai-lab
 
 ### What was executed

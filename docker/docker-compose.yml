@@ -61,6 +61,7 @@ services:
       - ../scripts:/app/scripts
       - ../prompts:/app/prompts
       - ../config:/app/config
+      - /home/jaydreyer/obsidian-vault:/home/jaydreyer/obsidian-vault:ro
     env_file:
       - ./.env
     environment:
@@ -71,6 +72,7 @@ services:
       - DATA_PROCESSED=/app/data/processed
       - DATA_ARTIFACTS=/app/data/artifacts
       - RECALL_DB_PATH=/app/data/recall.db
+      - RECALL_VAULT_PATH=/home/jaydreyer/obsidian-vault
       - N8N_HOST=http://n8n:5678
     networks:
       - backend

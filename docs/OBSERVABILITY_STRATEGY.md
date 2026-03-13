@@ -152,7 +152,7 @@ This is the current foundation to preserve now, even if full observability waits
 
 4. Basic operator checks
    - `scripts/phase6/run_dashboard_smoke.sh` for dashboard data readiness
-   - `scripts/phase6/run_ops_observability_check.sh` for bridge health, dashboard checks, UI reachability, one grounded RAG probe, and optional failure alerting
+   - `scripts/phase6/run_ops_observability_check.sh` for bridge health, dashboard checks, job-alert workflow wiring, UI reachability, one grounded RAG probe, and optional failure alerting
 
 These pieces are worth doing before the project is "finished" because retrofitting correlation later is harder and less clean.
 
