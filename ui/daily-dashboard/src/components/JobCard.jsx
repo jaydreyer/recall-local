@@ -1,4 +1,5 @@
 import JobDetail from './JobDetail'
+import { summarizeAngle, summarizeTopGap, summarizeTopMatch } from '../utils/jobSummary'
 
 function scoreClass(score) {
   if (score >= 75) {
@@ -18,27 +19,6 @@ function tierClass(tier) {
     return 'tier-two'
   }
   return 'tier-three'
-}
-
-function firstMatch(job) {
-  const skills = Array.isArray(job.matching_skills) ? job.matching_skills : []
-  if (skills.length === 0) {
-    return 'No matching skills persisted yet.'
-  }
-  const first = skills[0]
-  return typeof first === 'string' ? first : first.skill || first.name || 'Match unavailable'
-}
-
-function firstGap(job) {
-  const gaps = Array.isArray(job.gaps) ? job.gaps : []
-  if (gaps.length === 0) {
-    return 'No top gap captured.'
-  }
-  const first = gaps[0]
-  if (typeof first === 'string') {
-    return first
-  }
-  return first.gap || first.skill || first.name || 'Gap unavailable'
 }
 
 function relativeTime(value) {
@@ -103,10 +83,13 @@ export default function JobCard({
 
         <div className="summary-lines">
           <p>
-            <span className="summary-label">Top match:</span> {firstMatch(job)}
+            <span className="summary-label">Top match:</span> {summarizeTopMatch(job)}
           </p>
           <p>
-            <span className="summary-label">Top gap:</span> {firstGap(job)}
+            <span className="summary-label">Top gap:</span> {summarizeTopGap(job)}
+          </p>
+          <p>
+            <span className="summary-label">Angle:</span> {summarizeAngle(job, { maxLength: 110 })}
           </p>
         </div>
       </button>

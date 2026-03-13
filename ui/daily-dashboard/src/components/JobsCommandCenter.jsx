@@ -3,6 +3,7 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import CompanyLogo from './CompanyLogo'
 import JobDetail from './JobDetail'
 import StateNotice from './StateNotice'
+import { summarizeAngle, summarizeTopGap, summarizeTopMatch } from '../utils/jobSummary'
 
 const LANE_COPY = {
   focus: 'Best-fit evaluated roles ready for outreach or drafting.',
@@ -98,24 +99,6 @@ function formatRefreshLabel(value) {
   })
 }
 
-function topMatch(job) {
-  const skills = Array.isArray(job.matching_skills) ? job.matching_skills : []
-  if (skills.length === 0) {
-    return 'No matching skills captured yet.'
-  }
-  const first = skills[0]
-  return typeof first === 'string' ? first : first.skill || first.name || 'No matching skills captured yet.'
-}
-
-function topGap(job) {
-  const gaps = Array.isArray(job.gaps) ? job.gaps : []
-  if (gaps.length === 0) {
-    return 'No major gaps captured.'
-  }
-  const first = gaps[0]
-  return typeof first === 'string' ? first : first.gap || first.skill || first.name || 'No major gaps captured.'
-}
-
 function scoreLabel(job) {
   if ((job.fit_score ?? -1) >= 0) {
     return String(job.fit_score)
@@ -133,7 +116,7 @@ function queueHeadline(job) {
   if (effectiveStatus(job) === 'error') {
     return job.score_rationale || 'Last evaluation errored.'
   }
-  return job.cover_letter_angle || job.application_tips || job.score_rationale || 'Open the dossier for notes and recommendations.'
+  return summarizeAngle(job)
 }
 
 function uniqueCompanies(jobs) {
@@ -242,8 +225,8 @@ function QueueCard({ job, selected, onSelect }) {
 
       <p className="queue-snippet">{queueHeadline(job)}</p>
       <div className="queue-tags">
-        <span className="queue-tag">Match: {topMatch(job)}</span>
-        <span className="queue-tag">Gap: {topGap(job)}</span>
+        <span className="queue-tag">Match: {summarizeTopMatch(job, { maxLength: 72 })}</span>
+        <span className="queue-tag">Gap: {summarizeTopGap(job, { maxLength: 72 })}</span>
       </div>
     </button>
   )
@@ -498,11 +481,11 @@ export default function JobsCommandCenter({ jobsState, settings, onOpenSettings,
               <div className="spotlight-insights">
                 <div className="spotlight-insight">
                   <span className="mini-label">Top match</span>
-                  <p>{topMatch(heroJob)}</p>
+                  <p>{summarizeTopMatch(heroJob, { maxLength: 112 })}</p>
                 </div>
                 <div className="spotlight-insight">
                   <span className="mini-label">Biggest gap</span>
-                  <p>{topGap(heroJob)}</p>
+                  <p>{summarizeTopGap(heroJob, { maxLength: 112 })}</p>
                 </div>
                 <div className="spotlight-insight">
                   <span className="mini-label">Angle</span>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import JobDetail from './JobDetail'
+import { summarizeAngle } from '../utils/jobSummary'
 
 const CAPTURE_STORAGE_KEY = 'daily-dashboard-captures-v1'
 const CAPTURE_TYPES = ['Idea', 'Reminder', 'Errand', 'Follow-up']
@@ -67,10 +68,7 @@ function buildDerivedCaptures(jobs) {
   return jobs.slice(0, 3).map((job, index) => ({
     id: `job-${job.jobId}`,
     type: captureTypeForIndex(index),
-    text:
-      job.application_tips ||
-      job.cover_letter_angle ||
-      `Review ${job.company} · ${job.title} before outreach.`,
+    text: summarizeAngle(job, { maxLength: 110 }) || `Review ${job.company} · ${job.title} before outreach.`,
     time: compactTime(job.evaluated_at || job.discovered_at),
     jobId: job.jobId,
   }))
@@ -89,7 +87,7 @@ function buildAutomationItems(jobs) {
   return jobs.slice(0, 3).map((job, index) => ({
     id: `automation-${job.jobId}`,
     title: job.title,
-    desc: job.cover_letter_angle || job.application_tips || 'Open the role for the full evaluation context.',
+    desc: summarizeAngle(job, { maxLength: 110 }),
     owner: job.company,
     status: badgeStatus(job, index),
     jobId: job.jobId,

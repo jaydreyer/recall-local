@@ -93,6 +93,10 @@ This node also:
 - builds the Telegram message
 - counts jobs skipped for non-preferred locations
 - caps each Telegram message preview to 5 jobs
+- surfaces:
+  - top match with resume evidence when available
+  - top gap with severity when available
+  - one-line application angle from cover-letter angle, application tips, or rationale fallback
 
 ## Node 6: If Has High Fit
 
@@ -121,6 +125,9 @@ This node also:
   - fit score
   - preference bucket
   - raw location text
+  - top match summary
+  - top gap summary
+  - one-line positioning angle
   - job URL
 
 ## Node 8: Run Summary
