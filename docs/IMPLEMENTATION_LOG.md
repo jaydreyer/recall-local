@@ -1,5 +1,51 @@
 # Recall.local Implementation Log
 
+## 2026-03-13 - Dashboard and Telegram evaluation summaries polished
+
+### What was executed
+
+- Added a shared Phase 6 summary formatter in:
+  - [/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/utils/jobSummary.js](/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/utils/jobSummary.js)
+  - centralizes concise summary copy for:
+    - top match with resume evidence when available
+    - top gap with severity when available
+    - one-line application angle from cover-letter angle, application tips, or rationale fallback
+- Updated dashboard summary surfaces in:
+  - [/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/JobCard.jsx](/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/JobCard.jsx)
+  - [/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/JobsCommandCenter.jsx](/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/JobsCommandCenter.jsx)
+  - [/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/MissionControlPanel.jsx](/Users/jaydreyer/projects/recall-local/ui/daily-dashboard/src/components/MissionControlPanel.jsx)
+  - job cards and queue/spotlight panels now surface sharper evaluator summaries instead of only raw first-item strings
+- Tightened Telegram alert formatting in:
+  - [/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6c_evaluate_notify_import.workflow.json](/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6c_evaluate_notify_import.workflow.json)
+  - [/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6/workflow3_evaluate_notify.md](/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6/workflow3_evaluate_notify.md)
+  - batched alerts now include top match, top gap, and a short positioning angle for each preferred-location role
+- Updated the Python Telegram notifier scaffold in:
+  - [/Users/jaydreyer/projects/recall-local/scripts/phase6/telegram_notifier.py](/Users/jaydreyer/projects/recall-local/scripts/phase6/telegram_notifier.py)
+- Added regression coverage in:
+  - [/Users/jaydreyer/projects/recall-local/tests/test_phase6_telegram_notifier.py](/Users/jaydreyer/projects/recall-local/tests/test_phase6_telegram_notifier.py)
+
+### Validation
+
+- Local validation:
+  - `python3 -m unittest tests.test_phase6_telegram_notifier`
+  - `python3 -m py_compile scripts/phase6/telegram_notifier.py`
+  - `python3 -m json.tool n8n/workflows/phase6c_evaluate_notify_import.workflow.json`
+  - `npm run build` in `/Users/jaydreyer/projects/recall-local/ui/daily-dashboard`
+- Live follow-through on 2026-03-13:
+  - synced updated files to `ai-lab` and spot-checked remote contents
+  - rebuilt only `daily-dashboard` under Compose project `recall`
+  - patched the active n8n Workflow 3 formatter in both `workflow_entity` and active `workflow_history`
+  - restarted only `n8n` and re-ran `./validate-stack.sh`
+  - ran `./scripts/phase6/run_dashboard_smoke.sh http://100.116.103.78:8090` after deploy and received `status: ok`
+  - sent controlled webhook smokes through `http://localhost:5678/webhook/recall-job-evaluate`
+  - performed a browser spot-check against `http://100.116.103.78:3001`
+
+### Results
+
+- Cleaner evaluator outputs are now translated into more actionable dashboard summaries.
+- Telegram notifications should give faster first-pass triage context without opening the dashboard first.
+- Final truncation pass now prefers whole-word cuts for dashboard and Telegram summary copy, and the current alert verbosity was kept after the live UI spot-check.
+
 ## 2026-03-13 - Job-fit golden calibration lane added
 
 ### What was executed
