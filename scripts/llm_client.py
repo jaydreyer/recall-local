@@ -16,13 +16,16 @@ import importlib
 import os
 import time
 from pathlib import Path
-from typing import Any, List
+from typing import Any
 
 import httpx
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT / "docker" / ".env")
+load_dotenv(ROOT / "docker" / ".env.example")
+
+__all__ = ["generate", "embed"]
 
 PROVIDER = os.getenv("RECALL_LLM_PROVIDER", "ollama").strip().lower()
 _LANGFUSE_CLIENT: Any | None = None
@@ -75,10 +78,10 @@ def generate(
         )
 
 
-def embed(text: str, trace_metadata: dict[str, Any] | None = None) -> List[float]:
+def embed(text: str, trace_metadata: dict[str, Any] | None = None) -> list[float]:
     """Generate embeddings using Ollama."""
     started = time.perf_counter()
-    response_vector: List[float] | None = None
+    response_vector: list[float] | None = None
     error_text: str | None = None
     host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
     model = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
@@ -169,7 +172,7 @@ def _ollama_generate(prompt: str, system: str, temperature: float, max_tokens: i
     raise RuntimeError("Generation call failed without an error response")
 
 
-def _ollama_embed(*, host: str, model: str, prompt: str) -> List[float]:
+def _ollama_embed(*, host: str, model: str, prompt: str) -> list[float]:
     """Call Ollama embedding endpoint with forward/backward compatibility."""
     candidates = (
         ("/api/embed", {"model": model, "input": prompt}),
@@ -199,7 +202,7 @@ def _ollama_embed(*, host: str, model: str, prompt: str) -> List[float]:
     raise RuntimeError("Embedding call failed without an error response")
 
 
-def _extract_ollama_embedding(payload: Any) -> List[float]:
+def _extract_ollama_embedding(payload: Any) -> list[float]:
     if isinstance(payload, dict):
         embedding = payload.get("embedding")
         if isinstance(embedding, list) and embedding:
@@ -495,7 +498,7 @@ def _get_langfuse_client():
     return _LANGFUSE_CLIENT
 
 
-if __name__ == "__main__":
+def main() -> int:
     print(f"Provider: {PROVIDER}")
     print("Testing generation...")
     message = generate("Say 'Recall.local is online' and nothing else.")
@@ -505,3 +508,8 @@ if __name__ == "__main__":
     vector = embed("test embedding")
     print(f"Embedding dimension: {len(vector)}")
     print("\nAll systems go.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

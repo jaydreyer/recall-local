@@ -17,6 +17,8 @@ if str(ROOT) not in sys.path:
 from scripts.phase1.group_model import normalize_group
 from scripts.phase1.ingestion_pipeline import IngestRequest, ingest_request  # noqa: E402
 
+__all__ = ["load_payload", "payload_to_requests", "run_payload_ingestion"]
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Ingest a Recall.local webhook payload.")
@@ -230,27 +232,37 @@ def _first_non_empty(*values: Any) -> str | None:
     return None
 
 
-def main() -> int:
-    args = parse_args()
-    try:
-        payload = load_payload(args)
-        requests = payload_to_requests(payload)
-    except Exception as exc:  # noqa: BLE001
-        print(f"Invalid payload: {exc}", file=sys.stderr)
-        return 2
+def run_payload_ingestion(payload: dict[str, Any], *, dry_run: bool = False) -> tuple[dict[str, Any], int]:
+    """Convert one webhook payload into ingest requests and execute them.
 
-    results = []
-    errors = []
+    Returns a CLI-friendly summary payload plus an exit code so shell wrappers
+    and tests can reuse the same behavior without parsing stdout.
+    """
+    requests = payload_to_requests(payload)
+    results: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
     for index, request in enumerate(requests):
         try:
-            result = ingest_request(request, dry_run=args.dry_run)
+            result = ingest_request(request, dry_run=dry_run)
             results.append(asdict(result))
         except Exception as exc:  # noqa: BLE001
             errors.append({"request_index": index, "source_type": request.source_type, "error": str(exc)})
 
-    summary = {"ingested": results, "errors": errors, "dry_run": args.dry_run}
+    summary = {"ingested": results, "errors": errors, "dry_run": dry_run}
+    return summary, (0 if not errors else 1)
+
+
+def main() -> int:
+    args = parse_args()
+    try:
+        payload = load_payload(args)
+    except Exception as exc:  # noqa: BLE001
+        print(f"Invalid payload: {exc}", file=sys.stderr)
+        return 2
+
+    summary, exit_code = run_payload_ingestion(payload, dry_run=args.dry_run)
     print(json.dumps(summary, indent=2))
-    return 0 if not errors else 1
+    return exit_code
 
 
 if __name__ == "__main__":

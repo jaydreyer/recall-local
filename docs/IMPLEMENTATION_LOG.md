@@ -1,5 +1,47 @@
 # Recall.local Implementation Log
 
+## 2026-03-13 - Package boundaries and shared module APIs cleaned up
+
+### What was executed
+
+- Added explicit package markers in:
+  - `/Users/jaydreyer/projects/recall-local/scripts/__init__.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/eval/__init__.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase0/__init__.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/__init__.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase2/__init__.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase3/__init__.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase4/__init__.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase5/__init__.py`
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase6/__init__.py`
+  - gives the repo explicit Python package boundaries instead of relying on implicit namespace-package behavior
+  - documents the intended public module surface for each phase package
+- Tightened the shared LLM client in:
+  - `/Users/jaydreyer/projects/recall-local/scripts/llm_client.py`
+  - added an explicit public API (`generate`, `embed`)
+  - aligned env loading with the rest of the repo by loading both `docker/.env` and `docker/.env.example`
+  - replaced the ad hoc `__main__` block with a `main()` entrypoint
+  - normalized type hints to built-in generic syntax
+- Tightened the ingestion wrapper in:
+  - `/Users/jaydreyer/projects/recall-local/scripts/phase1/ingest_from_payload.py`
+  - added an explicit reusable `run_payload_ingestion(...)` helper so CLI behavior is available as a real module API instead of only through `main()`
+  - added an explicit public API list for the module
+- Removed stale local-only filesystem artifacts:
+  - deleted `/Users/jaydreyer/projects/recall-local/scripts/.DS_Store`
+  - removed the empty `/Users/jaydreyer/projects/recall-local/scripts/extract` directory
+
+### Validation
+
+- Local validation:
+  - `python3 -m py_compile scripts/__init__.py scripts/eval/__init__.py scripts/phase0/__init__.py scripts/phase1/__init__.py scripts/phase2/__init__.py scripts/phase3/__init__.py scripts/phase4/__init__.py scripts/phase5/__init__.py scripts/phase6/__init__.py scripts/llm_client.py scripts/phase1/ingest_from_payload.py`
+  - confirmed `scripts/.DS_Store` and `scripts/extract` are gone locally
+
+### Results
+
+- The repo now has clearer module/package boundaries and less implicit import behavior.
+- Shared modules expose cleaner public APIs for reuse from tests, wrappers, and future refactors.
+- No active `TODO`, `FIXME`, or `HACK` comments were found in `scripts/` or `tests/` during the audit.
+
 ## 2026-03-13 - Public repo ignore rules tightened
 
 ### What was executed
