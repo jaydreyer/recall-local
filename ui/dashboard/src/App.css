@@ -471,6 +471,7 @@ button:disabled {
 
 .query-layout {
   display: block;
+  width: min(1180px, 100%);
 }
 
 .mode-chip-row {
@@ -501,7 +502,8 @@ button:disabled {
   gap: 14px;
   min-height: 600px;
   max-height: calc(100vh - 235px);
-  max-width: 980px;
+  max-width: 1180px;
+  width: 100%;
 }
 
 .query-header {
