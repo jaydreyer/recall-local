@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+import logging
 import os
 import re
 import time
@@ -26,12 +27,21 @@ from scripts.phase6.setup_collections import COLLECTION_JOBS
 ROOT = Path(__file__).resolve().parents[2]
 JOB_SEARCH_CONFIG = ROOT / "config" / "job_search.json"
 CAREER_PAGES_CONFIG = ROOT / "config" / "career_pages.json"
+LOGGER = logging.getLogger(__name__)
 
 DEFAULT_SOURCE_ORDER = ["jobspy", "adzuna", "serpapi"]
 DEFAULT_SOURCE_LIMITS = {"jobspy": 2, "adzuna": 2, "serpapi": 1, "career_page": 25}
 DEFAULT_QUERY_BATCH_SIZE = 4
 DEFAULT_MAX_DAYS_OLD = 7
 DEFAULT_DELAY_SECONDS = 2.0
+DEFAULT_SIMILARITY_THRESHOLD = 0.92
+DEFAULT_HTTP_TIMEOUT_SECONDS = 30.0
+DISCOVERY_USER_AGENT = "recall-local-phase6-discovery/1.0"
+JOBSPY_RESULTS_WANTED = 30
+JOBSPY_COUNTRY = "usa"
+SUPPORTED_DISCOVERY_SOURCES = {"jobspy", "adzuna", "serpapi", "career_page"}
+DEFAULT_CAREER_PAGE_SOURCE_LIMIT = 3
+JOBSPY_SITES = ["indeed", "glassdoor", "zip_recruiter"]
 
 
 def _now_iso() -> str:
@@ -341,7 +351,8 @@ def _extract_jobspy_rows(raw_jobs: Any) -> list[dict[str, Any]]:
             converted = to_dict("records")
             if isinstance(converted, list):
                 return [item for item in converted if isinstance(item, dict)]
-        except Exception:
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.warning("Failed to normalize jobspy rows: %s", exc)
             return []
     return []
 
@@ -356,7 +367,7 @@ def _discover_jobspy(
 ) -> tuple[list[dict[str, Any]], list[str], dict[str, Any]]:
     try:
         from jobspy import scrape_jobs  # type: ignore
-    except Exception:
+    except ImportError:
         return [], ["jobspy unavailable (install python-jobspy in bridge runtime)."], {"attempted": 0, "returned": 0}
 
     discovered: list[dict[str, Any]] = []
@@ -365,20 +376,18 @@ def _discover_jobspy(
 
     # LinkedIn currently rejects this runtime's location/country combination in jobspy;
     # keep the other primary boards active for stable ingestion.
-    sites = ["indeed", "glassdoor", "zip_recruiter"]
-
     for query in queries[:source_limit]:
         attempted += 1
-        for site in sites:
+        for site in JOBSPY_SITES:
             try:
                 raw_jobs = scrape_jobs(
                     site_name=[site],
                     search_term=query["title"],
                     location=query["location"],
-                    results_wanted=30,
+                    results_wanted=JOBSPY_RESULTS_WANTED,
                     hours_old=max_days_old * 24,
                     # jobspy expects lowercase country tokens like "usa".
-                    country_indeed="usa",
+                    country_indeed=JOBSPY_COUNTRY,
                 )
             except Exception as exc:  # noqa: BLE001
                 errors.append(
@@ -763,6 +772,7 @@ def _record_activity_log(*, run_id: str, summary: dict[str, Any]) -> None:
 
 
 def run_discovery(payload: dict[str, Any]) -> dict[str, Any]:
+    """Discover new jobs from configured sources and persist non-duplicates."""
     search_config = _load_search_config()
     career_config = _load_career_config()
     tier_lookup = _tier_lookup()
@@ -779,7 +789,7 @@ def run_discovery(payload: dict[str, Any]) -> dict[str, Any]:
     sources = [
         _norm_lower(item)
         for item in configured_sources
-        if _norm_lower(item) in {"jobspy", "adzuna", "serpapi", "career_page"}
+        if _norm_lower(item) in SUPPORTED_DISCOVERY_SOURCES
     ]
     if not sources:
         sources = list(DEFAULT_SOURCE_ORDER)
@@ -798,7 +808,11 @@ def run_discovery(payload: dict[str, Any]) -> dict[str, Any]:
         delay_seconds = 0.0
 
     dry_run = bool(payload.get("dry_run", False))
-    similarity_threshold = float(payload.get("similarity_threshold") or search_config.get("dedup_similarity_threshold") or 0.92)
+    similarity_threshold = float(
+        payload.get("similarity_threshold")
+        or search_config.get("dedup_similarity_threshold")
+        or DEFAULT_SIMILARITY_THRESHOLD
+    )
 
     search_queries = _build_queries(titles=normalized_titles, locations=normalized_locations, keywords=normalized_keywords)
     selected_queries = _select_rotated_queries(combos=search_queries, batch_size=batch_size) if search_queries else []
@@ -820,7 +834,7 @@ def run_discovery(payload: dict[str, Any]) -> dict[str, Any]:
         source_metrics["manual"] = {"attempted": len(manual_jobs), "returned": len(manual_jobs)}
         sources = sorted({str(item.get("source") or "manual") for item in manual_jobs}) or ["manual"]
     else:
-        with httpx.Client(timeout=30.0, headers={"User-Agent": "recall-local-phase6-discovery/1.0"}) as client:
+        with httpx.Client(timeout=DEFAULT_HTTP_TIMEOUT_SECONDS, headers={"User-Agent": DISCOVERY_USER_AGENT}) as client:
             for source in sources:
                 if source == "jobspy":
                     rows, source_errors, metrics = _discover_jobspy(
@@ -850,7 +864,7 @@ def run_discovery(payload: dict[str, Any]) -> dict[str, Any]:
                 elif source == "career_page":
                     rows, source_errors, metrics = _discover_career_pages(
                         client=client,
-                        source_limit=source_limits.get("career_page", 3),
+                        source_limit=source_limits.get("career_page", DEFAULT_CAREER_PAGE_SOURCE_LIMIT),
                         delay_seconds=delay_seconds,
                         career_config=career_config,
                     )

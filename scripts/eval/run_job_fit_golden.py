@@ -21,10 +21,18 @@ from scripts.phase6 import job_evaluator
 
 DEFAULT_CASES_FILE = ROOT / "scripts" / "eval" / "golden_sets" / "job_fit_golden_v1.json"
 DEFAULT_ARTIFACT_DIR = ROOT / "data" / "artifacts" / "evals" / "job-fit-golden"
+DEFAULT_CASE_CATEGORY = "general"
+DEFAULT_LOCATION = "Unknown"
+WORKFLOW_NAME = "workflow_06c_job_fit_golden"
+EXIT_SUCCESS = 0
+EXIT_NO_CASES = 1
+EXIT_GOLDEN_FAILURE = 2
 
 
 @dataclass
 class GoldenCase:
+    """One versioned golden evaluation case for the Phase 6 job-fit scorer."""
+
     case_id: str
     category: str
     title: str
@@ -44,7 +52,7 @@ class GoldenCase:
 def _load_dotenv_if_available() -> None:
     try:
         from dotenv import load_dotenv
-    except Exception:
+    except ImportError:
         return
     load_dotenv(ROOT / "docker" / ".env")
     load_dotenv(ROOT / "docker" / ".env.example")
@@ -57,6 +65,7 @@ def _normalize_string_list(value: Any) -> list[str]:
 
 
 def load_cases(path: Path) -> list[GoldenCase]:
+    """Load and validate job-fit golden cases from disk."""
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, list):
         raise ValueError("Golden cases file must be a JSON array.")
@@ -80,10 +89,10 @@ def load_cases(path: Path) -> list[GoldenCase]:
         cases.append(
             GoldenCase(
                 case_id=case_id,
-                category=str(item.get("category") or "general").strip() or "general",
+                category=str(item.get("category") or DEFAULT_CASE_CATEGORY).strip() or DEFAULT_CASE_CATEGORY,
                 title=title,
                 company=company,
-                location=str(item.get("location") or "Unknown").strip() or "Unknown",
+                location=str(item.get("location") or DEFAULT_LOCATION).strip() or DEFAULT_LOCATION,
                 url=str(item.get("url") or "").strip(),
                 description=description,
                 resume_text=resume_text,
@@ -116,6 +125,7 @@ def _contains_any_forbidden(values: list[str], terms: list[str]) -> list[str]:
 
 
 def evaluate_case(case: GoldenCase, *, settings: dict[str, Any]) -> dict[str, Any]:
+    """Run one golden case through the evaluator and score the result."""
     prompt = job_evaluator._build_evaluation_prompt(  # noqa: SLF001
         job={
             "title": case.title,
@@ -185,6 +195,7 @@ def evaluate_case(case: GoldenCase, *, settings: dict[str, Any]) -> dict[str, An
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for the job-fit golden test runner."""
     parser = argparse.ArgumentParser(description="Run Phase 6 job-fit golden evaluation cases.")
     parser.add_argument("--cases-file", default=str(DEFAULT_CASES_FILE), help="Path to the job-fit golden set JSON file.")
     parser.add_argument("--model", choices=["local", "cloud"], default="local", help="Evaluation backend to use.")
@@ -198,6 +209,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    """Execute the golden-set run and emit a JSON summary artifact."""
     _load_dotenv_if_available()
     args = parse_args()
     cases = load_cases(Path(args.cases_file))
@@ -205,7 +217,7 @@ def main() -> int:
         cases = cases[: max(args.max_cases, 0)]
     if not cases:
         print("No golden cases to run.", file=sys.stderr)
-        return 1
+        return EXIT_NO_CASES
 
     settings = job_evaluator._load_runtime_settings(  # noqa: SLF001
         {
@@ -220,7 +232,7 @@ def main() -> int:
     passed = sum(1 for result in results if result["passed"])
     summary = {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "workflow": "workflow_06c_job_fit_golden",
+        "workflow": WORKFLOW_NAME,
         "cases_file": str(Path(args.cases_file).resolve()),
         "model": settings.get("evaluation_model"),
         "local_model": settings.get("local_model"),
@@ -242,7 +254,7 @@ def main() -> int:
         summary["artifact_path"] = str(artifact_path)
 
     print(json.dumps(summary, indent=2))
-    return 0 if passed == len(results) else 2
+    return EXIT_SUCCESS if passed == len(results) else EXIT_GOLDEN_FAILURE
 
 
 if __name__ == "__main__":

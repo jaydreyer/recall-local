@@ -5,13 +5,23 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
 
+LOGGER = logging.getLogger(__name__)
+WEBHOOK_TIMEOUT_SECONDS = 10
+STATUS_PASS = "pass"
+LEVEL_REGRESSION = "REGRESSION"
+LEVEL_OK = "OK"
+EMOJI_ALERT = "ALERT"
+EMOJI_INFO = "INFO"
+
 
 def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for regression alert delivery."""
     parser = argparse.ArgumentParser(description="Send a regression alert for eval results.")
     parser.add_argument("--result-json", required=True, help="Path to JSON output from run_eval.py.")
     parser.add_argument("--command-exit", type=int, required=True, help="Exit code from run_eval.py.")
@@ -28,6 +38,7 @@ def _load_result(path: Path) -> dict[str, Any]:
 
 
 def _build_message(result: dict[str, Any], *, command_exit: int, stderr_path: str) -> tuple[str, bool]:
+    """Build the alert text and whether it should be treated as a regression."""
     status = str(result.get("status", "unknown"))
     run_id = str(result.get("run_id", "unknown"))
     passed = result.get("passed", "?")
@@ -37,13 +48,13 @@ def _build_message(result: dict[str, Any], *, command_exit: int, stderr_path: st
     artifact_path = str(result.get("artifact_path", ""))
     webhook_url = str(result.get("webhook_url", ""))
 
-    regression = command_exit != 0 or status != "pass"
+    regression = command_exit != 0 or status != STATUS_PASS
     if regression:
-        level = "REGRESSION"
-        emoji = "ALERT"
+        level = LEVEL_REGRESSION
+        emoji = EMOJI_ALERT
     else:
-        level = "OK"
-        emoji = "INFO"
+        level = LEVEL_OK
+        emoji = EMOJI_INFO
 
     lines = [
         f"[{emoji}] Recall.local scheduled eval {level}",
@@ -62,6 +73,7 @@ def _build_message(result: dict[str, Any], *, command_exit: int, stderr_path: st
 
 
 def _post_webhook(*, webhook_url: str, message: str) -> None:
+    """Send an alert payload to a Slack- or Teams-compatible webhook."""
     body = json.dumps({"text": message}).encode("utf-8")
     request = urllib.request.Request(
         webhook_url,
@@ -69,18 +81,19 @@ def _post_webhook(*, webhook_url: str, message: str) -> None:
         headers={"content-type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=10) as response:
+    with urllib.request.urlopen(request, timeout=WEBHOOK_TIMEOUT_SECONDS) as response:
         if response.status >= 300:
             raise RuntimeError(f"Alert webhook returned HTTP {response.status}.")
 
 
 def main() -> int:
+    """Load an eval result, print the alert text, and optionally notify a webhook."""
     args = parse_args()
     result_path = Path(args.result_json)
 
     try:
         result = _load_result(result_path)
-    except Exception as exc:  # noqa: BLE001
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
         message = (
             "[ALERT] Recall.local scheduled eval REGRESSION\n"
             f"reason=Failed to parse eval JSON: {exc}\n"
@@ -91,7 +104,8 @@ def main() -> int:
         if args.webhook_url:
             try:
                 _post_webhook(webhook_url=args.webhook_url, message=message)
-            except Exception as webhook_exc:  # noqa: BLE001
+            except (RuntimeError, urllib.error.URLError) as webhook_exc:
+                LOGGER.warning("Webhook alert failed for %s: %s", args.webhook_url, webhook_exc)
                 print(f"Webhook alert failed: {webhook_exc}")
         return 0
 
@@ -102,8 +116,10 @@ def main() -> int:
         try:
             _post_webhook(webhook_url=args.webhook_url, message=message)
         except urllib.error.URLError as exc:
+            LOGGER.warning("Webhook alert failed for %s: %s", args.webhook_url, exc)
             print(f"Webhook alert failed: {exc}")
-        except Exception as exc:  # noqa: BLE001
+        except RuntimeError as exc:
+            LOGGER.warning("Webhook alert failed for %s: %s", args.webhook_url, exc)
             print(f"Webhook alert failed: {exc}")
     return 0
 

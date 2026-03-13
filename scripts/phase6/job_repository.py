@@ -5,13 +5,22 @@ from __future__ import annotations
 
 import os
 import time
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from scripts.phase1.ingestion_pipeline import qdrant_client_from_env
 
+LOGGER = logging.getLogger(__name__)
 COLLECTION_JOBS = "recall_jobs"
 DEFAULT_STATUS_FILTER = "evaluated"
+DEFAULT_QDRANT_HOST = "http://localhost:6333"
+DEFAULT_SCROLL_CACHE_SECONDS = 15.0
+SCROLL_PAGE_SIZE = 256
+UPSERT_BATCH_SIZE = 128
+HIGH_FIT_THRESHOLD = 75
+MEDIUM_FIT_THRESHOLD = 50
+LOW_FIT_THRESHOLD = 25
 _JOBS_SCROLL_CACHE: dict[tuple[bool, str], tuple[float, list[dict[str, Any]]]] = {}
 
 
@@ -145,26 +154,30 @@ def _normalize_job(record: Any) -> dict[str, Any]:
 
 
 def _scroll_jobs(*, with_vectors: bool = False, collection_name: str = COLLECTION_JOBS) -> list[dict[str, Any]]:
-    cache_ttl_seconds = _parse_float(os.getenv("RECALL_PHASE6_JOBS_CACHE_SECONDS"), default=15.0)
+    cache_ttl_seconds = _parse_float(
+        os.getenv("RECALL_PHASE6_JOBS_CACHE_SECONDS"),
+        default=DEFAULT_SCROLL_CACHE_SECONDS,
+    )
     cache_key = (with_vectors, collection_name)
     if cache_ttl_seconds > 0:
         cached = _JOBS_SCROLL_CACHE.get(cache_key)
         if cached and cached[0] > time.time():
             return [dict(item) for item in cached[1]]
 
-    client = qdrant_client_from_env(os.getenv("QDRANT_HOST", "http://localhost:6333"))
+    client = qdrant_client_from_env(os.getenv("QDRANT_HOST", DEFAULT_QDRANT_HOST))
     points: list[Any] = []
     offset: Any = None
     while True:
         try:
             response = client.scroll(
                 collection_name=collection_name,
-                limit=256,
+                limit=SCROLL_PAGE_SIZE,
                 offset=offset,
                 with_payload=True,
                 with_vectors=with_vectors,
             )
-        except Exception:
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.warning("Failed to scroll jobs from Qdrant collection %s: %s", collection_name, exc)
             return []
         if isinstance(response, tuple) and len(response) == 2:
             records, offset = response
@@ -191,6 +204,7 @@ def _scroll_jobs(*, with_vectors: bool = False, collection_name: str = COLLECTIO
 
 
 def invalidate_jobs_cache() -> None:
+    """Clear the in-memory jobs cache after mutations or config changes."""
     _JOBS_SCROLL_CACHE.clear()
 
 
@@ -209,6 +223,7 @@ def list_jobs(
     offset: int = 0,
     include_details: bool = True,
 ) -> dict[str, Any]:
+    """List Phase 6 jobs with filtering, sorting, and pagination applied."""
     records = _scroll_jobs(with_vectors=False)
 
     normalized_status = str(status or "").strip().lower()
@@ -256,6 +271,7 @@ def list_jobs(
 
 
 def get_job(job_id: str) -> dict[str, Any] | None:
+    """Return one sanitized job record by its stable job identifier."""
     target = str(job_id).strip()
     if not target:
         return None
@@ -266,6 +282,7 @@ def get_job(job_id: str) -> dict[str, Any] | None:
 
 
 def get_job_raw(job_id: str) -> dict[str, Any] | None:
+    """Return one internal job record, including Qdrant update fields."""
     target = str(job_id).strip()
     if not target:
         return None
@@ -291,12 +308,20 @@ def _point_for_update(*, models_module: Any, job: dict[str, Any]) -> Any:
     return models_module.PointStruct(id=point_id, vector=vector, payload=payload)
 
 
-def update_job(*, job_id: str, status: str | None, applied: bool | None, dismissed: bool | None, notes: str | None) -> dict[str, Any] | None:
+def update_job(
+    *,
+    job_id: str,
+    status: str | None,
+    applied: bool | None,
+    dismissed: bool | None,
+    notes: str | None,
+) -> dict[str, Any] | None:
+    """Persist status or note changes for a single Phase 6 job."""
     current = get_job_raw(job_id)
     if current is None:
         return None
 
-    now = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     if status is not None:
         current["status"] = status
     if applied is not None:
@@ -313,7 +338,7 @@ def update_job(*, job_id: str, status: str | None, applied: bool | None, dismiss
 
     from qdrant_client import models
 
-    client = qdrant_client_from_env(os.getenv("QDRANT_HOST", "http://localhost:6333"))
+    client = qdrant_client_from_env(os.getenv("QDRANT_HOST", DEFAULT_QDRANT_HOST))
     client.upsert(
         collection_name=COLLECTION_JOBS,
         points=[_point_for_update(models_module=models, job=current)],
@@ -324,6 +349,7 @@ def update_job(*, job_id: str, status: str | None, applied: bool | None, dismiss
 
 
 def update_company_tier(*, company_id: str, tier: int) -> int:
+    """Update the stored tier value for every job associated with a company."""
     target = _to_slug(company_id)
     if not target:
         return 0
@@ -334,7 +360,7 @@ def update_company_tier(*, company_id: str, tier: int) -> int:
 
     from qdrant_client import models
 
-    client = qdrant_client_from_env(os.getenv("QDRANT_HOST", "http://localhost:6333"))
+    client = qdrant_client_from_env(os.getenv("QDRANT_HOST", DEFAULT_QDRANT_HOST))
     points: list[Any] = []
     updated = 0
 
@@ -357,14 +383,18 @@ def update_company_tier(*, company_id: str, tier: int) -> int:
     if not points:
         return 0
 
-    for start in range(0, len(points), 128):
-        client.upsert(collection_name=COLLECTION_JOBS, points=points[start : start + 128])
+    for start in range(0, len(points), UPSERT_BATCH_SIZE):
+        client.upsert(
+            collection_name=COLLECTION_JOBS,
+            points=points[start : start + UPSERT_BATCH_SIZE],
+        )
 
     invalidate_jobs_cache()
     return updated
 
 
 def job_stats() -> dict[str, Any]:
+    """Summarize job volume, source mix, and fit-score distribution."""
     rows = _scroll_jobs(with_vectors=False)
     by_source: dict[str, int] = {}
     by_day: dict[str, int] = {}
@@ -392,15 +422,15 @@ def job_stats() -> dict[str, Any]:
                 new_today += 1
 
         score = _parse_int(item.get("fit_score"), default=-1)
-        if score >= 75:
+        if score >= HIGH_FIT_THRESHOLD:
             score_buckets["high"] += 1
             score_distribution["75-100"] += 1
-        elif score >= 50:
+        elif score >= MEDIUM_FIT_THRESHOLD:
             score_buckets["medium"] += 1
             score_distribution["50-74"] += 1
         elif score >= 0:
             score_buckets["low"] += 1
-            if score >= 25:
+            if score >= LOW_FIT_THRESHOLD:
                 score_distribution["25-49"] += 1
             else:
                 score_distribution["0-24"] += 1
@@ -438,4 +468,5 @@ def _sanitize_job(item: dict[str, Any], *, include_details: bool = True) -> dict
 
 
 def all_jobs() -> list[dict[str, Any]]:
+    """Return every stored job in its sanitized API-friendly form."""
     return [_sanitize_job(item) for item in _scroll_jobs(with_vectors=False)]

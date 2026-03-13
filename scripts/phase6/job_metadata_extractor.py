@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import time
@@ -12,7 +13,8 @@ from urllib.parse import urlparse
 
 import httpx
 
-JOB_URL_PATTERNS = [
+LOGGER = logging.getLogger(__name__)
+JOB_URL_PATTERNS = (
     re.compile(r"linkedin\.com/jobs", re.IGNORECASE),
     re.compile(r"indeed\.com/viewjob", re.IGNORECASE),
     re.compile(r"lever\.co", re.IGNORECASE),
@@ -23,7 +25,7 @@ JOB_URL_PATTERNS = [
     re.compile(r"workday\.com", re.IGNORECASE),
     re.compile(r"/careers?/", re.IGNORECASE),
     re.compile(r"/jobs?/", re.IGNORECASE),
-]
+)
 
 _SEVERITY_DEFAULT = "moderate"
 ALLOWED_LOCATION_TYPES = {"remote", "hybrid", "onsite"}
@@ -42,9 +44,23 @@ ALLOWED_JOB_SOURCES = {
     "serpapi",
     "unknown",
 }
+MIN_CONTENT_CHARS_FOR_LLM = 120
+MAX_DESCRIPTION_CHARS = 12_000
+PROMPT_CONTENT_CHAR_LIMIT = 14_000
+DEFAULT_OLLAMA_HOST = "http://localhost:11434"
+DEFAULT_METADATA_MODEL = "llama3.2:3b"
+DEFAULT_GENERATE_RETRIES = 3
+DEFAULT_GENERATE_BACKOFF_SECONDS = 1.5
+OLLAMA_TIMEOUT_SECONDS = 120
+OLLAMA_TEMPERATURE = 0.1
+OLLAMA_NUM_PREDICT = 1200
+UNKNOWN_LOCATION = "Unknown"
+REMOTE_LOCATION = "Remote"
+DEFAULT_LOCATION_TYPE = "onsite"
 
 
 def looks_like_job_url(url: str) -> bool:
+    """Return whether a URL looks like a job posting worth normalizing."""
     text = str(url or "").strip()
     if not text:
         return False
@@ -52,6 +68,7 @@ def looks_like_job_url(url: str) -> bool:
 
 
 def infer_source_from_url(url: str) -> str:
+    """Infer the job source label from a posting URL."""
     host = urlparse(str(url or "").strip()).netloc.lower()
     if "linkedin.com" in host:
         return "linkedin"
@@ -71,34 +88,36 @@ def infer_source_from_url(url: str) -> str:
 
 
 def extract_job_metadata(payload: dict[str, Any]) -> dict[str, Any]:
+    """Normalize extracted or user-provided job payloads into a stable metadata shape."""
     url = str(payload.get("url") or "").strip()
     source = _normalize_source(str(payload.get("source") or ""), url=url)
-    input_title = str(payload.get("title") or "").strip()
-    input_company = str(payload.get("company") or "").strip()
-    input_location = str(payload.get("location") or "").strip()
+    provided_title = str(payload.get("title") or "").strip()
+    provided_company = str(payload.get("company") or "").strip()
+    provided_location = str(payload.get("location") or "").strip()
 
     content = _coerce_content(payload)
     llm_data: dict[str, Any] = {}
-    if content and len(content) >= 120:
+    if content and len(content) >= MIN_CONTENT_CHARS_FOR_LLM:
         try:
             llm_data = _extract_with_llm(url=url, content=content)
-        except Exception:
+        except (httpx.HTTPError, RuntimeError, ValueError) as exc:
+            LOGGER.warning("Job metadata extraction fell back to heuristic parsing for %s: %s", url or "<no-url>", exc)
             llm_data = {}
 
-    title = _best_text(llm_data.get("title"), input_title)
-    company = _best_text(llm_data.get("company"), input_company)
-    location = _best_text(llm_data.get("location"), input_location)
-    if not title and input_title:
-        title = input_title
+    title = _best_text(llm_data.get("title"), provided_title)
+    company = _best_text(llm_data.get("company"), provided_company)
+    location = _best_text(llm_data.get("location"), provided_location)
+    if not title and provided_title:
+        title = provided_title
 
     if not company and title:
         company = _infer_company_from_title(title)
     if not location:
-        location = "Remote" if "remote" in content.lower() else "Unknown"
+        location = REMOTE_LOCATION if "remote" in content.lower() else UNKNOWN_LOCATION
 
     description = _best_text(llm_data.get("description"), content)
-    if len(description) > 12000:
-        description = description[:12000]
+    if len(description) > MAX_DESCRIPTION_CHARS:
+        description = description[:MAX_DESCRIPTION_CHARS]
 
     location_type = _normalize_location_type(
         llm_data.get("location_type"),
@@ -144,7 +163,7 @@ def _normalize_location_type(raw_location_type: Any, *, location: str, descripti
     inferred = _infer_location_type(location, description)
     if inferred in ALLOWED_LOCATION_TYPES:
         return inferred
-    return "onsite"
+    return DEFAULT_LOCATION_TYPE
 
 
 def _coerce_content(payload: dict[str, Any]) -> str:
@@ -179,8 +198,8 @@ def _extract_with_llm(*, url: str, content: str) -> dict[str, Any]:
 
 def _build_extraction_prompt(*, url: str, content: str) -> str:
     trimmed = content.strip()
-    if len(trimmed) > 14000:
-        trimmed = trimmed[:14000]
+    if len(trimmed) > PROMPT_CONTENT_CHAR_LIMIT:
+        trimmed = trimmed[:PROMPT_CONTENT_CHAR_LIMIT]
 
     return (
         "Extract job posting metadata from this content. "
@@ -202,18 +221,22 @@ def _build_extraction_prompt(*, url: str, content: str) -> str:
 
 
 def _call_ollama(prompt: str) -> str:
-    host = os.getenv("OLLAMA_HOST", "http://localhost:11434").strip() or "http://localhost:11434"
-    model = os.getenv("RECALL_PHASE6_METADATA_MODEL", "llama3.2:3b").strip() or "llama3.2:3b"
-    retries = _int_env("RECALL_GENERATE_RETRIES", default=3, minimum=1)
-    backoff_seconds = _float_env("RECALL_GENERATE_BACKOFF_SECONDS", default=1.5, minimum=0.0)
+    host = os.getenv("OLLAMA_HOST", DEFAULT_OLLAMA_HOST).strip() or DEFAULT_OLLAMA_HOST
+    model = os.getenv("RECALL_PHASE6_METADATA_MODEL", DEFAULT_METADATA_MODEL).strip() or DEFAULT_METADATA_MODEL
+    retries = _int_env("RECALL_GENERATE_RETRIES", default=DEFAULT_GENERATE_RETRIES, minimum=1)
+    backoff_seconds = _float_env(
+        "RECALL_GENERATE_BACKOFF_SECONDS",
+        default=DEFAULT_GENERATE_BACKOFF_SECONDS,
+        minimum=0.0,
+    )
 
     payload = {
         "model": model,
         "prompt": prompt,
         "stream": False,
         "options": {
-            "temperature": 0.1,
-            "num_predict": 1200,
+            "temperature": OLLAMA_TEMPERATURE,
+            "num_predict": OLLAMA_NUM_PREDICT,
         },
     }
 
@@ -223,7 +246,7 @@ def _call_ollama(prompt: str) -> str:
             response = httpx.post(
                 f"{host}/api/generate",
                 json=payload,
-                timeout=120,
+                timeout=OLLAMA_TIMEOUT_SECONDS,
             )
             response.raise_for_status()
             body = response.json()
@@ -231,15 +254,17 @@ def _call_ollama(prompt: str) -> str:
             if not text:
                 raise ValueError("Ollama response was empty.")
             return text
-        except Exception as exc:  # noqa: BLE001
+        except (httpx.HTTPError, ValueError) as exc:
             last_error = exc
             if attempt >= retries:
                 break
             time.sleep(backoff_seconds * attempt)
 
-    if last_error is not None:
-        raise last_error
-    raise RuntimeError("Ollama call failed without an error.")
+    if last_error is None:
+        raise RuntimeError("Ollama metadata extraction failed without a captured exception.")
+    raise RuntimeError(
+        f"Ollama metadata extraction failed after {retries} attempts: {last_error}"
+    ) from last_error
 
 
 def _parse_json_object(raw: str) -> dict[str, Any]:

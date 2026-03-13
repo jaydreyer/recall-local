@@ -3,12 +3,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
-import re
+import logging
 import os
+import re
 import time
-import hashlib
 from collections import Counter
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
@@ -16,6 +17,7 @@ from typing import Any
 
 from scripts import llm_client
 
+LOGGER = logging.getLogger(__name__)
 SEVERITY_TO_SCORE = {
     "critical": 3,
     "moderate": 2,
@@ -29,11 +31,19 @@ SCORE_TO_SEVERITY = {
 }
 
 SIMILARITY_THRESHOLD = 0.85
+DEFAULT_GAP_CACHE_SECONDS = 300.0
+DEFAULT_GAP_EMBED_LIMIT = 24
+MAX_RECOMMENDATIONS = 5
+MAX_VARIANTS = 5
+TOP_MATCHING_SKILLS_LIMIT = 10
+TOP_GAPS_LIMIT = 10
+RECOMMENDED_FOCUS_LIMIT = 3
 _GAP_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 _EMBED_CACHE: dict[str, list[float] | None] = {}
 
 
 def aggregate_gaps(jobs: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate evaluated job gaps into recruiter-friendly clusters and counts."""
     evaluated = [
         job
         for job in jobs
@@ -70,12 +80,12 @@ def aggregate_gaps(jobs: list[dict[str, Any]]) -> dict[str, Any]:
 
     top_matching_skills = [
         {"skill": skill, "count": count}
-        for skill, count in matching_skill_counter.most_common(10)
+        for skill, count in matching_skill_counter.most_common(TOP_MATCHING_SKILLS_LIMIT)
     ]
 
     top_gaps = [
         {"skill": item["gap"], "count": item["frequency"]}
-        for item in aggregated[:10]
+        for item in aggregated[:TOP_GAPS_LIMIT]
     ]
 
     payload = {
@@ -87,7 +97,7 @@ def aggregate_gaps(jobs: list[dict[str, Any]]) -> dict[str, Any]:
         "evaluated_jobs": len(evaluated),
         "top_gaps": top_gaps,
         "top_matching_skills": top_matching_skills,
-        "recommended_focus": [item["gap"] for item in aggregated[:3]],
+        "recommended_focus": [item["gap"] for item in aggregated[:RECOMMENDED_FOCUS_LIMIT]],
     }
     if cache_ttl_seconds > 0:
         _GAP_CACHE[cache_key] = (time.time() + cache_ttl_seconds, dict(payload))
@@ -95,10 +105,12 @@ def aggregate_gaps(jobs: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def invalidate_gap_cache() -> None:
+    """Clear cached aggregate gap results after job data changes."""
     _GAP_CACHE.clear()
 
 
 def merge_similar_gaps(gaps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Merge near-duplicate gaps using lexical and optional embedding similarity."""
     if not gaps:
         return []
 
@@ -146,7 +158,7 @@ def merge_similar_gaps(gaps: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "avg_severity": SCORE_TO_SEVERITY.get(rounded, "moderate"),
             "avg_severity_score": round(average_score, 2),
             "top_recommendations": recommendations,
-            "variants": [name for name, _ in variants_counter.most_common(5)],
+            "variants": [name for name, _ in variants_counter.most_common(MAX_VARIANTS)],
         }
 
     clusters.sort(
@@ -175,16 +187,16 @@ def _collect_gap_instances(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _cache_ttl_seconds() -> float:
     try:
-        return max(float(os.getenv("RECALL_PHASE6_GAP_CACHE_SECONDS", "300")), 0.0)
+        return max(float(os.getenv("RECALL_PHASE6_GAP_CACHE_SECONDS", str(DEFAULT_GAP_CACHE_SECONDS))), 0.0)
     except (TypeError, ValueError):
-        return 300.0
+        return DEFAULT_GAP_CACHE_SECONDS
 
 
 def _should_use_embeddings(gaps: list[dict[str, Any]]) -> bool:
     try:
-        limit = int(os.getenv("RECALL_PHASE6_GAP_EMBED_LIMIT", "24"))
+        limit = int(os.getenv("RECALL_PHASE6_GAP_EMBED_LIMIT", str(DEFAULT_GAP_EMBED_LIMIT)))
     except (TypeError, ValueError):
-        limit = 24
+        limit = DEFAULT_GAP_EMBED_LIMIT
     if limit <= 0:
         return False
     unique_gap_count = len(
@@ -312,7 +324,7 @@ def _add_to_cluster(cluster: dict[str, Any], item: dict[str, Any]) -> None:
 
 def _recommendations_from_counter(counter: Counter[str]) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
-    for serialized, _ in counter.most_common(5):
+    for serialized, _ in counter.most_common(MAX_RECOMMENDATIONS):
         try:
             parsed = json.loads(serialized)
         except json.JSONDecodeError:
@@ -373,7 +385,8 @@ def _get_gap_embedding(text: str) -> list[float] | None:
         )
         _EMBED_CACHE[normalized] = vector
         return vector
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        LOGGER.warning("Gap embedding unavailable for %r: %s", normalized, exc)
         _EMBED_CACHE[normalized] = None
         return None
 
