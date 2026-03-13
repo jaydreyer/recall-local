@@ -1,6 +1,6 @@
 # Workflow 1: Job Board Aggregator (Guided)
 
-Goal: every 8 hours, run aggregator discovery through bridge, then queue evaluation for newly discovered jobs.
+Goal: every 8 hours, run aggregator discovery through bridge, then hand newly discovered jobs to Workflow 3 so evaluation and Telegram notify stay in one path.
 
 ## Node 1: Schedule Trigger
 
@@ -66,20 +66,22 @@ Expected response fields:
 - Operation: `larger`
 - Value 2: `0`
 
-## Node 5: Queue Evaluation Run
+## Node 5: Trigger Evaluation Workflow
 
 - Node type: `HTTP Request`
 - Method: `POST`
-- URL: `http://100.116.103.78:8090/v1/job-evaluation-runs`
+- URL: `http://100.116.103.78:5678/webhook/recall-job-evaluate`
 - Send body: `JSON`
 - JSON body:
 
 ```javascript
 ={{ {
   job_ids: $json.new_job_ids,
-  wait: false
+  wait: true
 } }}
 ```
+
+- This keeps all notify gating and Telegram delivery inside Workflow 3 instead of bypassing it through the bridge evaluation endpoint.
 
 ## Node 6: Log Summary
 
@@ -105,7 +107,7 @@ return [{
 
 1. Click `Execute workflow`.
 2. Confirm Node 3 returns `new_job_ids` (can be empty if no new jobs).
-3. If Node 4 true path runs, confirm Node 5 returns `run_id` from job evaluation queue.
+3. If Node 4 true path runs, confirm Node 5 returns Workflow 3 summary fields such as `run_id`, `high_fit_count`, and `notifications_sent`.
 4. Check bridge jobs endpoint:
 
 ```bash

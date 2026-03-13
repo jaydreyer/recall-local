@@ -102,6 +102,20 @@ This node also:
 ## Node 7: Telegram Notify
 
 - Node type: `Telegram`
+- Resource: `message`
+- Operation: `sendMessage`
+- Chat ID: `8724583836`
+- Text:
+
+```text
+={{ $json.telegram_message }}
+```
+
+- Credential:
+  - type: `telegramApi`
+  - name: `Telegram account`
+  - id: `6aWx4DnLbVi8JlGU`
+
 - Sends one batched message for the qualifying jobs in the current webhook run.
 - Message includes:
   - fit score

@@ -1,5 +1,56 @@
 # Recall.local Implementation Log
 
+## 2026-03-13 - Phase 6C Telegram delivery restoration on ai-lab
+
+### What was executed
+
+- Re-validated the live ai-lab stack and current Workflow 3 execution path before changing runtime state:
+  - `cd /home/jaydreyer/recall-local/docker && ./validate-stack.sh`
+  - confirmed active workflows include:
+    - `Job Board Aggregator` (`cWHLi1plI5siWP8X`)
+    - `Recall Phase6B - Career Page Monitor (Traditional Import)` (`eE5wQFqV9oiSHKaL`)
+    - `Phase 6C - Workflow 3 - Evaluate & Notify` (`9DEQqfD8JA5PCiVP`)
+- Confirmed the end-to-end evaluation webhook path was active but not delivering alerts:
+  - `POST http://localhost:5678/webhook/recall-job-evaluate`
+  - a high-fit test job returned `high_fit_count=1` and `notifications_sent=0`
+  - decoded the latest n8n execution payload and found the root cause:
+    - Workflow 3 had drifted back to an HTTP Request node using `$env`
+    - ai-lab still blocks env access in n8n expressions (`access to env vars denied`)
+- Restored the repo workflow artifacts back to the known-good credential-based Telegram path:
+  - [/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6c_evaluate_notify_import.workflow.json](/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6c_evaluate_notify_import.workflow.json)
+  - [/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6/workflow3_evaluate_notify.md](/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6/workflow3_evaluate_notify.md)
+  - [/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6/workflow1_aggregator.md](/Users/jaydreyer/projects/recall-local/n8n/workflows/phase6/workflow1_aggregator.md)
+- Removed the temporary unused n8n Telegram env wiring from:
+  - [/Users/jaydreyer/projects/recall-local/docker/docker-compose.yml](/Users/jaydreyer/projects/recall-local/docker/docker-compose.yml)
+- Synced the updated local files to ai-lab and spot-checked remote contents before restart/verification.
+- Patched the active Workflow 3 node directly in ai-lab n8n SQLite to match the credential-based configuration:
+  - node: `Send Telegram Alert`
+  - type: `n8n-nodes-base.telegram`
+  - credential: `6aWx4DnLbVi8JlGU` (`Telegram account`)
+  - chat id: `8724583836`
+- Restarted only `n8n` under the `recall` Compose project and re-ran stack validation.
+
+### Validation
+
+- `./validate-stack.sh` passed after the `n8n` restart.
+- Direct Telegram Bot API probe from ai-lab succeeded for the target chat.
+- High-fit Workflow 3 webhook smoke test succeeded end-to-end:
+  - `POST http://localhost:5678/webhook/recall-job-evaluate`
+  - payload: `{"job_ids":["job_bcb835e52c70d017"],"wait":true}`
+  - response fields:
+    - `high_fit_count=1`
+    - `notifications_sent=1`
+    - `notification_errors=[]`
+
+### Results
+
+- `Recall Job Scout` alerts are flowing again through the intended Phase 6C path.
+- The active aggregator/career workflows now hand off into Workflow 3 without bypassing Telegram delivery.
+- Workflow 3 is back on the supported ai-lab pattern:
+  - Telegram credential inside n8n
+  - no `$env` dependency in node expressions
+- A fresh high-fit webhook probe now sends a real Telegram alert successfully.
+
 ## 2026-03-12 - Optional OTEL/Honeycomb bridge tracing added
 
 ### What was executed
