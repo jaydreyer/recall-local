@@ -152,6 +152,18 @@ For deeper technical detail, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
+## Product Tour
+
+| Operations Panel | Daily Dashboard |
+| --- | --- |
+| ![Recall.local operations panel](docs/docs/screenshots/operations-panel.png) | ![Recall.local daily dashboard](docs/docs/screenshots/dashboard.png) |
+
+| Sample RAG Query | API Docs |
+| --- | --- |
+| ![Recall.local sample query](docs/docs/screenshots/sample-query.png) | ![Recall.local API docs](docs/docs/screenshots/api-docs.png) |
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |
