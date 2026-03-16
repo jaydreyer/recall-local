@@ -16,7 +16,6 @@ import uuid
 from collections import deque
 from contextlib import asynccontextmanager
 from dataclasses import asdict
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional
 
@@ -47,6 +46,7 @@ from scripts.phase1.rag_query import run_rag_query  # noqa: E402
 from scripts.phase5.vault_sync import list_vault_tree, run_vault_sync_once  # noqa: F401,E402
 from scripts.phase2.meeting_action_items import run_meeting_action_items  # noqa: E402
 from scripts.phase2.meeting_from_payload import payload_to_meeting_kwargs  # noqa: E402
+from scripts.shared_time import now_iso  # noqa: E402
 from scripts.phase6 import storage as phase6_storage  # noqa: F401,E402
 from scripts.phase6.company_profiler import get_company_profile as phase6_get_company_profile  # noqa: F401,E402
 from scripts.phase6.company_profiler import list_company_profiles as phase6_list_company_profiles  # noqa: E402
@@ -152,7 +152,7 @@ class DashboardCacheWarmer:
             }
 
     def warm_once(self) -> None:
-        started_at = _now_iso()
+        started_at = now_iso()
         with self._lock:
             self.last_started_at = started_at
             self.last_error = None
@@ -167,7 +167,7 @@ class DashboardCacheWarmer:
                 self.last_error = str(exc)
             return
         with self._lock:
-            self.last_completed_at = _now_iso()
+            self.last_completed_at = now_iso()
 
     def _run(self) -> None:
         self.warm_once()
@@ -1687,7 +1687,7 @@ def _dashboard_checks_payload(
     return {
         "workflow": "workflow_06a_dashboard_checks",
         "status": overall_status,
-        "checked_at": _now_iso(),
+        "checked_at": now_iso(),
         "jobs": sections["jobs"],
         "companies": sections["companies"],
         "gaps": sections["gaps"],
@@ -1893,7 +1893,7 @@ def _read_latest_evaluations(*, recent_limit: int) -> tuple[dict[str, Any] | Non
 
 def _queue_eval_run(*, suite: str, backend: str) -> str:
     eval_run_id = f"eval_{uuid.uuid4().hex[:12]}"
-    queued_at = _now_iso()
+    queued_at = now_iso()
     with EVAL_RUNS_LOCK:
         EVAL_RUNS[eval_run_id] = {
             "run_id": eval_run_id,
@@ -1919,7 +1919,7 @@ def _get_eval_run(eval_run_id: str) -> dict[str, Any]:
                 "suite": "unknown",
                 "backend": "unknown",
                 "started_at": None,
-                "ended_at": _now_iso(),
+                "ended_at": now_iso(),
                 "error": "run_not_found",
                 "result": None,
             }
@@ -1946,7 +1946,7 @@ def _execute_eval_run(
     _update_eval_run(
         eval_run_id,
         status="running",
-        started_at=_now_iso(),
+        started_at=now_iso(),
         error=None,
     )
     try:
@@ -1960,7 +1960,7 @@ def _execute_eval_run(
         _update_eval_run(
             eval_run_id,
             status="failed",
-            ended_at=_now_iso(),
+            ended_at=now_iso(),
             error=str(exc),
             result=None,
         )
@@ -1969,7 +1969,7 @@ def _execute_eval_run(
     _update_eval_run(
         eval_run_id,
         status="completed",
-        ended_at=_now_iso(),
+        ended_at=now_iso(),
         error=None,
         result=result,
     )
@@ -2826,10 +2826,6 @@ def _request_id() -> str:
 
 def _generated_request_id() -> str:
     return f"req_{uuid.uuid4().hex[:12]}"
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def _read_positive_int_env(name: str, default_value: int) -> int:

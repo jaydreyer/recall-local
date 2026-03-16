@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+"""Phase 6 bridge helper exports for route registration."""
+
+from scripts.phase1 import ingest_bridge_api as _bridge_api
+
+from typing import Any
+
+PHASE6_JOB_STATUSES = _bridge_api.PHASE6_JOB_STATUSES
+PHASE6_JOB_SOURCES = _bridge_api.PHASE6_JOB_SOURCES
+
+
+def phase6_list_jobs(*args: Any, **kwargs: Any) -> Any:
+    return _bridge_api.phase6_list_jobs(*args, **kwargs)
+
+
+def phase6_get_job(*args: Any, **kwargs: Any) -> Any:
+    return _bridge_api.phase6_get_job(*args, **kwargs)
+
+
+def phase6_update_job(*args: Any, **kwargs: Any) -> Any:
+    return _bridge_api.phase6_update_job(*args, **kwargs)
+
+
+def phase6_queue_job_evaluations(*args: Any, **kwargs: Any) -> Any:
+    return _bridge_api.phase6_queue_job_evaluations(*args, **kwargs)
+
+
+def phase6_job_stats(*args: Any, **kwargs: Any) -> Any:
+    return _bridge_api.phase6_job_stats(*args, **kwargs)
+
+
+def phase6_all_jobs(*args: Any, **kwargs: Any) -> Any:
+    return _bridge_api.phase6_all_jobs(*args, **kwargs)
+
+
+def phase6_aggregate_gaps(*args: Any, **kwargs: Any) -> Any:
+    return _bridge_api.phase6_aggregate_gaps(*args, **kwargs)
+
+
+def phase6_check_job_duplicate(*args: Any, **kwargs: Any) -> Any:
+    return _bridge_api.phase6_check_job_duplicate(*args, **kwargs)
+
+
+def phase6_ensure_collections(*args: Any, **kwargs: Any) -> Any:
+    return _bridge_api.phase6_ensure_collections(*args, **kwargs)
+
+
+def phase6_run_discovery(*args: Any, **kwargs: Any) -> Any:
+    return _bridge_api.phase6_run_discovery(*args, **kwargs)
+
+
+def phase6_ingest_resume(*args: Any, **kwargs: Any) -> Any:
+    return _bridge_api.phase6_ingest_resume(*args, **kwargs)
+
+
+phase6_storage = _bridge_api.phase6_storage
+
+
+def phase6_list_company_profiles(*args: Any, **kwargs: Any) -> Any:
+    return _bridge_api.phase6_list_company_profiles(*args, **kwargs)
+
+
+def phase6_get_company_profile(*args: Any, **kwargs: Any) -> Any:
+    return _bridge_api.phase6_get_company_profile(*args, **kwargs)
+
+
+def phase6_upsert_tracked_company_config(*args: Any, **kwargs: Any) -> Any:
+    return _bridge_api.phase6_upsert_tracked_company_config(*args, **kwargs)
+
+
+def phase6_update_company_tier(*args: Any, **kwargs: Any) -> Any:
+    return _bridge_api.phase6_update_company_tier(*args, **kwargs)
+
+
+def phase6_refresh_company_profile(*args: Any, **kwargs: Any) -> Any:
+    return _bridge_api.phase6_refresh_company_profile(*args, **kwargs)
+
+
+def phase6_generate_cover_letter_draft(*args: Any, **kwargs: Any) -> Any:
+    return _bridge_api.phase6_generate_cover_letter_draft(*args, **kwargs)
+
+JOB_PATCH_REQUEST_BODY = _bridge_api.JOB_PATCH_REQUEST_BODY
+JOB_EVALUATION_RUN_REQUEST_BODY = _bridge_api.JOB_EVALUATION_RUN_REQUEST_BODY
+JOB_STATS_SUCCESS_EXAMPLE = _bridge_api.JOB_STATS_SUCCESS_EXAMPLE
+JOB_GAPS_SUCCESS_EXAMPLE = _bridge_api.JOB_GAPS_SUCCESS_EXAMPLE
+JOB_DEDUP_REQUEST_BODY = _bridge_api.JOB_DEDUP_REQUEST_BODY
+JOB_DISCOVERY_RUN_REQUEST_BODY = _bridge_api.JOB_DISCOVERY_RUN_REQUEST_BODY
+RESUME_REQUEST_BODY = _bridge_api.RESUME_REQUEST_BODY
+COMPANY_CREATE_REQUEST_BODY = _bridge_api.COMPANY_CREATE_REQUEST_BODY
+COMPANY_PATCH_REQUEST_BODY = _bridge_api.COMPANY_PATCH_REQUEST_BODY
+COVER_LETTER_DRAFT_REQUEST_BODY = _bridge_api.COVER_LETTER_DRAFT_REQUEST_BODY
+LLM_SETTINGS_PATCH_REQUEST_BODY = _bridge_api.LLM_SETTINGS_PATCH_REQUEST_BODY
+
+__all__ = [
+    "PHASE6_JOB_STATUSES",
+    "PHASE6_JOB_SOURCES",
+    "phase6_list_jobs",
+    "phase6_get_job",
+    "phase6_update_job",
+    "JOB_PATCH_REQUEST_BODY",
+    "phase6_queue_job_evaluations",
+    "JOB_EVALUATION_RUN_REQUEST_BODY",
+    "JOB_STATS_SUCCESS_EXAMPLE",
+    "phase6_job_stats",
+    "JOB_GAPS_SUCCESS_EXAMPLE",
+    "phase6_all_jobs",
+    "phase6_aggregate_gaps",
+    "JOB_DEDUP_REQUEST_BODY",
+    "phase6_check_job_duplicate",
+    "JOB_DISCOVERY_RUN_REQUEST_BODY",
+    "phase6_ensure_collections",
+    "phase6_run_discovery",
+    "RESUME_REQUEST_BODY",
+    "phase6_ingest_resume",
+    "phase6_storage",
+    "phase6_list_company_profiles",
+    "phase6_get_company_profile",
+    "COMPANY_CREATE_REQUEST_BODY",
+    "phase6_upsert_tracked_company_config",
+    "phase6_update_company_tier",
+    "COMPANY_PATCH_REQUEST_BODY",
+    "phase6_refresh_company_profile",
+    "COVER_LETTER_DRAFT_REQUEST_BODY",
+    "phase6_generate_cover_letter_draft",
+    "LLM_SETTINGS_PATCH_REQUEST_BODY",
+]

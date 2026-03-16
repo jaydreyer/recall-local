@@ -9,72 +9,10 @@ from typing import Optional
 from fastapi import FastAPI, File, Form, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
 
-from scripts.phase1 import ingest_bridge_api as bridge
+from scripts.phase1.bridge_routes_core_contracts import *  # noqa: F401,F403
 
 
-def register_core_routes(app: FastAPI, *, rate_limiter: bridge.InMemoryRateLimiter, dashboard_cache_warmer: bridge.DashboardCacheWarmer | None) -> None:
-    API_PREFIX = bridge.API_PREFIX
-    HealthResponse = bridge.HealthResponse
-    DashboardChecksResponse = bridge.DashboardChecksResponse
-    ErrorResponse = bridge.ErrorResponse
-    ERROR_EXAMPLE_UNAUTHORIZED = bridge.ERROR_EXAMPLE_UNAUTHORIZED
-    RATE_LIMIT_ERROR_RESPONSE = bridge.RATE_LIMIT_ERROR_RESPONSE
-    _request_id = bridge._request_id
-    _enforce_api_and_rate_limit = bridge._enforce_api_and_rate_limit
-    _dashboard_checks_payload = bridge._dashboard_checks_payload
-    _json_response = bridge._json_response
-    AutoTagRulesResponse = bridge.AutoTagRulesResponse
-    AUTO_TAG_RULES_SUCCESS_EXAMPLE = bridge.AUTO_TAG_RULES_SUCCESS_EXAMPLE
-    ERROR_EXAMPLE_CONFIG_NOT_FOUND = bridge.ERROR_EXAMPLE_CONFIG_NOT_FOUND
-    ERROR_EXAMPLE_CONFIG_INVALID = bridge.ERROR_EXAMPLE_CONFIG_INVALID
-    _read_auto_tag_rules = bridge._read_auto_tag_rules
-    IngestWorkflowResponse = bridge.IngestWorkflowResponse
-    INGEST_SUCCESS_EXAMPLE = bridge.INGEST_SUCCESS_EXAMPLE
-    ERROR_EXAMPLE_VALIDATION = bridge.ERROR_EXAMPLE_VALIDATION
-    INGEST_REQUEST_BODY = bridge.INGEST_REQUEST_BODY
-    _read_json_body = bridge._read_json_body
-    _error_response = bridge._error_response
-    _process_ingestion = bridge._process_ingestion
-    FileIngestionResponse = bridge.FileIngestionResponse
-    FILE_INGEST_SUCCESS_EXAMPLE = bridge.FILE_INGEST_SUCCESS_EXAMPLE
-    ERROR_EXAMPLE_WORKFLOW = bridge.ERROR_EXAMPLE_WORKFLOW
-    FILE_INGEST_REQUEST_BODY = bridge.FILE_INGEST_REQUEST_BODY
-    _process_file_upload = bridge._process_file_upload
-    RagWorkflowResponse = bridge.RagWorkflowResponse
-    RAG_SUCCESS_EXAMPLE = bridge.RAG_SUCCESS_EXAMPLE
-    RAG_REQUEST_BODY = bridge.RAG_REQUEST_BODY
-    _process_rag_query = bridge._process_rag_query
-    MeetingWorkflowResponse = bridge.MeetingWorkflowResponse
-    MEETING_SUCCESS_EXAMPLE = bridge.MEETING_SUCCESS_EXAMPLE
-    MEETING_REQUEST_BODY = bridge.MEETING_REQUEST_BODY
-    _process_meeting_action_items = bridge._process_meeting_action_items
-    VaultTreeResponse = bridge.VaultTreeResponse
-    VAULT_TREE_SUCCESS_EXAMPLE = bridge.VAULT_TREE_SUCCESS_EXAMPLE
-    list_vault_tree = bridge.list_vault_tree
-    VaultSyncResponse = bridge.VaultSyncResponse
-    VAULT_SYNC_SUCCESS_EXAMPLE = bridge.VAULT_SYNC_SUCCESS_EXAMPLE
-    VAULT_SYNC_REQUEST_BODY = bridge.VAULT_SYNC_REQUEST_BODY
-    _normalize_bool = bridge._normalize_bool
-    _normalize_optional_positive_int = bridge._normalize_optional_positive_int
-    _normalize_optional_string = bridge._normalize_optional_string
-    run_vault_sync_once = bridge.run_vault_sync_once
-    ActivityResponse = bridge.ActivityResponse
-    ACTIVITY_SUCCESS_EXAMPLE = bridge.ACTIVITY_SUCCESS_EXAMPLE
-    DEFAULT_ACTIVITY_LIMIT = bridge.DEFAULT_ACTIVITY_LIMIT
-    _normalize_group_filter = bridge._normalize_group_filter
-    _read_recent_activity = bridge._read_recent_activity
-    EvaluationLatestResponse = bridge.EvaluationLatestResponse
-    DEFAULT_RECENT_EVAL_RUNS = bridge.DEFAULT_RECENT_EVAL_RUNS
-    EVAL_LATEST_SUCCESS_EXAMPLE = bridge.EVAL_LATEST_SUCCESS_EXAMPLE
-    _read_latest_evaluations = bridge._read_latest_evaluations
-    _list_eval_runs = bridge._list_eval_runs
-    EvaluationRunAcceptedResponse = bridge.EvaluationRunAcceptedResponse
-    EVAL_RUN_COMPLETED_EXAMPLE = bridge.EVAL_RUN_COMPLETED_EXAMPLE
-    EVAL_RUN_ACCEPTED_EXAMPLE = bridge.EVAL_RUN_ACCEPTED_EXAMPLE
-    EVAL_RUN_REQUEST_BODY = bridge.EVAL_RUN_REQUEST_BODY
-    _queue_eval_run = bridge._queue_eval_run
-    _execute_eval_run = bridge._execute_eval_run
-    _get_eval_run = bridge._get_eval_run
+def register_core_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter, dashboard_cache_warmer: DashboardCacheWarmer | None) -> None:
 
     @app.get(
         f"{API_PREFIX}/healthz",

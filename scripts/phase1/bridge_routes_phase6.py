@@ -10,64 +10,10 @@ from typing import Any, Optional
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 
-from scripts.phase1 import ingest_bridge_api as bridge
+from scripts.phase1.bridge_routes_phase6_contracts import *  # noqa: F401,F403
 
 
-def register_phase6_routes(app: FastAPI, *, rate_limiter: bridge.InMemoryRateLimiter) -> None:
-    API_PREFIX = bridge.API_PREFIX
-    ErrorResponse = bridge.ErrorResponse
-    ERROR_EXAMPLE_UNAUTHORIZED = bridge.ERROR_EXAMPLE_UNAUTHORIZED
-    ERROR_EXAMPLE_VALIDATION = bridge.ERROR_EXAMPLE_VALIDATION
-    ERROR_EXAMPLE_WORKFLOW = bridge.ERROR_EXAMPLE_WORKFLOW
-    RATE_LIMIT_ERROR_RESPONSE = bridge.RATE_LIMIT_ERROR_RESPONSE
-    _request_id = bridge._request_id
-    _enforce_api_and_rate_limit = bridge._enforce_api_and_rate_limit
-    _error_response = bridge._error_response
-    _json_response = bridge._json_response
-    _read_json_body = bridge._read_json_body
-    _normalize_bool = bridge._normalize_bool
-    _normalize_company_watch_payload = bridge._normalize_company_watch_payload
-    JobsCollectionResponse = bridge.JobsCollectionResponse
-    JOBS_LIST_SUCCESS_EXAMPLE = bridge.JOBS_LIST_SUCCESS_EXAMPLE
-    PHASE6_JOB_STATUSES = bridge.PHASE6_JOB_STATUSES
-    PHASE6_JOB_SOURCES = bridge.PHASE6_JOB_SOURCES
-    phase6_list_jobs = bridge.phase6_list_jobs
-    phase6_get_job = bridge.phase6_get_job
-    phase6_update_job = bridge.phase6_update_job
-    JOB_PATCH_REQUEST_BODY = bridge.JOB_PATCH_REQUEST_BODY
-    JobEvaluationRunResponse = bridge.JobEvaluationRunResponse
-    JOB_EVALUATION_RUN_COMPLETED_EXAMPLE = bridge.JOB_EVALUATION_RUN_COMPLETED_EXAMPLE
-    JOB_EVALUATION_RUN_ACCEPTED_EXAMPLE = bridge.JOB_EVALUATION_RUN_ACCEPTED_EXAMPLE
-    JOB_EVALUATION_RUN_REQUEST_BODY = bridge.JOB_EVALUATION_RUN_REQUEST_BODY
-    phase6_queue_job_evaluations = bridge.phase6_queue_job_evaluations
-    JOB_STATS_SUCCESS_EXAMPLE = bridge.JOB_STATS_SUCCESS_EXAMPLE
-    phase6_job_stats = bridge.phase6_job_stats
-    JOB_GAPS_SUCCESS_EXAMPLE = bridge.JOB_GAPS_SUCCESS_EXAMPLE
-    phase6_all_jobs = bridge.phase6_all_jobs
-    phase6_aggregate_gaps = bridge.phase6_aggregate_gaps
-    JOB_DEDUP_REQUEST_BODY = bridge.JOB_DEDUP_REQUEST_BODY
-    phase6_check_job_duplicate = bridge.phase6_check_job_duplicate
-    JOB_DISCOVERY_RUN_REQUEST_BODY = bridge.JOB_DISCOVERY_RUN_REQUEST_BODY
-    phase6_ensure_collections = bridge.phase6_ensure_collections
-    phase6_run_discovery = bridge.phase6_run_discovery
-    ResumeIngestionResponse = bridge.ResumeIngestionResponse
-    RESUME_SUCCESS_EXAMPLE = bridge.RESUME_SUCCESS_EXAMPLE
-    RESUME_REQUEST_BODY = bridge.RESUME_REQUEST_BODY
-    phase6_ingest_resume = bridge.phase6_ingest_resume
-    phase6_storage = bridge.phase6_storage
-    phase6_list_company_profiles = bridge.phase6_list_company_profiles
-    phase6_get_company_profile = bridge.phase6_get_company_profile
-    COMPANY_SUCCESS_EXAMPLE = bridge.COMPANY_SUCCESS_EXAMPLE
-    COMPANY_CREATE_REQUEST_BODY = bridge.COMPANY_CREATE_REQUEST_BODY
-    phase6_upsert_tracked_company_config = bridge.phase6_upsert_tracked_company_config
-    phase6_update_company_tier = bridge.phase6_update_company_tier
-    COMPANY_PATCH_REQUEST_BODY = bridge.COMPANY_PATCH_REQUEST_BODY
-    phase6_refresh_company_profile = bridge.phase6_refresh_company_profile
-    COVER_LETTER_DRAFT_SUCCESS_EXAMPLE = bridge.COVER_LETTER_DRAFT_SUCCESS_EXAMPLE
-    COVER_LETTER_DRAFT_REQUEST_BODY = bridge.COVER_LETTER_DRAFT_REQUEST_BODY
-    phase6_generate_cover_letter_draft = bridge.phase6_generate_cover_letter_draft
-    LLM_SETTINGS_SUCCESS_EXAMPLE = bridge.LLM_SETTINGS_SUCCESS_EXAMPLE
-    LLM_SETTINGS_PATCH_REQUEST_BODY = bridge.LLM_SETTINGS_PATCH_REQUEST_BODY
+def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -> None:
     @app.get(
         f"{API_PREFIX}/jobs",
         tags=["Jobs"],

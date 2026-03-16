@@ -28,6 +28,13 @@ Public-repo note: historical entries use placeholder hostnames and paths where t
   - `<repo-root>/scripts/phase1/bridge_routes_core.py`
   - `<repo-root>/scripts/phase1/bridge_routes_phase6.py`
   - top-level app creation in `<repo-root>/scripts/phase1/ingest_bridge_api.py` now keeps startup, middleware, auth/rate-limiting, and fallback handlers while delegating route registration to dedicated modules
+- Added dedicated phase-specific contract/shared layers to keep route modules decoupled from the monolith:
+  - `<repo-root>/scripts/phase1/bridge_routes_models.py`
+  - `<repo-root>/scripts/phase1/bridge_routes_middleware.py`
+  - `<repo-root>/scripts/phase1/bridge_routes_core_helpers.py`
+  - `<repo-root>/scripts/phase1/bridge_routes_core_contracts.py`
+  - `<repo-root>/scripts/phase1/bridge_routes_phase6_helpers.py`
+  - `<repo-root>/scripts/phase1/bridge_routes_phase6_contracts.py`
 
 ### Validation
 
