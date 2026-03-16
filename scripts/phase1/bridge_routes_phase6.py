@@ -10,7 +10,9 @@ from typing import Any, Optional
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 
-from scripts.phase1.bridge_routes_phase6_contracts import *  # noqa: F401,F403
+from scripts.phase1.bridge_routes_middleware import *  # noqa: F401,F403
+from scripts.phase1.bridge_routes_models import *  # noqa: F401,F403
+from scripts.phase1.bridge_routes_phase6_helpers import *  # noqa: F401,F403
 
 
 def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -> None:

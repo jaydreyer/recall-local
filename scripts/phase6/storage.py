@@ -6,9 +6,10 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from scripts.shared_time import now_iso
 
 DEFAULT_LLM_SETTINGS: dict[str, Any] = {
     "evaluation_model": "local",
@@ -19,10 +20,6 @@ DEFAULT_LLM_SETTINGS: dict[str, Any] = {
     "escalate_threshold_gaps": 2,
     "escalate_threshold_rationale_words": 20,
 }
-
-
-def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def db_path_from_env() -> Path:

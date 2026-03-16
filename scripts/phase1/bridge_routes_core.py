@@ -9,7 +9,9 @@ from typing import Optional
 from fastapi import FastAPI, File, Form, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
 
-from scripts.phase1.bridge_routes_core_contracts import *  # noqa: F401,F403
+from scripts.phase1.bridge_routes_core_helpers import *  # noqa: F401,F403
+from scripts.phase1.bridge_routes_middleware import *  # noqa: F401,F403
+from scripts.phase1.bridge_routes_models import *  # noqa: F401,F403
 
 
 def register_core_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter, dashboard_cache_warmer: DashboardCacheWarmer | None) -> None:

@@ -248,7 +248,7 @@ python3 -m pytest tests/ -q --cov=scripts --cov-report=term-missing
 
 ```
 recall-local/
-├── scripts/                     # Core execution logic (76 files)
+├── scripts/                     # Core execution logic (51 source files)
 │   ├── llm_client.py            #   Unified LLM provider interface (Ollama/Anthropic/OpenAI/Gemini)
 │   ├── validate_output.py       #   JSON and output format validation
 │   ├── phase0/                  #   Bootstrap: SQLite schema, Qdrant collections, connectivity
@@ -259,7 +259,7 @@ recall-local/
 │   ├── phase5/                  #   Obsidian vault sync, operator stack management
 │   ├── phase6/                  #   Job discovery, evaluation, cover letters, Telegram alerts
 │   └── eval/                    #   Evaluation harness, golden sets, model bakeoffs
-├── tests/                       # 182+ tests, 49% coverage (29 files)
+├── tests/                       # 229+ tests, 49.6% coverage (38 files)
 │   ├── conftest.py              #   Shared fixtures (temp DBs, mocked LLM clients)
 │   ├── test_bridge_api_contract.py  #   FastAPI endpoint contract validation
 │   └── ...                      #   Phase-specific regression suites
@@ -313,10 +313,10 @@ python3 -m pytest tests/ -q --cov=scripts --cov-report=term-missing
 
 | Metric | Value |
 |--------|-------|
-| Passing tests | 182+ |
-| Coverage | 49.62% |
+| Passing tests | 229+ |
+| Coverage | 49.6% |
 | CI floor | 25% minimum |
-| Test files | 29 |
+| Test files | 38 |
 
 The test strategy prioritizes **contract tests** (API surface) and **regression tests** (highest-risk logic) over exhaustive unit coverage. Key test files:
 

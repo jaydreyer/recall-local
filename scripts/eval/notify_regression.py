@@ -6,10 +6,10 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import urllib.error
-import urllib.request
 from pathlib import Path
 from typing import Any
+from urllib.error import URLError
+from urllib.request import Request, urlopen
 
 LOGGER = logging.getLogger(__name__)
 WEBHOOK_TIMEOUT_SECONDS = 10
@@ -75,13 +75,13 @@ def _build_message(result: dict[str, Any], *, command_exit: int, stderr_path: st
 def _post_webhook(*, webhook_url: str, message: str) -> None:
     """Send an alert payload to a Slack- or Teams-compatible webhook."""
     body = json.dumps({"text": message}).encode("utf-8")
-    request = urllib.request.Request(
+    request = Request(
         webhook_url,
         data=body,
         headers={"content-type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=WEBHOOK_TIMEOUT_SECONDS) as response:
+    with urlopen(request, timeout=WEBHOOK_TIMEOUT_SECONDS) as response:
         if response.status >= 300:
             raise RuntimeError(f"Alert webhook returned HTTP {response.status}.")
 
@@ -104,7 +104,7 @@ def main() -> int:
         if args.webhook_url:
             try:
                 _post_webhook(webhook_url=args.webhook_url, message=message)
-            except (RuntimeError, urllib.error.URLError) as webhook_exc:
+            except (RuntimeError, URLError) as webhook_exc:
                 LOGGER.warning("Webhook alert failed for %s: %s", args.webhook_url, webhook_exc)
                 print(f"Webhook alert failed: {webhook_exc}")
         return 0
@@ -115,7 +115,7 @@ def main() -> int:
     if regression and args.webhook_url:
         try:
             _post_webhook(webhook_url=args.webhook_url, message=message)
-        except urllib.error.URLError as exc:
+        except URLError as exc:
             LOGGER.warning("Webhook alert failed for %s: %s", args.webhook_url, exc)
             print(f"Webhook alert failed: {exc}")
         except RuntimeError as exc:
