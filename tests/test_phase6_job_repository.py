@@ -14,6 +14,12 @@ class JobRepositoryTests(unittest.TestCase):
         normalized = job_repository._normalize_workflow(
             {
                 "packet": {"coverLetterDraft": True},
+                "nextAction": {
+                    "action": "tailor_resume",
+                    "rationale": "The role is a strong fit and packet work should start now.",
+                    "confidence": "high",
+                    "dueAt": "2026-03-20T16:00:00Z",
+                },
                 "artifacts": {
                     "coverLetterDraft": {
                         "draftId": "cover_letter_job-1",
@@ -29,6 +35,8 @@ class JobRepositoryTests(unittest.TestCase):
         )
 
         self.assertTrue(normalized["packet"]["coverLetterDraft"])
+        self.assertEqual(normalized["nextAction"]["action"], "tailor_resume")
+        self.assertEqual(normalized["nextAction"]["confidence"], "high")
         self.assertEqual(normalized["artifacts"]["coverLetterDraft"]["draftId"], "cover_letter_job-1")
         self.assertEqual(normalized["artifacts"]["coverLetterDraft"]["wordCount"], 132)
         self.assertTrue(normalized["artifacts"]["coverLetterDraft"]["savedToVault"])

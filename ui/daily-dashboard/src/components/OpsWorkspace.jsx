@@ -102,6 +102,7 @@ function WorkflowRail({
   onMarkFollowUpDueNow,
   onMarkFollowUpComplete,
   onResetFollowUp,
+  onSetRecommendedNextAction,
 }) {
   const workflow = deriveWorkflow(job, coverLetterState, workflowState)
   const timeline = buildWorkflowTimeline(job, coverLetterState)
@@ -165,6 +166,14 @@ function WorkflowRail({
             <strong>{workflow.nextActionLabel}</strong>
           </div>
           <div className="ops-kv">
+            <span className="mini-label">Confidence</span>
+            <strong>{workflow.nextActionConfidence ? workflow.nextActionConfidence.toUpperCase() : 'Not set'}</strong>
+          </div>
+          <div className="ops-kv">
+            <span className="mini-label">Due</span>
+            <strong>{workflow.nextActionDueLabel || 'Not set'}</strong>
+          </div>
+          <div className="ops-kv">
             <span className="mini-label">Packet status</span>
             <strong>{workflow.packetLabel}</strong>
           </div>
@@ -173,9 +182,19 @@ function WorkflowRail({
             <strong>{workflow.approvalLabel}</strong>
           </div>
         </div>
+        {workflow.nextActionRationale ? (
+          <div className="workflow-callout pending">
+            <p className="section-label">Recommendation rationale</p>
+            <strong>{workflow.nextActionLabel}</strong>
+            <p className="body-copy">{workflow.nextActionRationale}</p>
+          </div>
+        ) : null}
         <div className="section-inline-actions workflow-action-row">
           <button type="button" className="text-button accent" onClick={onApproveNextAction}>
             Approve next action
+          </button>
+          <button type="button" className="ghost-button" onClick={onSetRecommendedNextAction}>
+            Sync recommendation
           </button>
           <button type="button" className="ghost-button" onClick={onApprovePacket}>
             Approve packet
@@ -649,6 +668,16 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
               coverLetterState={jobsState.coverLetterState}
               workflowState={workflowState}
               onApproveNextAction={() => jobsState.updateWorkflow(selectedJob.jobId, { nextActionApproval: 'approved' })}
+              onSetRecommendedNextAction={() =>
+                jobsState.updateWorkflow(selectedJob.jobId, {
+                  nextAction: {
+                    action: workflow.nextAction,
+                    rationale: workflow.nextActionRationale,
+                    confidence: workflow.nextActionConfidence,
+                    dueAt: workflow.nextActionDueAt || null,
+                  },
+                })
+              }
               onApprovePacket={() => jobsState.updateWorkflow(selectedJob.jobId, { packetApproval: 'approved' })}
               onTogglePacketItem={(key) =>
                 jobsState.updateWorkflow(selectedJob.jobId, {

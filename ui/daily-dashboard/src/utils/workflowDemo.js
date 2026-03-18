@@ -1,5 +1,6 @@
 export const WORKFLOW_STAGES = ['focus', 'review', 'follow_up', 'monitor', 'closed']
 export const FOLLOW_UP_STATUSES = ['not_scheduled', 'scheduled', 'completed']
+export const NEXT_ACTIONS = ['none', 'review_role', 'tailor_resume', 'hold', 'skip', 'follow_up', 'monitor_response', 'schedule_follow_up', 'send_follow_up']
 
 export const WORKFLOW_STAGE_LABELS = {
   focus: 'Focus queue',
@@ -86,6 +87,31 @@ function formatDateTime(value, fallback = 'Not set') {
   })
 }
 
+function titleCaseAction(value) {
+  return String(value || '')
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part[0].toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function nextActionState(job, workflowState, fallback) {
+  const raw = workflowState?.nextAction || {}
+  const action = NEXT_ACTIONS.includes(raw.action) ? raw.action : fallback.action
+  const rationale = raw.rationale || fallback.rationale || null
+  const confidence = raw.confidence || fallback.confidence || null
+  const dueAt = raw.dueAt || fallback.dueAt || null
+
+  return {
+    action,
+    label: fallback.action === action ? fallback.label : titleCaseAction(action),
+    rationale,
+    confidence,
+    dueAt,
+    dueLabel: dueAt ? formatDateTime(dueAt, 'Not set') : 'Not set',
+  }
+}
+
 function followUpState(job, workflowState) {
   const raw = workflowState?.followUp || {}
   const status = FOLLOW_UP_STATUSES.includes(raw.status) ? raw.status : 'not_scheduled'
@@ -140,6 +166,12 @@ export function defaultWorkflowState(job = null) {
     stage,
     nextActionApproval: job?.workflow?.nextActionApproval || 'pending',
     packetApproval: job?.workflow?.packetApproval || 'pending',
+    nextAction: {
+      action: job?.workflow?.nextAction?.action || null,
+      rationale: job?.workflow?.nextAction?.rationale || null,
+      confidence: job?.workflow?.nextAction?.confidence || null,
+      dueAt: job?.workflow?.nextAction?.dueAt || null,
+    },
     packet: {
       tailoredSummary: Boolean(job?.workflow?.packet?.tailoredSummary),
       resumeBullets: Boolean(job?.workflow?.packet?.resumeBullets),
@@ -182,11 +214,18 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
     : 'No draft artifact yet'
 
   if (status === 'dismissed' || status === 'expired') {
+    const nextActionStateValue = nextActionState(job, effectiveWorkflow, {
+      action: 'none',
+      label: 'Closed out',
+      rationale: 'This role is archived, so no further workflow action is needed.',
+      confidence: 'high',
+      dueAt: null,
+    })
     return {
       state: 'closed',
       stateLabel: 'Closed',
-      nextAction: 'none',
-      nextActionLabel: 'Closed out',
+      nextAction: nextActionStateValue.action,
+      nextActionLabel: nextActionStateValue.label,
       blocker: 'Role archived for reference',
       blockerTone: 'muted',
       packetStatus: draftGenerated ? 'draft_generated' : 'not_started',
@@ -200,15 +239,24 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       followUpDueLabel: followUp.dueLabel,
       coverLetterArtifactLabel: draftArtifactLabel,
       coverLetterArtifact: draftArtifact,
+      nextActionRationale: nextActionStateValue.rationale,
+      nextActionConfidence: nextActionStateValue.confidence,
+      nextActionDueLabel: nextActionStateValue.dueLabel,
+      nextActionDueAt: nextActionStateValue.dueAt,
     }
   }
 
   if (status === 'applied') {
-    return {
-      state: 'applied',
-      stateLabel: 'Applied',
-      nextAction: followUp.status === 'completed' ? 'monitor_response' : 'follow_up',
-      nextActionLabel:
+    const nextActionStateValue = nextActionState(job, effectiveWorkflow, {
+      action:
+        followUp.status === 'completed'
+          ? 'monitor_response'
+          : followUp.isDue
+            ? 'send_follow_up'
+            : followUp.status === 'scheduled'
+              ? 'follow_up'
+              : 'schedule_follow_up',
+      label:
         followUp.status === 'completed'
           ? 'Monitor response'
           : followUp.isDue
@@ -216,6 +264,22 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
             : followUp.status === 'scheduled'
               ? 'Hold until follow-up date'
               : 'Schedule follow-up',
+      rationale:
+        followUp.status === 'completed'
+          ? 'The follow-up was already sent, so the next step is to watch for a response.'
+          : followUp.isDue
+            ? 'The role is already in follow-up and the due date has arrived.'
+            : followUp.status === 'scheduled'
+              ? 'A follow-up is already planned, so the best move is to wait until it is due.'
+              : 'The application is recorded, but there is no follow-up date scheduled yet.',
+      confidence: followUp.isDue || followUp.status === 'completed' ? 'high' : 'medium',
+      dueAt: followUp.dueAt || null,
+    })
+    return {
+      state: 'applied',
+      stateLabel: 'Applied',
+      nextAction: nextActionStateValue.action,
+      nextActionLabel: nextActionStateValue.label,
       blocker:
         followUp.status === 'completed'
           ? 'Waiting for response'
@@ -242,15 +306,26 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       followUpCompletedLabel: followUp.completedLabel,
       coverLetterArtifactLabel: draftArtifactLabel,
       coverLetterArtifact: draftArtifact,
+      nextActionRationale: nextActionStateValue.rationale,
+      nextActionConfidence: nextActionStateValue.confidence,
+      nextActionDueLabel: nextActionStateValue.dueLabel,
+      nextActionDueAt: nextActionStateValue.dueAt,
     }
   }
 
   if (status === 'new' || !evaluated) {
+    const nextActionStateValue = nextActionState(job, effectiveWorkflow, {
+      action: 'review_role',
+      label: 'Review role',
+      rationale: 'This role still needs evaluation before packet work or approvals should begin.',
+      confidence: 'high',
+      dueAt: null,
+    })
     return {
       state: 'new',
       stateLabel: 'New',
-      nextAction: 'review_role',
-      nextActionLabel: 'Review role',
+      nextAction: nextActionStateValue.action,
+      nextActionLabel: nextActionStateValue.label,
       blocker: 'Needs evaluation',
       blockerTone: 'warning',
       packetStatus: 'not_started',
@@ -264,15 +339,29 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       followUpDueLabel: followUp.dueLabel,
       coverLetterArtifactLabel: draftArtifactLabel,
       coverLetterArtifact: draftArtifact,
+      nextActionRationale: nextActionStateValue.rationale,
+      nextActionConfidence: nextActionStateValue.confidence,
+      nextActionDueLabel: nextActionStateValue.dueLabel,
+      nextActionDueAt: nextActionStateValue.dueAt,
     }
   }
 
   if (highFit) {
+    const nextActionStateValue = nextActionState(job, effectiveWorkflow, {
+      action: 'tailor_resume',
+      label: 'Tailor resume',
+      rationale:
+        nextActionApproval === 'approved'
+          ? 'This role is a strong fit and is ready for packet work before application.'
+          : 'This role is a strong fit, but the next step should be reviewed before packet work moves forward.',
+      confidence: 'high',
+      dueAt: null,
+    })
     return {
       state: 'target',
       stateLabel: 'Target',
-      nextAction: 'tailor_resume',
-      nextActionLabel: 'Tailor resume',
+      nextAction: nextActionStateValue.action,
+      nextActionLabel: nextActionStateValue.label,
       blocker:
         packetApproval === 'approved'
           ? 'Ready to move forward'
@@ -298,14 +387,28 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       followUpDueLabel: followUp.dueLabel,
       coverLetterArtifactLabel: draftArtifactLabel,
       coverLetterArtifact: draftArtifact,
+      nextActionRationale: nextActionStateValue.rationale,
+      nextActionConfidence: nextActionStateValue.confidence,
+      nextActionDueLabel: nextActionStateValue.dueLabel,
+      nextActionDueAt: nextActionStateValue.dueAt,
     }
   }
 
+  const nextActionStateValue = nextActionState(job, effectiveWorkflow, {
+    action: fitScore >= 50 ? 'hold' : 'skip',
+    label: fitScore >= 50 ? 'Hold for later' : 'Skip for now',
+    rationale:
+      fitScore >= 50
+        ? 'The role is viable but not strong enough to move into the focus queue right now.'
+        : 'The fit score is below the current threshold, so this role should not take priority.',
+    confidence: fitScore >= 50 ? 'medium' : 'high',
+    dueAt: null,
+  })
   return {
     state: 'reviewed',
     stateLabel: 'Reviewed',
-    nextAction: fitScore >= 50 ? 'hold' : 'skip',
-    nextActionLabel: fitScore >= 50 ? 'Hold for later' : 'Skip for now',
+    nextAction: nextActionStateValue.action,
+    nextActionLabel: nextActionStateValue.label,
     blocker: 'Fit threshold not met',
     blockerTone: 'muted',
     packetStatus: 'not_started',
@@ -319,6 +422,10 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
     followUpDueLabel: followUp.dueLabel,
     coverLetterArtifactLabel: draftArtifactLabel,
     coverLetterArtifact: draftArtifact,
+    nextActionRationale: nextActionStateValue.rationale,
+    nextActionConfidence: nextActionStateValue.confidence,
+    nextActionDueLabel: nextActionStateValue.dueLabel,
+    nextActionDueAt: nextActionStateValue.dueAt,
   }
 }
 

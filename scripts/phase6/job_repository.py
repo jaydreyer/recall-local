@@ -47,8 +47,26 @@ DEFAULT_WORKFLOW_FOLLOW_UP = {
     "dueAt": None,
     "lastCompletedAt": None,
 }
+DEFAULT_WORKFLOW_NEXT_ACTION = {
+    "action": None,
+    "rationale": None,
+    "confidence": None,
+    "dueAt": None,
+}
 WORKFLOW_STAGES = {"focus", "review", "follow_up", "monitor", "closed"}
 WORKFLOW_FOLLOW_UP_STATUSES = {"not_scheduled", "scheduled", "completed"}
+WORKFLOW_NEXT_ACTIONS = {
+    "none",
+    "review_role",
+    "tailor_resume",
+    "hold",
+    "skip",
+    "follow_up",
+    "monitor_response",
+    "schedule_follow_up",
+    "send_follow_up",
+}
+WORKFLOW_NEXT_ACTION_CONFIDENCE = {"low", "medium", "high"}
 
 
 def _parse_int(value: Any, default: int = 0) -> int:
@@ -100,6 +118,7 @@ def _normalize_workflow(value: Any) -> dict[str, Any]:
     source = dict(value) if isinstance(value, dict) else {}
     packet = source.get("packet") if isinstance(source.get("packet"), dict) else {}
     artifacts = source.get("artifacts") if isinstance(source.get("artifacts"), dict) else {}
+    next_action = source.get("nextAction") if isinstance(source.get("nextAction"), dict) else {}
     follow_up = source.get("followUp") if isinstance(source.get("followUp"), dict) else {}
     stage = str(source.get("stage") or "").strip().lower()
     follow_up_status = str(follow_up.get("status") or "").strip().lower()
@@ -111,6 +130,7 @@ def _normalize_workflow(value: Any) -> dict[str, Any]:
             key: bool(packet.get(key, default))
             for key, default in DEFAULT_WORKFLOW_PACKET.items()
         },
+        "nextAction": _normalize_next_action(next_action),
         "artifacts": {
             "coverLetterDraft": _normalize_cover_letter_artifact(artifacts.get("coverLetterDraft")),
         },
@@ -140,6 +160,8 @@ def _normalize_workflow_patch(value: Any) -> dict[str, Any]:
             for key, value in source["packet"].items()
             if key in DEFAULT_WORKFLOW_PACKET
         }
+    if isinstance(source.get("nextAction"), dict):
+        normalized["nextAction"] = _normalize_next_action(source.get("nextAction"))
     if isinstance(source.get("artifacts"), dict):
         artifacts = source["artifacts"]
         next_artifacts: dict[str, Any] = {}
@@ -520,6 +542,22 @@ def _normalize_cover_letter_artifact(value: Any) -> dict[str, Any]:
     return normalized
 
 
+def _normalize_next_action(value: Any) -> dict[str, Any]:
+    source = dict(value) if isinstance(value, dict) else {}
+    normalized = dict(DEFAULT_WORKFLOW_NEXT_ACTION)
+    action = str(source.get("action") or "").strip().lower()
+    confidence = str(source.get("confidence") or "").strip().lower()
+    normalized.update(
+        {
+            "action": action if action in WORKFLOW_NEXT_ACTIONS else None,
+            "rationale": str(source.get("rationale") or "").strip() or None,
+            "confidence": confidence if confidence in WORKFLOW_NEXT_ACTION_CONFIDENCE else None,
+            "dueAt": str(source.get("dueAt") or "").strip() or None,
+        }
+    )
+    return normalized
+
+
 def _append_workflow_event(
     timeline: list[dict[str, Any]],
     *,
@@ -630,6 +668,10 @@ def update_job(
             **existing_workflow.get("packet", {}),
             **incoming_workflow.get("packet", {}),
         }
+        merged_next_action = {
+            **_normalize_next_action(existing_workflow.get("nextAction")),
+            **incoming_workflow.get("nextAction", {}),
+        }
         merged_artifacts = {
             **existing_workflow.get("artifacts", {}),
             **incoming_workflow.get("artifacts", {}),
@@ -644,6 +686,7 @@ def update_job(
             **existing_workflow,
             **incoming_workflow,
             "packet": merged_packet,
+            "nextAction": _normalize_next_action(merged_next_action),
             "artifacts": merged_artifacts,
             "followUp": merged_follow_up,
             "updatedAt": now,
@@ -658,6 +701,23 @@ def update_job(
                 current["workflowTimeline"],
                 event_type="next_action_approved" if next_workflow.get("nextActionApproval") == "approved" else "next_action_pending",
                 label="Next action approved" if next_workflow.get("nextActionApproval") == "approved" else "Next action sent back for review",
+                at=now,
+            )
+        existing_next_action = _normalize_next_action(existing_workflow.get("nextAction"))
+        next_next_action = _normalize_next_action(next_workflow.get("nextAction"))
+        if existing_next_action != next_next_action and next_next_action.get("action"):
+            detail_parts = []
+            if next_next_action.get("confidence"):
+                detail_parts.append(f"Confidence: {next_next_action['confidence']}")
+            if next_next_action.get("dueAt"):
+                detail_parts.append(f"Due {_timeline_datetime_label(next_next_action['dueAt'])}")
+            if next_next_action.get("rationale"):
+                detail_parts.append(next_next_action["rationale"])
+            current["workflowTimeline"] = _append_workflow_event(
+                current["workflowTimeline"],
+                event_type="next_action_updated",
+                label=f"Next action set to {str(next_next_action['action']).replace('_', ' ')}",
+                detail=" | ".join(detail_parts) if detail_parts else None,
                 at=now,
             )
         if existing_workflow.get("packetApproval") != next_workflow.get("packetApproval"):

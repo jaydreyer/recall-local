@@ -239,6 +239,12 @@ class BridgeApiContractTests(unittest.TestCase):
             "workflow": {
                 "stage": "follow_up",
                 "nextActionApproval": "approved",
+                "nextAction": {
+                    "action": "send_follow_up",
+                    "rationale": "The due date is today and the role is already in follow-up.",
+                    "confidence": "high",
+                    "dueAt": "2026-03-24T16:00:00Z",
+                },
                 "packetApproval": "pending",
                 "packet": {
                     "tailoredSummary": True,
@@ -273,6 +279,12 @@ class BridgeApiContractTests(unittest.TestCase):
                         "workflow": {
                             "stage": "follow_up",
                             "nextActionApproval": "approved",
+                            "nextAction": {
+                                "action": "send_follow_up",
+                                "rationale": "The due date is today and the role is already in follow-up.",
+                                "confidence": "high",
+                                "dueAt": "2026-03-24T16:00:00Z",
+                            },
                             "packet": {
                                 "tailoredSummary": True,
                             },
@@ -286,6 +298,7 @@ class BridgeApiContractTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["workflow"]["nextActionApproval"], "approved")
+        self.assertEqual(response.json()["workflow"]["nextAction"]["action"], "send_follow_up")
         self.assertEqual(response.json()["workflow"]["packet"]["tailoredSummary"], True)
         self.assertEqual(response.json()["workflow"]["followUp"]["status"], "scheduled")
         update_mock.assert_called_once_with(
@@ -297,6 +310,12 @@ class BridgeApiContractTests(unittest.TestCase):
             workflow={
                 "stage": "follow_up",
                 "nextActionApproval": "approved",
+                "nextAction": {
+                    "action": "send_follow_up",
+                    "rationale": "The due date is today and the role is already in follow-up.",
+                    "confidence": "high",
+                    "dueAt": "2026-03-24T16:00:00Z",
+                },
                 "packet": {
                     "tailoredSummary": True,
                 },
@@ -328,6 +347,28 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"]["code"], "validation_failed")
         self.assertEqual(response.json()["error"]["details"][0]["field"], "workflow.followUp.status")
+
+    def test_patch_job_rejects_invalid_next_action_confidence(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        with build_client(env) as client:
+            response = client.patch(
+                "/v1/jobs/job-123",
+                json={
+                    "workflow": {
+                        "nextAction": {
+                            "action": "tailor_resume",
+                            "confidence": "certain",
+                        }
+                    },
+                },
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"]["details"][0]["field"], "workflow.nextAction.confidence")
 
     def test_auto_tag_rules_endpoint_is_canonical_only(self) -> None:
         env = {
