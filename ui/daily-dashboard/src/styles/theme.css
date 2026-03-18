@@ -2688,6 +2688,11 @@ body {
   border-left-color: var(--text-tertiary);
 }
 
+.workflow-callout.subtle {
+  border-left-color: rgba(116, 129, 140, 0.4);
+  background: rgba(247, 242, 233, 0.56);
+}
+
 .workflow-callout strong,
 .timeline-row strong,
 .ops-kv strong {
@@ -2830,6 +2835,22 @@ body {
   margin-top: 6px;
   border-radius: 999px;
   background: var(--accent);
+}
+
+.timeline-dot.complete {
+  background: var(--status-complete);
+}
+
+.timeline-dot.pending {
+  background: var(--status-pending);
+}
+
+.timeline-dot.warning {
+  background: var(--accent);
+}
+
+.timeline-dot.default {
+  background: var(--tier-two);
 }
 
 .ops-detail-card .detail-columns {

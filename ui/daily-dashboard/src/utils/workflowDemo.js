@@ -5,10 +5,12 @@ export const PACKET_ARTIFACT_KEYS = ['tailoredSummary', 'resumeBullets', 'outrea
 export const PACKET_ARTIFACT_LABELS = {
   tailoredSummary: 'Tailored summary',
   resumeBullets: 'Resume bullets',
+  coverLetterDraft: 'Cover letter draft',
   outreachNote: 'Outreach note',
   interviewBrief: 'Interview brief',
   talkingPoints: 'Talking points',
 }
+const PACKET_SEQUENCE = ['tailoredSummary', 'resumeBullets', 'coverLetterDraft', 'outreachNote', 'interviewBrief', 'talkingPoints']
 
 export const WORKFLOW_STAGE_LABELS = {
   focus: 'Focus queue',
@@ -72,6 +74,26 @@ function hasDraft(job, coverLetterState) {
 
 function packetCompletion(packet = {}) {
   return Object.values(packet).filter(Boolean).length
+}
+
+function packetArtifactCompletion(packetArtifacts = {}) {
+  return Object.values(packetArtifacts).filter((artifact) => artifact?.available).length
+}
+
+function missingPacketItems(packet = {}) {
+  return PACKET_SEQUENCE.filter((key) => !packet?.[key])
+}
+
+function packetReadinessSummary(packet, packetArtifacts) {
+  const completed = packetCompletion(packet)
+  const linked = packetArtifactCompletion(packetArtifacts)
+  const missing = missingPacketItems(packet)
+  return {
+    completed,
+    linked,
+    missing,
+    missingLabels: missing.map((key) => PACKET_ARTIFACT_LABELS[key] || titleCaseAction(key)),
+  }
 }
 
 function parseDate(value) {
@@ -275,6 +297,15 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
   for (const key of PACKET_ARTIFACT_KEYS) {
     packetArtifacts[key] = packetArtifactState(job, key)
   }
+  const packetSummary = packetReadinessSummary(effectiveWorkflow?.packet || {}, packetArtifacts)
+  const packetProgressLabel =
+    packetSummary.completed > 0
+      ? `${packetSummary.completed}/${PACKET_SEQUENCE.length} packet items complete`
+      : 'No packet work linked yet'
+  const packetArtifactSummaryLabel =
+    packetSummary.linked > 0
+      ? `${packetSummary.linked} linked ${packetSummary.linked === 1 ? 'artifact' : 'artifacts'}`
+      : 'No linked artifacts yet'
 
   if (status === 'dismissed' || status === 'expired') {
     const nextActionStateValue = nextActionState(job, effectiveWorkflow, {
@@ -293,6 +324,8 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       blockerTone: 'muted',
       packetStatus: draftGenerated ? 'draft_generated' : 'not_started',
       packetLabel: draftGenerated ? 'Draft generated' : 'Not started',
+      packetProgressLabel,
+      packetArtifactSummaryLabel,
       approvalLabel: 'No approval needed',
       priorityLabel: 'Archive lane',
       stage,
@@ -303,6 +336,7 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       coverLetterArtifactLabel: draftArtifactLabel,
       coverLetterArtifact: draftArtifact,
       packetArtifacts,
+      packetSummary,
       nextActionRationale: nextActionStateValue.rationale,
       nextActionConfidence: nextActionStateValue.confidence,
       nextActionDueLabel: nextActionStateValue.dueLabel,
@@ -360,6 +394,8 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
             : 'pending',
       packetStatus: draftGenerated ? 'draft_generated' : 'not_started',
       packetLabel: draftGenerated ? 'Draft generated' : 'Not started',
+      packetProgressLabel,
+      packetArtifactSummaryLabel,
       approvalLabel: packetApproval === 'approved' ? 'Packet approved' : 'Application recorded',
       priorityLabel: followUp.needsAttention ? 'Needs touchpoint' : 'Keep momentum',
       stage,
@@ -371,6 +407,7 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       coverLetterArtifactLabel: draftArtifactLabel,
       coverLetterArtifact: draftArtifact,
       packetArtifacts,
+      packetSummary,
       nextActionRationale: nextActionStateValue.rationale,
       nextActionConfidence: nextActionStateValue.confidence,
       nextActionDueLabel: nextActionStateValue.dueLabel,
@@ -395,6 +432,8 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       blockerTone: 'warning',
       packetStatus: 'not_started',
       packetLabel: 'Not started',
+      packetProgressLabel,
+      packetArtifactSummaryLabel,
       approvalLabel: 'Awaiting review',
       priorityLabel: 'Fresh intake',
       stage,
@@ -405,6 +444,7 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       coverLetterArtifactLabel: draftArtifactLabel,
       coverLetterArtifact: draftArtifact,
       packetArtifacts,
+      packetSummary,
       nextActionRationale: nextActionStateValue.rationale,
       nextActionConfidence: nextActionStateValue.confidence,
       nextActionDueLabel: nextActionStateValue.dueLabel,
@@ -431,14 +471,25 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       blocker:
         packetApproval === 'approved'
           ? 'Ready to move forward'
-          : draftGenerated || packetDone
-            ? 'Waiting on packet review'
-            : nextActionApproval === 'approved'
-              ? 'Tailored packet missing'
-              : 'Next action not approved',
+          : packetSummary.completed >= 4 && nextActionApproval === 'approved'
+            ? `Packet review pending (${packetProgressLabel})`
+            : draftGenerated || packetDone
+              ? `Packet still missing ${packetSummary.missingLabels.slice(0, 2).join(' and ')}`
+              : nextActionApproval === 'approved'
+                ? 'Packet work has not started yet'
+                : 'Next action not approved',
       blockerTone: packetApproval === 'approved' ? 'pending' : draftGenerated || packetDone ? 'pending' : 'warning',
       packetStatus: packetApproval === 'approved' ? 'approved' : draftGenerated || packetDone ? 'draft_generated' : 'not_started',
-      packetLabel: packetApproval === 'approved' ? 'Approved' : draftGenerated || packetDone ? 'Draft generated' : 'Not started',
+      packetLabel:
+        packetApproval === 'approved'
+          ? 'Approved'
+          : packetSummary.completed > 0
+            ? packetProgressLabel
+            : draftGenerated || packetDone
+              ? 'Draft generated'
+              : 'Not started',
+      packetProgressLabel,
+      packetArtifactSummaryLabel,
       approvalLabel:
         packetApproval === 'approved'
           ? 'Packet approved'
@@ -454,6 +505,7 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       coverLetterArtifactLabel: draftArtifactLabel,
       coverLetterArtifact: draftArtifact,
       packetArtifacts,
+      packetSummary,
       nextActionRationale: nextActionStateValue.rationale,
       nextActionConfidence: nextActionStateValue.confidence,
       nextActionDueLabel: nextActionStateValue.dueLabel,
@@ -480,6 +532,8 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
     blockerTone: 'muted',
     packetStatus: 'not_started',
     packetLabel: 'Not started',
+    packetProgressLabel,
+    packetArtifactSummaryLabel,
     approvalLabel: 'No packet needed yet',
     priorityLabel: 'Monitor',
     stage,
@@ -490,6 +544,7 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
     coverLetterArtifactLabel: draftArtifactLabel,
     coverLetterArtifact: draftArtifact,
     packetArtifacts,
+    packetSummary,
     nextActionRationale: nextActionStateValue.rationale,
     nextActionConfidence: nextActionStateValue.confidence,
     nextActionDueLabel: nextActionStateValue.dueLabel,
@@ -506,6 +561,14 @@ function buildEvent(type, label, value, detail = '') {
     type,
     label,
     detail,
+    tone:
+      type.includes('approved') || type.includes('completed')
+        ? 'complete'
+        : type.includes('pending') || type.includes('scheduled')
+          ? 'pending'
+          : type.includes('reopened') || type.includes('cleared')
+            ? 'warning'
+            : 'default',
     value,
     timestamp: Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime(),
     dateLabel: Number.isNaN(parsed.getTime())
@@ -533,7 +596,8 @@ export function buildWorkflowTimeline(job, coverLetterState) {
     ...persistedEvents,
   ]
     .filter(Boolean)
-    .sort((left, right) => right.timestamp - left.timestamp)
+      .sort((left, right) => right.timestamp - left.timestamp)
+      .slice(0, 12)
 
   return events.length > 0
     ? events

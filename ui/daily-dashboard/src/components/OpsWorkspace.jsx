@@ -202,6 +202,10 @@ function WorkflowRail({
             <strong>{workflow.packetLabel}</strong>
           </div>
           <div className="ops-kv">
+            <span className="mini-label">Linked artifacts</span>
+            <strong>{workflow.packetArtifactSummaryLabel}</strong>
+          </div>
+          <div className="ops-kv">
             <span className="mini-label">Approval</span>
             <strong>{workflow.approvalLabel}</strong>
           </div>
@@ -277,6 +281,11 @@ function WorkflowRail({
               </div>
             </label>
           ))}
+        </div>
+        <div className="workflow-callout subtle">
+          <p className="section-label">Packet progress</p>
+          <strong>{workflow.packetProgressLabel}</strong>
+          <p className="body-copy">{workflow.packetArtifactSummaryLabel}</p>
         </div>
         {coverLetterArtifact?.available ? (
           <div className="workflow-callout pending">
@@ -364,7 +373,7 @@ function WorkflowRail({
         <div className="workflow-timeline">
           {timeline.map((event) => (
             <div key={`${event.type}-${event.dateLabel}`} className="timeline-row">
-              <span className="timeline-dot" aria-hidden="true" />
+              <span className={`timeline-dot ${event.tone || 'default'}`} aria-hidden="true" />
               <div>
                 <strong>{event.label}</strong>
                 <p className="meta-text">{event.dateLabel}</p>
@@ -671,10 +680,11 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
                     <span className="mini-label">Primary blocker</span>
                     <p>{workflow.blocker}</p>
                   </div>
-                  <div className="spotlight-insight">
-                    <span className="mini-label">Packet readiness</span>
-                    <p>{workflow.packetLabel}</p>
-                  </div>
+            <div className="spotlight-insight">
+              <span className="mini-label">Packet readiness</span>
+              <p>{workflow.packetLabel}</p>
+              <span className="meta-text">{workflow.packetArtifactSummaryLabel}</span>
+            </div>
                 </div>
               </section>
 
