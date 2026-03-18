@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
@@ -13,6 +14,17 @@ from fastapi.responses import JSONResponse
 from scripts.phase1.bridge_routes_middleware import *  # noqa: F401,F403
 from scripts.phase1.bridge_routes_models import *  # noqa: F401,F403
 from scripts.phase1.bridge_routes_phase6_helpers import *  # noqa: F401,F403
+
+
+def _normalize_optional_iso8601(value: Any, *, field_name: str) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be a valid ISO-8601 datetime.") from exc
+    return text
 
 
 def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -> None:
@@ -248,7 +260,7 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                     details=[{"field": "workflow", "issue": "value must be an object"}],
                 )
 
-            allowed_workflow_fields = {"stage", "nextActionApproval", "packetApproval", "packet"}
+            allowed_workflow_fields = {"stage", "nextActionApproval", "packetApproval", "packet", "followUp"}
             unknown_workflow_fields = [key for key in workflow_value.keys() if key not in allowed_workflow_fields]
             if unknown_workflow_fields:
                 return _error_response(
@@ -316,6 +328,53 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                         key: _normalize_bool(value, field_name=f"workflow.packet.{key}")
                         for key, value in packet_value.items()
                     }
+                except ValueError as exc:
+                    return _error_response(
+                        status_code=400,
+                        code="validation_failed",
+                        message=str(exc),
+                        request_id=request_id,
+                    )
+
+            if "followUp" in workflow_value:
+                follow_up_value = workflow_value.get("followUp")
+                if not isinstance(follow_up_value, dict):
+                    return _error_response(
+                        status_code=400,
+                        code="validation_failed",
+                        message="workflow.followUp must be an object.",
+                        request_id=request_id,
+                        details=[{"field": "workflow.followUp", "issue": "value must be an object"}],
+                    )
+                allowed_follow_up_fields = {"status", "dueAt", "lastCompletedAt"}
+                unknown_follow_up_fields = [key for key in follow_up_value.keys() if key not in allowed_follow_up_fields]
+                if unknown_follow_up_fields:
+                    return _error_response(
+                        status_code=400,
+                        code="validation_failed",
+                        message="Invalid workflow follow-up payload.",
+                        request_id=request_id,
+                        details=[{"field": f"workflow.followUp.{key}", "issue": "field is not supported"} for key in unknown_follow_up_fields],
+                    )
+                if "status" in follow_up_value:
+                    normalized_status = str(follow_up_value.get("status") or "").strip().lower()
+                    if normalized_status not in {"not_scheduled", "scheduled", "completed"}:
+                        return _error_response(
+                            status_code=400,
+                            code="validation_failed",
+                            message="Invalid workflow follow-up status value.",
+                            request_id=request_id,
+                            details=[{"field": "workflow.followUp.status", "issue": "allowed values: not_scheduled, scheduled, completed"}],
+                        )
+                    follow_up_value["status"] = normalized_status
+                try:
+                    if "dueAt" in follow_up_value:
+                        follow_up_value["dueAt"] = _normalize_optional_iso8601(follow_up_value.get("dueAt"), field_name="workflow.followUp.dueAt")
+                    if "lastCompletedAt" in follow_up_value:
+                        follow_up_value["lastCompletedAt"] = _normalize_optional_iso8601(
+                            follow_up_value.get("lastCompletedAt"),
+                            field_name="workflow.followUp.lastCompletedAt",
+                        )
                 except ValueError as exc:
                     return _error_response(
                         status_code=400,

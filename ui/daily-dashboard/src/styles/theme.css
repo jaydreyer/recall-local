@@ -2500,6 +2500,44 @@ body {
   max-width: 640px;
 }
 
+.ops-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  margin-top: 22px;
+}
+
+.ops-summary-card {
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(250, 244, 238, 0.84));
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--text-secondary);
+  font: inherit;
+  text-align: left;
+}
+
+.ops-summary-card.active {
+  border-color: rgba(232, 85, 58, 0.35);
+  background:
+    radial-gradient(circle at top right, rgba(232, 85, 58, 0.12), transparent 42%),
+    linear-gradient(180deg, rgba(255, 248, 244, 0.96), rgba(250, 241, 235, 0.88));
+  color: var(--text);
+}
+
+.ops-summary-value {
+  font-family: 'Playfair Display', serif;
+  font-size: 2.15rem;
+  font-weight: 500;
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+  color: #1a1815;
+}
+
 .ops-workspace-grid {
   display: grid;
   grid-template-columns: minmax(260px, 0.85fr) minmax(0, 1.5fr) minmax(280px, 0.9fr);
@@ -2551,6 +2589,41 @@ body {
 .ops-lane-list {
   gap: 10px;
   margin-bottom: 18px;
+}
+
+.ops-filter-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.ops-sort-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.ops-sort-row .ops-filter-list {
+  margin-bottom: 0;
+}
+
+.queue-filter-chip {
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 8px 10px;
+}
+
+.queue-filter-chip.active {
+  border-color: rgba(232, 85, 58, 0.35);
+  color: var(--accent-strong);
+  background: rgba(255, 247, 243, 0.92);
 }
 
 .ops-queue-list,
@@ -2619,6 +2692,13 @@ body {
   margin-top: 18px;
 }
 
+.workflow-follow-up-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
 .workflow-stage-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2679,6 +2759,13 @@ body {
   grid-template-columns: 14px minmax(0, 1fr);
   gap: 12px;
   align-items: start;
+}
+
+.timeline-detail {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 .timeline-dot {
@@ -2765,6 +2852,10 @@ body {
 
   .ops-workspace-grid,
   .ops-hero-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-summary-strip {
     grid-template-columns: 1fr;
   }
 

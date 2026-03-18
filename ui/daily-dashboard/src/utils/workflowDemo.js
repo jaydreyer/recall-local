@@ -1,4 +1,5 @@
 export const WORKFLOW_STAGES = ['focus', 'review', 'follow_up', 'monitor', 'closed']
+export const FOLLOW_UP_STATUSES = ['not_scheduled', 'scheduled', 'completed']
 
 export const WORKFLOW_STAGE_LABELS = {
   focus: 'Focus queue',
@@ -27,6 +28,57 @@ function hasDraft(job, coverLetterState) {
 
 function packetCompletion(packet = {}) {
   return Object.values(packet).filter(Boolean).length
+}
+
+function parseDate(value) {
+  if (!value) {
+    return null
+  }
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function formatDateTime(value, fallback = 'Not set') {
+  const parsed = parseDate(value)
+  if (!parsed) {
+    return fallback
+  }
+  return parsed.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+function followUpState(job, workflowState) {
+  const raw = workflowState?.followUp || {}
+  const status = FOLLOW_UP_STATUSES.includes(raw.status) ? raw.status : 'not_scheduled'
+  const dueAt = raw.dueAt || null
+  const lastCompletedAt = raw.lastCompletedAt || null
+  const dueDate = parseDate(dueAt)
+  const isDue = status !== 'completed' && Boolean(dueDate) && dueDate.getTime() <= Date.now()
+  const activeFollowUp = effectiveStatus(job) === 'applied' || workflowState?.stage === 'follow_up'
+  const needsAttention = activeFollowUp && (status === 'not_scheduled' || isDue)
+
+  let label = 'Not scheduled'
+  if (status === 'completed') {
+    label = lastCompletedAt ? `Completed ${formatDateTime(lastCompletedAt, 'recently')}` : 'Completed'
+  } else if (status === 'scheduled' && dueAt) {
+    label = isDue ? `Due ${formatDateTime(dueAt, 'now')}` : `Scheduled for ${formatDateTime(dueAt, 'soon')}`
+  }
+
+  return {
+    status,
+    dueAt,
+    lastCompletedAt,
+    isDue,
+    activeFollowUp,
+    needsAttention,
+    label,
+    dueLabel: dueAt ? formatDateTime(dueAt, 'Not set') : 'Not set',
+    completedLabel: lastCompletedAt ? formatDateTime(lastCompletedAt, 'Not completed') : 'Not completed',
+  }
 }
 
 function inferWorkflowStage(job) {
@@ -61,6 +113,11 @@ export function defaultWorkflowState(job = null) {
       interviewBrief: Boolean(job?.workflow?.packet?.interviewBrief),
       talkingPoints: Boolean(job?.workflow?.packet?.talkingPoints),
     },
+    followUp: {
+      status: FOLLOW_UP_STATUSES.includes(job?.workflow?.followUp?.status) ? job.workflow.followUp.status : 'not_scheduled',
+      dueAt: job?.workflow?.followUp?.dueAt || null,
+      lastCompletedAt: job?.workflow?.followUp?.lastCompletedAt || null,
+    },
     updatedAt: job?.workflow?.updatedAt || null,
   }
 }
@@ -76,6 +133,7 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
   const packetDone = packetCompletion(effectiveWorkflow?.packet) > 0
   const nextActionApproval = effectiveWorkflow?.nextActionApproval || 'pending'
   const packetApproval = effectiveWorkflow?.packetApproval || 'pending'
+  const followUp = followUpState(job, effectiveWorkflow)
 
   if (status === 'dismissed' || status === 'expired') {
     return {
@@ -91,6 +149,9 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       priorityLabel: 'Archive lane',
       stage,
       stageLabel: WORKFLOW_STAGE_LABELS[stage] || 'Closed',
+      followUpLabel: followUp.label,
+      followUpStatus: followUp.status,
+      followUpDueLabel: followUp.dueLabel,
     }
   }
 
@@ -98,16 +159,39 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
     return {
       state: 'applied',
       stateLabel: 'Applied',
-      nextAction: 'follow_up',
-      nextActionLabel: 'Prepare follow-up',
-      blocker: 'Follow-up not scheduled',
-      blockerTone: 'warning',
+      nextAction: followUp.status === 'completed' ? 'monitor_response' : 'follow_up',
+      nextActionLabel:
+        followUp.status === 'completed'
+          ? 'Monitor response'
+          : followUp.isDue
+            ? 'Send follow-up'
+            : followUp.status === 'scheduled'
+              ? 'Hold until follow-up date'
+              : 'Schedule follow-up',
+      blocker:
+        followUp.status === 'completed'
+          ? 'Waiting for response'
+          : followUp.isDue
+            ? `Follow-up due ${followUp.dueLabel}`
+            : followUp.status === 'scheduled'
+              ? `Follow-up scheduled for ${followUp.dueLabel}`
+              : 'Follow-up not scheduled',
+      blockerTone:
+        followUp.status === 'completed'
+          ? 'muted'
+          : followUp.isDue || followUp.status === 'not_scheduled'
+            ? 'warning'
+            : 'pending',
       packetStatus: draftGenerated ? 'draft_generated' : 'not_started',
       packetLabel: draftGenerated ? 'Draft generated' : 'Not started',
       approvalLabel: packetApproval === 'approved' ? 'Packet approved' : 'Application recorded',
-      priorityLabel: 'Keep momentum',
+      priorityLabel: followUp.needsAttention ? 'Needs touchpoint' : 'Keep momentum',
       stage,
       stageLabel: WORKFLOW_STAGE_LABELS[stage] || 'Follow-up',
+      followUpLabel: followUp.label,
+      followUpStatus: followUp.status,
+      followUpDueLabel: followUp.dueLabel,
+      followUpCompletedLabel: followUp.completedLabel,
     }
   }
 
@@ -125,6 +209,9 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       priorityLabel: 'Fresh intake',
       stage,
       stageLabel: WORKFLOW_STAGE_LABELS[stage] || 'Needs review',
+      followUpLabel: followUp.label,
+      followUpStatus: followUp.status,
+      followUpDueLabel: followUp.dueLabel,
     }
   }
 
@@ -154,6 +241,9 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       priorityLabel: 'Focus now',
       stage,
       stageLabel: WORKFLOW_STAGE_LABELS[stage] || 'Focus queue',
+      followUpLabel: followUp.label,
+      followUpStatus: followUp.status,
+      followUpDueLabel: followUp.dueLabel,
     }
   }
 
@@ -170,10 +260,13 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
     priorityLabel: 'Monitor',
     stage,
     stageLabel: WORKFLOW_STAGE_LABELS[stage] || 'Monitor',
+    followUpLabel: followUp.label,
+    followUpStatus: followUp.status,
+    followUpDueLabel: followUp.dueLabel,
   }
 }
 
-function buildEvent(type, label, value) {
+function buildEvent(type, label, value, detail = '') {
   if (!value) {
     return null
   }
@@ -181,6 +274,7 @@ function buildEvent(type, label, value) {
   return {
     type,
     label,
+    detail,
     value,
     timestamp: Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime(),
     dateLabel: Number.isNaN(parsed.getTime())
@@ -196,7 +290,7 @@ function buildEvent(type, label, value) {
 
 export function buildWorkflowTimeline(job, coverLetterState) {
   const persistedEvents = Array.isArray(job?.workflowTimeline)
-    ? job.workflowTimeline.map((event) => buildEvent(event.type, event.label, event.at)).filter(Boolean)
+    ? job.workflowTimeline.map((event) => buildEvent(event.type, event.label, event.at, event.detail || '')).filter(Boolean)
     : []
   const events = [
     buildEvent('discovered', 'Role discovered', job?.discovered_at || job?.date_posted),
@@ -219,8 +313,13 @@ export function buildWorkflowTimeline(job, coverLetterState) {
           value: '',
           timestamp: 0,
           dateLabel: 'No timeline data yet',
+          detail: '',
         },
       ]
+}
+
+export function isFollowUpDue(job) {
+  return followUpState(job, defaultWorkflowState(job)).needsAttention
 }
 
 function demoNarrativeScore(job) {

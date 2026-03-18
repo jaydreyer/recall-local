@@ -31,7 +31,13 @@ DEFAULT_WORKFLOW_PACKET = {
     "interviewBrief": False,
     "talkingPoints": False,
 }
+DEFAULT_WORKFLOW_FOLLOW_UP = {
+    "status": "not_scheduled",
+    "dueAt": None,
+    "lastCompletedAt": None,
+}
 WORKFLOW_STAGES = {"focus", "review", "follow_up", "monitor", "closed"}
+WORKFLOW_FOLLOW_UP_STATUSES = {"not_scheduled", "scheduled", "completed"}
 
 
 def _parse_int(value: Any, default: int = 0) -> int:
@@ -82,7 +88,9 @@ def _default_workflow_stage(*, status: str | None, fit_score: Any, applied: Any,
 def _normalize_workflow(value: Any) -> dict[str, Any]:
     source = dict(value) if isinstance(value, dict) else {}
     packet = source.get("packet") if isinstance(source.get("packet"), dict) else {}
+    follow_up = source.get("followUp") if isinstance(source.get("followUp"), dict) else {}
     stage = str(source.get("stage") or "").strip().lower()
+    follow_up_status = str(follow_up.get("status") or "").strip().lower()
     return {
         "stage": stage if stage in WORKFLOW_STAGES else None,
         "nextActionApproval": "approved" if str(source.get("nextActionApproval")).strip().lower() == "approved" else "pending",
@@ -90,6 +98,11 @@ def _normalize_workflow(value: Any) -> dict[str, Any]:
         "packet": {
             key: bool(packet.get(key, default))
             for key, default in DEFAULT_WORKFLOW_PACKET.items()
+        },
+        "followUp": {
+            "status": follow_up_status if follow_up_status in WORKFLOW_FOLLOW_UP_STATUSES else DEFAULT_WORKFLOW_FOLLOW_UP["status"],
+            "dueAt": str(follow_up.get("dueAt") or "").strip() or None,
+            "lastCompletedAt": str(follow_up.get("lastCompletedAt") or "").strip() or None,
         },
         "updatedAt": str(source.get("updatedAt") or "").strip() or None,
     }
@@ -112,6 +125,18 @@ def _normalize_workflow_patch(value: Any) -> dict[str, Any]:
             for key, value in source["packet"].items()
             if key in DEFAULT_WORKFLOW_PACKET
         }
+    if isinstance(source.get("followUp"), dict):
+        follow_up = source["followUp"]
+        next_follow_up: dict[str, Any] = {}
+        if "status" in follow_up:
+            status = str(follow_up.get("status") or "").strip().lower()
+            if status in WORKFLOW_FOLLOW_UP_STATUSES:
+                next_follow_up["status"] = status
+        if "dueAt" in follow_up:
+            next_follow_up["dueAt"] = str(follow_up.get("dueAt") or "").strip() or None
+        if "lastCompletedAt" in follow_up:
+            next_follow_up["lastCompletedAt"] = str(follow_up.get("lastCompletedAt") or "").strip() or None
+        normalized["followUp"] = next_follow_up
     return normalized
 
 
@@ -421,6 +446,42 @@ def _workflow_packet_label(key: str) -> str:
     return labels.get(key, key)
 
 
+def _workflow_stage_label(stage: str) -> str:
+    labels = {
+        "focus": "Focus",
+        "review": "Review",
+        "follow_up": "Follow-up",
+        "monitor": "Monitor",
+        "closed": "Closed",
+    }
+    return labels.get(stage, stage.replace("_", " ").title())
+
+
+def _timeline_datetime_label(value: str | None) -> str:
+    parsed = _parse_datetime(value)
+    if parsed is None:
+        return str(value or "").strip()
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).strftime("%b %-d, %Y at %-I:%M %p UTC")
+
+
+def _default_follow_up_due_at(now: datetime) -> str:
+    return (now + timedelta(days=5)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _normalize_follow_up_state(value: Any) -> dict[str, Any]:
+    source = dict(value) if isinstance(value, dict) else {}
+    normalized = {
+        "status": str(source.get("status") or DEFAULT_WORKFLOW_FOLLOW_UP["status"]).strip().lower(),
+        "dueAt": str(source.get("dueAt") or "").strip() or None,
+        "lastCompletedAt": str(source.get("lastCompletedAt") or "").strip() or None,
+    }
+    if normalized["status"] not in WORKFLOW_FOLLOW_UP_STATUSES:
+        normalized["status"] = DEFAULT_WORKFLOW_FOLLOW_UP["status"]
+    return normalized
+
+
 def _append_workflow_event(
     timeline: list[dict[str, Any]],
     *,
@@ -462,8 +523,21 @@ def update_job(
     current["workflowTimeline"] = _normalize_workflow_timeline(current.get("workflowTimeline"))
     if status is not None:
         current["status"] = status
+        current["workflow"]["updatedAt"] = now
         if status == "applied":
             current["workflow"]["stage"] = "follow_up"
+            follow_up = _normalize_follow_up_state(current["workflow"].get("followUp"))
+            if follow_up.get("status") == "not_scheduled" and not follow_up.get("dueAt"):
+                follow_up["status"] = "scheduled"
+                follow_up["dueAt"] = _default_follow_up_due_at(datetime.now(timezone.utc))
+                current["workflow"]["followUp"] = follow_up
+                current["workflowTimeline"] = _append_workflow_event(
+                    current["workflowTimeline"],
+                    event_type="follow_up_scheduled",
+                    label="Follow-up scheduled",
+                    detail=f"Due {_timeline_datetime_label(follow_up['dueAt'])}",
+                    at=now,
+                )
         elif status in {"dismissed", "expired"}:
             current["workflow"]["stage"] = "closed"
         current["workflowTimeline"] = _append_workflow_event(
@@ -474,10 +548,23 @@ def update_job(
         )
     if applied is not None:
         current["applied"] = bool(applied)
+        current["workflow"]["updatedAt"] = now
         if applied:
             current["applied_at"] = current.get("applied_at") or now
             current["status"] = "applied"
             current["workflow"]["stage"] = "follow_up"
+            follow_up = _normalize_follow_up_state(current["workflow"].get("followUp"))
+            if follow_up.get("status") == "not_scheduled" and not follow_up.get("dueAt"):
+                follow_up["status"] = "scheduled"
+                follow_up["dueAt"] = _default_follow_up_due_at(datetime.now(timezone.utc))
+                current["workflow"]["followUp"] = follow_up
+                current["workflowTimeline"] = _append_workflow_event(
+                    current["workflowTimeline"],
+                    event_type="follow_up_scheduled",
+                    label="Follow-up scheduled",
+                    detail=f"Due {_timeline_datetime_label(follow_up['dueAt'])}",
+                    at=now,
+                )
             current["workflowTimeline"] = _append_workflow_event(
                 current["workflowTimeline"],
                 event_type="applied",
@@ -486,6 +573,7 @@ def update_job(
             )
     if dismissed is not None:
         current["dismissed"] = bool(dismissed)
+        current["workflow"]["updatedAt"] = now
         if dismissed:
             current["status"] = "dismissed"
             current["workflow"]["stage"] = "closed"
@@ -504,12 +592,21 @@ def update_job(
             **existing_workflow.get("packet", {}),
             **incoming_workflow.get("packet", {}),
         }
+        merged_follow_up = {
+            **_normalize_follow_up_state(existing_workflow.get("followUp")),
+            **incoming_workflow.get("followUp", {}),
+        }
         next_workflow = {
             **existing_workflow,
             **incoming_workflow,
             "packet": merged_packet,
+            "followUp": merged_follow_up,
             "updatedAt": now,
         }
+        if next_workflow["followUp"].get("status") == "completed" and not next_workflow["followUp"].get("lastCompletedAt"):
+            next_workflow["followUp"]["lastCompletedAt"] = now
+        if next_workflow["followUp"].get("status") == "completed":
+            next_workflow["followUp"]["dueAt"] = None
 
         if existing_workflow.get("nextActionApproval") != next_workflow.get("nextActionApproval"):
             current["workflowTimeline"] = _append_workflow_event(
@@ -529,18 +626,59 @@ def update_job(
             current["workflowTimeline"] = _append_workflow_event(
                 current["workflowTimeline"],
                 event_type="stage_changed",
-                label=f"Moved to {str(next_workflow['stage']).replace('_', ' ')} lane",
+                label=f"Moved to {_workflow_stage_label(str(next_workflow['stage']))} lane",
+                detail=(
+                    f"Previous lane: {_workflow_stage_label(str(existing_workflow.get('stage') or 'review'))}"
+                    if existing_workflow.get("stage")
+                    else None
+                ),
                 at=now,
             )
         for key, value in merged_packet.items():
-            if not value or existing_workflow.get("packet", {}).get(key) == value:
+            previous_value = bool(existing_workflow.get("packet", {}).get(key))
+            if previous_value == bool(value):
                 continue
             current["workflowTimeline"] = _append_workflow_event(
                 current["workflowTimeline"],
-                event_type="packet_item_completed",
-                label=f"{_workflow_packet_label(key)} completed",
+                event_type="packet_item_completed" if value else "packet_item_reopened",
+                label=f"{_workflow_packet_label(key)} completed" if value else f"{_workflow_packet_label(key)} reopened",
                 at=now,
             )
+        existing_follow_up = _normalize_follow_up_state(existing_workflow.get("followUp"))
+        next_follow_up = _normalize_follow_up_state(next_workflow.get("followUp"))
+        if existing_follow_up.get("dueAt") != next_follow_up.get("dueAt") and next_follow_up.get("dueAt"):
+            current["workflowTimeline"] = _append_workflow_event(
+                current["workflowTimeline"],
+                event_type="follow_up_scheduled",
+                label="Follow-up scheduled",
+                detail=f"Due {_timeline_datetime_label(next_follow_up['dueAt'])}",
+                at=now,
+            )
+        elif existing_follow_up.get("dueAt") and not next_follow_up.get("dueAt") and next_follow_up.get("status") == "not_scheduled":
+            current["workflowTimeline"] = _append_workflow_event(
+                current["workflowTimeline"],
+                event_type="follow_up_cleared",
+                label="Follow-up cleared",
+                at=now,
+            )
+        if existing_follow_up.get("status") != next_follow_up.get("status"):
+            if next_follow_up.get("status") == "completed":
+                current["workflowTimeline"] = _append_workflow_event(
+                    current["workflowTimeline"],
+                    event_type="follow_up_completed",
+                    label="Follow-up completed",
+                    detail=(
+                        f"Completed {_timeline_datetime_label(next_follow_up.get('lastCompletedAt') or now)}"
+                    ),
+                    at=now,
+                )
+            elif existing_follow_up.get("status") == "completed":
+                current["workflowTimeline"] = _append_workflow_event(
+                    current["workflowTimeline"],
+                    event_type="follow_up_reopened",
+                    label="Follow-up reopened",
+                    at=now,
+                )
 
         current["workflow"] = next_workflow
 

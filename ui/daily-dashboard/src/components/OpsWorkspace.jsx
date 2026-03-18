@@ -4,7 +4,7 @@ import CompanyLogo from './CompanyLogo'
 import JobDetail from './JobDetail'
 import StateNotice from './StateNotice'
 import { displayCompanyName } from '../utils/displayText'
-import { buildWorkflowTimeline, defaultWorkflowState, deriveWorkflow, preferredDemoJob, WORKFLOW_STAGE_LABELS } from '../utils/workflowDemo'
+import { buildWorkflowTimeline, defaultWorkflowState, deriveWorkflow, isFollowUpDue, preferredDemoJob, WORKFLOW_STAGE_LABELS } from '../utils/workflowDemo'
 
 function compactRelativeTime(value) {
   if (!value) {
@@ -47,6 +47,21 @@ const LANE_LABELS = {
   closed: 'Closed',
 }
 
+const QUEUE_FILTERS = {
+  all: 'All roles',
+  needs_approval: 'Needs approval',
+  packet_in_progress: 'Packet in progress',
+  ready_to_apply: 'Ready to apply',
+  follow_up_due: 'Follow-up due',
+}
+
+const SUMMARY_FILTERS = ['needs_approval', 'packet_in_progress', 'ready_to_apply', 'follow_up_due']
+const QUEUE_SORTS = {
+  readiness: 'Most ready',
+  fit: 'Highest fit',
+  updated: 'Recently updated',
+}
+
 function firstAvailableLane(laneCounts) {
   if (laneCounts.focus > 0) {
     return 'focus'
@@ -75,9 +90,22 @@ const PACKET_ITEMS = [
   { key: 'talkingPoints', label: 'Talking points' },
 ]
 
-function WorkflowRail({ job, coverLetterState, workflowState, onApproveNextAction, onApprovePacket, onTogglePacketItem, onMoveStage }) {
+function WorkflowRail({
+  job,
+  coverLetterState,
+  workflowState,
+  onApproveNextAction,
+  onApprovePacket,
+  onTogglePacketItem,
+  onMoveStage,
+  onScheduleFollowUp,
+  onMarkFollowUpDueNow,
+  onMarkFollowUpComplete,
+  onResetFollowUp,
+}) {
   const workflow = deriveWorkflow(job, coverLetterState, workflowState)
   const timeline = buildWorkflowTimeline(job, coverLetterState)
+  const showFollowUpActions = job?.status === 'applied' || workflowState?.stage === 'follow_up'
 
   return (
     <div className="ops-rail-stack">
@@ -206,6 +234,50 @@ function WorkflowRail({ job, coverLetterState, workflowState, onApproveNextActio
       <section className="ops-rail-card">
         <div className="panel-heading compact">
           <div>
+            <p className="section-label">Follow-through</p>
+            <h3 className="card-title">Follow-up plan</h3>
+          </div>
+        </div>
+        <div className="section-rule" />
+        <div className="ops-status-stack">
+          <div className="ops-kv">
+            <span className="mini-label">Status</span>
+            <strong>{workflow.followUpLabel}</strong>
+          </div>
+          <div className="ops-kv">
+            <span className="mini-label">Due</span>
+            <strong>{workflow.followUpDueLabel || 'Not set'}</strong>
+          </div>
+          {workflow.followUpCompletedLabel ? (
+            <div className="ops-kv">
+              <span className="mini-label">Last completed</span>
+              <strong>{workflow.followUpCompletedLabel}</strong>
+            </div>
+          ) : null}
+        </div>
+        {showFollowUpActions ? (
+          <div className="workflow-follow-up-actions">
+            <button type="button" className="ghost-button" onClick={() => onScheduleFollowUp(3)}>
+              Schedule +3d
+            </button>
+            <button type="button" className="ghost-button" onClick={onMarkFollowUpDueNow}>
+              Due now
+            </button>
+            <button type="button" className="text-button accent" onClick={onMarkFollowUpComplete}>
+              Mark sent
+            </button>
+            <button type="button" className="ghost-button" onClick={onResetFollowUp}>
+              Reset follow-up
+            </button>
+          </div>
+        ) : (
+          <p className="body-copy">Follow-up controls become active once a role moves into the applied lane.</p>
+        )}
+      </section>
+
+      <section className="ops-rail-card">
+        <div className="panel-heading compact">
+          <div>
             <p className="section-label">Timeline</p>
             <h3 className="card-title">Recent activity</h3>
           </div>
@@ -218,6 +290,7 @@ function WorkflowRail({ job, coverLetterState, workflowState, onApproveNextActio
               <div>
                 <strong>{event.label}</strong>
                 <p className="meta-text">{event.dateLabel}</p>
+                {event.detail ? <p className="timeline-detail">{event.detail}</p> : null}
               </div>
             </div>
           ))}
@@ -229,6 +302,8 @@ function WorkflowRail({ job, coverLetterState, workflowState, onApproveNextActio
 
 export default function OpsWorkspace({ jobsState, onBackToOverview }) {
   const [lane, setLane] = useState('focus')
+  const [queueFilter, setQueueFilter] = useState('all')
+  const [queueSort, setQueueSort] = useState('readiness')
   const jobs = Array.isArray(jobsState.jobs) ? jobsState.jobs : []
   const demoJob = useMemo(() => preferredDemoJob(jobs), [jobs])
   const laneCounts = useMemo(
@@ -241,11 +316,94 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
     }),
     [jobs]
   )
-  const filteredJobs = useMemo(() => jobs.filter((job) => opsLane(job) === lane).slice(0, 30), [jobs, lane])
+  const summaryCounts = useMemo(() => {
+    const counts = {
+      needs_approval: 0,
+      packet_in_progress: 0,
+      ready_to_apply: 0,
+      follow_up_due: 0,
+    }
+    for (const job of jobs) {
+      const workflowState = defaultWorkflowState(job)
+      const workflow = deriveWorkflow(job, jobsState.coverLetterState, workflowState)
+      if (workflowState.nextActionApproval !== 'approved' || workflowState.packetApproval !== 'approved') {
+        counts.needs_approval += 1
+      }
+      if (Object.values(workflowState.packet || {}).some(Boolean) && workflowState.packetApproval !== 'approved') {
+        counts.packet_in_progress += 1
+      }
+      if (workflow.stage === 'focus' && workflowState.packetApproval === 'approved') {
+        counts.ready_to_apply += 1
+      }
+      if (isFollowUpDue(job)) {
+        counts.follow_up_due += 1
+      }
+    }
+    return counts
+  }, [jobs, jobsState.coverLetterState])
+  const filteredJobs = useMemo(
+    () =>
+      jobs
+        .filter((job) => opsLane(job) === lane)
+        .filter((job) => {
+          const workflowState = defaultWorkflowState(job)
+          const workflow = deriveWorkflow(job, jobsState.coverLetterState, workflowState)
+          if (queueFilter === 'needs_approval') {
+            return workflowState.nextActionApproval !== 'approved' || workflowState.packetApproval !== 'approved'
+          }
+          if (queueFilter === 'packet_in_progress') {
+            return Object.values(workflowState.packet || {}).some(Boolean) && workflowState.packetApproval !== 'approved'
+          }
+          if (queueFilter === 'ready_to_apply') {
+            return workflow.stage === 'focus' && workflowState.packetApproval === 'approved'
+          }
+          if (queueFilter === 'follow_up_due') {
+            return isFollowUpDue(job)
+          }
+          return true
+        })
+        .sort((left, right) => {
+          const leftWorkflowState = defaultWorkflowState(left)
+          const rightWorkflowState = defaultWorkflowState(right)
+          const leftWorkflow = deriveWorkflow(left, jobsState.coverLetterState, leftWorkflowState)
+          const rightWorkflow = deriveWorkflow(right, jobsState.coverLetterState, rightWorkflowState)
+
+          if (queueSort === 'fit') {
+            return Number(right.fit_score ?? -1) - Number(left.fit_score ?? -1)
+          }
+
+          if (queueSort === 'updated') {
+            const leftTime = new Date(leftWorkflowState.updatedAt || left.applied_at || left.evaluated_at || left.discovered_at || left.date_posted || 0).getTime()
+            const rightTime = new Date(rightWorkflowState.updatedAt || right.applied_at || right.evaluated_at || right.discovered_at || right.date_posted || 0).getTime()
+            return rightTime - leftTime
+          }
+
+          const readinessScore = (job, workflow, workflowState) => {
+            let score = 0
+            if (workflow.stage === 'focus') score += 50
+            if (workflowState.packetApproval === 'approved') score += 40
+            if (workflowState.nextActionApproval === 'approved') score += 18
+            score += Object.values(workflowState.packet || {}).filter(Boolean).length * 4
+            score += Math.max(0, Number(job.fit_score ?? 0) / 10)
+            return score
+          }
+
+          return (
+            readinessScore(right, rightWorkflow, rightWorkflowState) -
+            readinessScore(left, leftWorkflow, leftWorkflowState)
+          )
+        })
+        .slice(0, 30),
+    [jobs, lane, jobsState.coverLetterState, queueFilter, queueSort]
+  )
   const selectedJob = jobsState.selectedJob || demoJob || filteredJobs[0] || jobs[0] || null
   const selectedLane = selectedJob ? opsLane(selectedJob) : firstAvailableLane(laneCounts)
   const workflowState = defaultWorkflowState(selectedJob)
   const workflow = deriveWorkflow(selectedJob, jobsState.coverLetterState, workflowState)
+
+  function nextIsoDays(days) {
+    return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString()
+  }
 
   useEffect(() => {
     if (!jobs.length) {
@@ -261,6 +419,13 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
       setLane(firstAvailableLane(laneCounts))
     }
   }, [jobs.length, lane, laneCounts, selectedJob, selectedLane])
+
+  useEffect(() => {
+    if (filteredJobs.length > 0) {
+      return
+    }
+    setQueueFilter('all')
+  }, [filteredJobs.length, lane])
 
   return (
     <section className="ops-workspace reveal reveal-delay-3">
@@ -278,6 +443,27 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
         <button type="button" className="ghost-button" onClick={onBackToOverview}>
           Back to overview
         </button>
+      </div>
+
+      <div className="ops-summary-strip">
+        {SUMMARY_FILTERS.map((key) => (
+          <button
+            key={key}
+            type="button"
+            className={queueFilter === key ? 'ops-summary-card active' : 'ops-summary-card'}
+            onClick={() => {
+              if (queueFilter === key) {
+                setQueueFilter('all')
+                return
+              }
+              setQueueFilter(key)
+            }}
+          >
+            <span className="mini-label">{QUEUE_FILTERS[key]}</span>
+            <strong className="ops-summary-value">{summaryCounts[key]}</strong>
+            <span className="meta-text">{queueFilter === key ? 'Showing filtered queue' : 'Click to focus the queue'}</span>
+          </button>
+        ))}
       </div>
 
       <div className="ops-workspace-grid">
@@ -301,6 +487,33 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
                 <strong>{laneCounts[key]}</strong>
               </button>
             ))}
+          </div>
+          <div className="ops-filter-list" aria-label="Queue filters">
+            {Object.entries(QUEUE_FILTERS).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                className={queueFilter === key ? 'queue-filter-chip active' : 'queue-filter-chip'}
+                onClick={() => setQueueFilter(key)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="ops-sort-row">
+            <span className="mini-label">Sort queue</span>
+            <div className="ops-filter-list" aria-label="Queue sorting">
+              {Object.entries(QUEUE_SORTS).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={queueSort === key ? 'queue-filter-chip active' : 'queue-filter-chip'}
+                  onClick={() => setQueueSort(key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="ops-queue-list">
             {filteredJobs.map((job) => {
@@ -426,6 +639,44 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
                 })
               }
               onMoveStage={(stage) => jobsState.updateWorkflow(selectedJob.jobId, { stage })}
+              onScheduleFollowUp={(days) =>
+                jobsState.updateWorkflow(selectedJob.jobId, {
+                  stage: 'follow_up',
+                  followUp: {
+                    status: 'scheduled',
+                    dueAt: nextIsoDays(days),
+                  },
+                })
+              }
+              onMarkFollowUpDueNow={() =>
+                jobsState.updateWorkflow(selectedJob.jobId, {
+                  stage: 'follow_up',
+                  followUp: {
+                    status: 'scheduled',
+                    dueAt: new Date().toISOString(),
+                  },
+                })
+              }
+              onMarkFollowUpComplete={() =>
+                jobsState.updateWorkflow(selectedJob.jobId, {
+                  stage: 'monitor',
+                  followUp: {
+                    status: 'completed',
+                    dueAt: null,
+                    lastCompletedAt: new Date().toISOString(),
+                  },
+                })
+              }
+              onResetFollowUp={() =>
+                jobsState.updateWorkflow(selectedJob.jobId, {
+                  stage: 'follow_up',
+                  followUp: {
+                    status: 'not_scheduled',
+                    dueAt: null,
+                    lastCompletedAt: null,
+                  },
+                })
+              }
             />
           ) : (
             <StateNotice compact title="Workflow rail waiting on a role" body="Select a role to see blockers, packet status, and timeline." />

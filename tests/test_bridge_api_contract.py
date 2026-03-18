@@ -33,6 +33,75 @@ def build_client(env_updates: dict[str, str]) -> Iterator[TestClient]:
 
 
 class BridgeApiContractTests(unittest.TestCase):
+    def test_dashboard_checks_uses_warmed_gap_section_when_available(self) -> None:
+        warmer = SimpleNamespace(
+            warmed_gap_section=lambda: {"status": "ok", "count": 7, "detail": "7 aggregated gaps across 4 evaluated jobs"},
+            snapshot=lambda: {
+                "enabled": True,
+                "interval_seconds": 300,
+                "last_started_at": "2026-03-17T19:00:00+00:00",
+                "last_completed_at": "2026-03-17T19:00:10+00:00",
+                "last_error": None,
+            },
+        )
+
+        with patch(
+            "scripts.phase1.ingest_bridge_api.phase6_list_jobs",
+            return_value={"total": 12, "items": [{"jobId": "job-1"}]},
+        ), patch(
+            "scripts.phase1.ingest_bridge_api.phase6_job_stats",
+            return_value={"total_jobs": 12, "high_fit_count": 3},
+        ), patch(
+            "scripts.phase1.ingest_bridge_api.phase6_all_jobs",
+            return_value=[{"jobId": "job-1", "company": "OpenAI", "status": "evaluated", "fit_score": 90}],
+        ), patch(
+            "scripts.phase1.ingest_bridge_api.phase6_list_company_profiles",
+            return_value=[{"company_id": "openai", "company_name": "OpenAI"}],
+        ), patch(
+            "scripts.phase1.ingest_bridge_api.phase6_aggregate_gaps",
+        ) as aggregate_mock:
+            payload = ingest_bridge_api._dashboard_checks_payload(include_gaps=True, cache_warmer=warmer)
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["gaps"]["count"], 7)
+        self.assertEqual(payload["gaps"]["status"], "ok")
+        aggregate_mock.assert_not_called()
+
+    def test_dashboard_checks_returns_fast_degraded_gap_placeholder_while_warming(self) -> None:
+        warmer = SimpleNamespace(
+            warmed_gap_section=lambda: None,
+            snapshot=lambda: {
+                "enabled": True,
+                "interval_seconds": 300,
+                "last_started_at": "2026-03-17T19:00:00+00:00",
+                "last_completed_at": None,
+                "last_error": None,
+            },
+        )
+
+        with patch(
+            "scripts.phase1.ingest_bridge_api.phase6_list_jobs",
+            return_value={"total": 12, "items": [{"jobId": "job-1"}]},
+        ), patch(
+            "scripts.phase1.ingest_bridge_api.phase6_job_stats",
+            return_value={"total_jobs": 12, "high_fit_count": 3},
+        ), patch(
+            "scripts.phase1.ingest_bridge_api.phase6_all_jobs",
+            return_value=[{"jobId": "job-1", "company": "OpenAI", "status": "evaluated", "fit_score": 90}],
+        ), patch(
+            "scripts.phase1.ingest_bridge_api.phase6_list_company_profiles",
+            return_value=[{"company_id": "openai", "company_name": "OpenAI"}],
+        ), patch(
+            "scripts.phase1.ingest_bridge_api.phase6_aggregate_gaps",
+        ) as aggregate_mock:
+            payload = ingest_bridge_api._dashboard_checks_payload(include_gaps=True, cache_warmer=warmer)
+
+        self.assertEqual(payload["status"], "degraded")
+        self.assertEqual(payload["gaps"]["status"], "degraded")
+        self.assertIn("warming in the background", payload["gaps"]["detail"].lower())
+        self.assertIn("warming in background", payload["notes"][0].lower())
+        aggregate_mock.assert_not_called()
+
     def test_cors_defaults_to_no_cross_origin_access_when_unset(self) -> None:
         env = {
             "RECALL_API_KEY": "",
@@ -154,6 +223,111 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(third.json()["error"]["code"], "rate_limited")
         self.assertTrue(third.json()["error"]["details"])
         self.assertEqual(third.json()["error"]["details"][0]["field"], "retry_after_seconds")
+
+    def test_patch_job_accepts_workflow_state_payload(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        updated_job = {
+            "jobId": "job-123",
+            "title": "Solutions Engineer",
+            "company": "OpenAI",
+            "status": "evaluated",
+            "fit_score": 88,
+            "workflow": {
+                "stage": "follow_up",
+                "nextActionApproval": "approved",
+                "packetApproval": "pending",
+                "packet": {
+                    "tailoredSummary": True,
+                    "resumeBullets": False,
+                    "coverLetterDraft": False,
+                    "outreachNote": False,
+                    "interviewBrief": False,
+                    "talkingPoints": False,
+                },
+                "followUp": {
+                    "status": "scheduled",
+                    "dueAt": "2026-03-24T16:00:00Z",
+                    "lastCompletedAt": None,
+                },
+                "updatedAt": "2026-03-17T21:05:00Z",
+            },
+            "workflowTimeline": [
+                {
+                    "type": "next_action_approved",
+                    "label": "Next action approved",
+                    "detail": None,
+                    "at": "2026-03-17T21:05:00Z",
+                }
+            ],
+        }
+
+        with patch("scripts.phase1.bridge_routes_phase6.phase6_update_job", return_value=updated_job) as update_mock:
+            with build_client(env) as client:
+                response = client.patch(
+                    "/v1/jobs/job-123",
+                    json={
+                        "workflow": {
+                            "stage": "follow_up",
+                            "nextActionApproval": "approved",
+                            "packet": {
+                                "tailoredSummary": True,
+                            },
+                            "followUp": {
+                                "status": "scheduled",
+                                "dueAt": "2026-03-24T16:00:00Z",
+                            },
+                        }
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["workflow"]["nextActionApproval"], "approved")
+        self.assertEqual(response.json()["workflow"]["packet"]["tailoredSummary"], True)
+        self.assertEqual(response.json()["workflow"]["followUp"]["status"], "scheduled")
+        update_mock.assert_called_once_with(
+            job_id="job-123",
+            status=None,
+            applied=None,
+            dismissed=None,
+            notes=None,
+            workflow={
+                "stage": "follow_up",
+                "nextActionApproval": "approved",
+                "packet": {
+                    "tailoredSummary": True,
+                },
+                "followUp": {
+                    "status": "scheduled",
+                    "dueAt": "2026-03-24T16:00:00Z",
+                },
+            },
+        )
+
+    def test_patch_job_rejects_invalid_follow_up_payload(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        with build_client(env) as client:
+            response = client.patch(
+                "/v1/jobs/job-123",
+                json={
+                    "workflow": {
+                        "followUp": {
+                            "status": "tomorrow",
+                        }
+                    },
+                },
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"]["code"], "validation_failed")
+        self.assertEqual(response.json()["error"]["details"][0]["field"], "workflow.followUp.status")
 
     def test_auto_tag_rules_endpoint_is_canonical_only(self) -> None:
         env = {
