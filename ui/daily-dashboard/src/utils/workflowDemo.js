@@ -1,3 +1,13 @@
+export const WORKFLOW_STAGES = ['focus', 'review', 'follow_up', 'monitor', 'closed']
+
+export const WORKFLOW_STAGE_LABELS = {
+  focus: 'Focus queue',
+  review: 'Needs review',
+  follow_up: 'Follow-up',
+  monitor: 'Monitor',
+  closed: 'Closed',
+}
+
 function effectiveStatus(job) {
   if (job?.applied || job?.status === 'applied') {
     return 'applied'
@@ -19,8 +29,28 @@ function packetCompletion(packet = {}) {
   return Object.values(packet).filter(Boolean).length
 }
 
+function inferWorkflowStage(job) {
+  const status = effectiveStatus(job)
+  const fitScore = Number(job?.fit_score ?? -1)
+  if (status === 'dismissed' || status === 'expired') {
+    return 'closed'
+  }
+  if (status === 'applied') {
+    return 'follow_up'
+  }
+  if (status === 'new' || fitScore < 0) {
+    return 'review'
+  }
+  if (fitScore >= 75) {
+    return 'focus'
+  }
+  return 'monitor'
+}
+
 export function defaultWorkflowState(job = null) {
+  const stage = WORKFLOW_STAGES.includes(job?.workflow?.stage) ? job.workflow.stage : inferWorkflowStage(job)
   return {
+    stage,
     nextActionApproval: job?.workflow?.nextActionApproval || 'pending',
     packetApproval: job?.workflow?.packetApproval || 'pending',
     packet: {
@@ -37,6 +67,7 @@ export function defaultWorkflowState(job = null) {
 
 export function deriveWorkflow(job, coverLetterState, workflowState = null) {
   const effectiveWorkflow = workflowState || defaultWorkflowState(job)
+  const stage = effectiveWorkflow?.stage || inferWorkflowStage(job)
   const status = effectiveStatus(job)
   const fitScore = Number(job?.fit_score ?? -1)
   const draftGenerated = hasDraft(job, coverLetterState) || Boolean(effectiveWorkflow?.packet?.coverLetterDraft)
@@ -58,6 +89,8 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       packetLabel: draftGenerated ? 'Draft generated' : 'Not started',
       approvalLabel: 'No approval needed',
       priorityLabel: 'Archive lane',
+      stage,
+      stageLabel: WORKFLOW_STAGE_LABELS[stage] || 'Closed',
     }
   }
 
@@ -73,6 +106,8 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       packetLabel: draftGenerated ? 'Draft generated' : 'Not started',
       approvalLabel: packetApproval === 'approved' ? 'Packet approved' : 'Application recorded',
       priorityLabel: 'Keep momentum',
+      stage,
+      stageLabel: WORKFLOW_STAGE_LABELS[stage] || 'Follow-up',
     }
   }
 
@@ -88,6 +123,8 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       packetLabel: 'Not started',
       approvalLabel: 'Awaiting review',
       priorityLabel: 'Fresh intake',
+      stage,
+      stageLabel: WORKFLOW_STAGE_LABELS[stage] || 'Needs review',
     }
   }
 
@@ -115,6 +152,8 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
             ? 'Next action approved'
             : 'Needs approval',
       priorityLabel: 'Focus now',
+      stage,
+      stageLabel: WORKFLOW_STAGE_LABELS[stage] || 'Focus queue',
     }
   }
 
@@ -129,6 +168,8 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
     packetLabel: 'Not started',
     approvalLabel: 'No packet needed yet',
     priorityLabel: 'Monitor',
+    stage,
+    stageLabel: WORKFLOW_STAGE_LABELS[stage] || 'Monitor',
   }
 }
 

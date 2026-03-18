@@ -4,7 +4,7 @@ import CompanyLogo from './CompanyLogo'
 import JobDetail from './JobDetail'
 import StateNotice from './StateNotice'
 import { displayCompanyName } from '../utils/displayText'
-import { buildWorkflowTimeline, defaultWorkflowState, deriveWorkflow, preferredDemoJob } from '../utils/workflowDemo'
+import { buildWorkflowTimeline, defaultWorkflowState, deriveWorkflow, preferredDemoJob, WORKFLOW_STAGE_LABELS } from '../utils/workflowDemo'
 
 function compactRelativeTime(value) {
   if (!value) {
@@ -36,17 +36,7 @@ function toneForScore(score) {
 }
 
 function opsLane(job) {
-  const workflow = deriveWorkflow(job)
-  if (workflow.state === 'applied') {
-    return 'follow_up'
-  }
-  if (workflow.state === 'target') {
-    return 'focus'
-  }
-  if (workflow.state === 'new') {
-    return 'review'
-  }
-  return 'monitor'
+  return defaultWorkflowState(job).stage
 }
 
 const LANE_LABELS = {
@@ -54,6 +44,7 @@ const LANE_LABELS = {
   review: 'Needs review',
   follow_up: 'Follow-up',
   monitor: 'Monitor',
+  closed: 'Closed',
 }
 
 function firstAvailableLane(laneCounts) {
@@ -65,6 +56,12 @@ function firstAvailableLane(laneCounts) {
   }
   if (laneCounts.follow_up > 0) {
     return 'follow_up'
+  }
+  if (laneCounts.monitor > 0) {
+    return 'monitor'
+  }
+  if (laneCounts.closed > 0) {
+    return 'closed'
   }
   return 'monitor'
 }
@@ -78,7 +75,7 @@ const PACKET_ITEMS = [
   { key: 'talkingPoints', label: 'Talking points' },
 ]
 
-function WorkflowRail({ job, coverLetterState, workflowState, onApproveNextAction, onApprovePacket, onTogglePacketItem }) {
+function WorkflowRail({ job, coverLetterState, workflowState, onApproveNextAction, onApprovePacket, onTogglePacketItem, onMoveStage }) {
   const workflow = deriveWorkflow(job, coverLetterState, workflowState)
   const timeline = buildWorkflowTimeline(job, coverLetterState)
 
@@ -127,6 +124,10 @@ function WorkflowRail({ job, coverLetterState, workflowState, onApproveNextActio
         <div className="section-rule" />
         <div className="ops-status-stack">
           <div className="ops-kv">
+            <span className="mini-label">Lane</span>
+            <strong>{workflow.stageLabel}</strong>
+          </div>
+          <div className="ops-kv">
             <span className="mini-label">State</span>
             <strong>{workflow.stateLabel}</strong>
           </div>
@@ -150,6 +151,18 @@ function WorkflowRail({ job, coverLetterState, workflowState, onApproveNextActio
           <button type="button" className="ghost-button" onClick={onApprovePacket}>
             Approve packet
           </button>
+        </div>
+        <div className="workflow-stage-grid">
+          {Object.entries(LANE_LABELS).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              className={workflow.stage === key ? 'workflow-stage-button active' : 'workflow-stage-button'}
+              onClick={() => onMoveStage(key)}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </section>
 
@@ -224,6 +237,7 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
       review: jobs.filter((job) => opsLane(job) === 'review').length,
       follow_up: jobs.filter((job) => opsLane(job) === 'follow_up').length,
       monitor: jobs.filter((job) => opsLane(job) === 'monitor').length,
+      closed: jobs.filter((job) => opsLane(job) === 'closed').length,
     }),
     [jobs]
   )
@@ -309,7 +323,7 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
                     <span className={`queue-score ${toneForScore(job.fit_score || 0)}`}>{scoreLabel(job)}</span>
                   </div>
                   <div className="queue-meta-row">
-                    <span>{itemWorkflow.stateLabel}</span>
+                    <span>{WORKFLOW_STAGE_LABELS[itemWorkflow.stage] || itemWorkflow.stateLabel}</span>
                     <span>{itemWorkflow.nextActionLabel}</span>
                     <span>{compactRelativeTime(job.evaluated_at || job.discovered_at || job.date_posted)}</span>
                   </div>
@@ -344,6 +358,7 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
                       <div className="spotlight-meta-row">
                         <span>{selectedJob.location || 'Unknown location'}</span>
                         <span>{workflow.stateLabel}</span>
+                        <span>{workflow.stageLabel}</span>
                         <span>{workflow.priorityLabel}</span>
                         <span>{compactRelativeTime(selectedJob.evaluated_at || selectedJob.discovered_at || selectedJob.date_posted)}</span>
                       </div>
@@ -410,6 +425,7 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
                   },
                 })
               }
+              onMoveStage={(stage) => jobsState.updateWorkflow(selectedJob.jobId, { stage })}
             />
           ) : (
             <StateNotice compact title="Workflow rail waiting on a role" body="Select a role to see blockers, packet status, and timeline." />

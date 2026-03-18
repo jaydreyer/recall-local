@@ -248,7 +248,7 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                     details=[{"field": "workflow", "issue": "value must be an object"}],
                 )
 
-            allowed_workflow_fields = {"nextActionApproval", "packetApproval", "packet"}
+            allowed_workflow_fields = {"stage", "nextActionApproval", "packetApproval", "packet"}
             unknown_workflow_fields = [key for key in workflow_value.keys() if key not in allowed_workflow_fields]
             if unknown_workflow_fields:
                 return _error_response(
@@ -258,6 +258,18 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                     request_id=request_id,
                     details=[{"field": f"workflow.{key}", "issue": "field is not supported"} for key in unknown_workflow_fields],
                 )
+
+            if "stage" in workflow_value:
+                normalized_stage = str(workflow_value.get("stage") or "").strip().lower()
+                if normalized_stage not in {"focus", "review", "follow_up", "monitor", "closed"}:
+                    return _error_response(
+                        status_code=400,
+                        code="validation_failed",
+                        message="Invalid workflow stage value.",
+                        request_id=request_id,
+                        details=[{"field": "workflow.stage", "issue": "allowed values: focus, review, follow_up, monitor, closed"}],
+                    )
+                workflow_value["stage"] = normalized_stage
 
             for approval_field in ("nextActionApproval", "packetApproval"):
                 if approval_field in workflow_value:

@@ -31,6 +31,7 @@ DEFAULT_WORKFLOW_PACKET = {
     "interviewBrief": False,
     "talkingPoints": False,
 }
+WORKFLOW_STAGES = {"focus", "review", "follow_up", "monitor", "closed"}
 
 
 def _parse_int(value: Any, default: int = 0) -> int:
@@ -64,10 +65,26 @@ def _normalize_observation(value: Any) -> dict[str, Any]:
     return {}
 
 
+def _default_workflow_stage(*, status: str | None, fit_score: Any, applied: Any, dismissed: Any) -> str:
+    normalized_status = str(status or "").strip().lower()
+    if bool(dismissed) or normalized_status in {"dismissed", "expired"}:
+        return "closed"
+    if bool(applied) or normalized_status == "applied":
+        return "follow_up"
+    score = _parse_int(fit_score, default=-1)
+    if normalized_status == "new" or score < 0:
+        return "review"
+    if score >= HIGH_FIT_THRESHOLD:
+        return "focus"
+    return "monitor"
+
+
 def _normalize_workflow(value: Any) -> dict[str, Any]:
     source = dict(value) if isinstance(value, dict) else {}
     packet = source.get("packet") if isinstance(source.get("packet"), dict) else {}
+    stage = str(source.get("stage") or "").strip().lower()
     return {
+        "stage": stage if stage in WORKFLOW_STAGES else None,
         "nextActionApproval": "approved" if str(source.get("nextActionApproval")).strip().lower() == "approved" else "pending",
         "packetApproval": "approved" if str(source.get("packetApproval")).strip().lower() == "approved" else "pending",
         "packet": {
@@ -81,6 +98,10 @@ def _normalize_workflow(value: Any) -> dict[str, Any]:
 def _normalize_workflow_patch(value: Any) -> dict[str, Any]:
     source = dict(value) if isinstance(value, dict) else {}
     normalized: dict[str, Any] = {}
+    if "stage" in source:
+        stage = str(source.get("stage") or "").strip().lower()
+        if stage in WORKFLOW_STAGES:
+            normalized["stage"] = stage
     if "nextActionApproval" in source:
         normalized["nextActionApproval"] = "approved" if str(source.get("nextActionApproval")).strip().lower() == "approved" else "pending"
     if "packetApproval" in source:
@@ -176,6 +197,12 @@ def _normalize_job(record: Any) -> dict[str, Any]:
     job_id = str(payload.get("job_id") or payload.get("doc_id") or qdrant_id)
     company = str(payload.get("company") or "")
     workflow = _normalize_workflow(payload.get("workflow"))
+    workflow["stage"] = workflow.get("stage") or _default_workflow_stage(
+        status=payload.get("status"),
+        fit_score=payload.get("fit_score"),
+        applied=payload.get("applied"),
+        dismissed=payload.get("dismissed"),
+    )
     workflow_timeline = _normalize_workflow_timeline(payload.get("workflow_timeline"))
     normalized = {
         "jobId": job_id,
@@ -426,9 +453,19 @@ def update_job(
 
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     current["workflow"] = _normalize_workflow(current.get("workflow"))
+    current["workflow"]["stage"] = current["workflow"].get("stage") or _default_workflow_stage(
+        status=current.get("status"),
+        fit_score=current.get("fit_score"),
+        applied=current.get("applied"),
+        dismissed=current.get("dismissed"),
+    )
     current["workflowTimeline"] = _normalize_workflow_timeline(current.get("workflowTimeline"))
     if status is not None:
         current["status"] = status
+        if status == "applied":
+            current["workflow"]["stage"] = "follow_up"
+        elif status in {"dismissed", "expired"}:
+            current["workflow"]["stage"] = "closed"
         current["workflowTimeline"] = _append_workflow_event(
             current["workflowTimeline"],
             event_type="status_updated",
@@ -440,6 +477,7 @@ def update_job(
         if applied:
             current["applied_at"] = current.get("applied_at") or now
             current["status"] = "applied"
+            current["workflow"]["stage"] = "follow_up"
             current["workflowTimeline"] = _append_workflow_event(
                 current["workflowTimeline"],
                 event_type="applied",
@@ -450,6 +488,7 @@ def update_job(
         current["dismissed"] = bool(dismissed)
         if dismissed:
             current["status"] = "dismissed"
+            current["workflow"]["stage"] = "closed"
             current["workflowTimeline"] = _append_workflow_event(
                 current["workflowTimeline"],
                 event_type="dismissed",
@@ -484,6 +523,13 @@ def update_job(
                 current["workflowTimeline"],
                 event_type="packet_approved" if next_workflow.get("packetApproval") == "approved" else "packet_pending",
                 label="Packet approved" if next_workflow.get("packetApproval") == "approved" else "Packet returned to draft state",
+                at=now,
+            )
+        if existing_workflow.get("stage") != next_workflow.get("stage") and next_workflow.get("stage"):
+            current["workflowTimeline"] = _append_workflow_event(
+                current["workflowTimeline"],
+                event_type="stage_changed",
+                label=f"Moved to {str(next_workflow['stage']).replace('_', ' ')} lane",
                 at=now,
             )
         for key, value in merged_packet.items():

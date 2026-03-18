@@ -2619,6 +2619,30 @@ body {
   margin-top: 18px;
 }
 
+.workflow-stage-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.workflow-stage-button {
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 0.86rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 10px 12px;
+}
+
+.workflow-stage-button.active {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+  background: rgba(255, 244, 240, 0.9);
+}
+
 .demo-story-list {
   display: flex;
   flex-direction: column;
