@@ -170,7 +170,7 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
         f"{API_PREFIX}/jobs/{{jobId}}",
         tags=["Jobs"],
         summary="Update job",
-        description="Updates mutable job fields (`status`, `applied`, `dismissed`, `notes`).",
+        description="Updates mutable job fields (`status`, `applied`, `dismissed`, `notes`, `workflow`).",
         responses={
             200: {"description": "Job updated."},
             400: {"model": ErrorResponse, "description": "Invalid update payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
@@ -191,7 +191,7 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
         except ValueError as exc:
             return _error_response(status_code=400, code="invalid_json", message=str(exc), request_id=request_id)
 
-        allowed_fields = {"status", "applied", "dismissed", "notes"}
+        allowed_fields = {"status", "applied", "dismissed", "notes", "workflow"}
         unknown_fields = [key for key in payload.keys() if key not in allowed_fields]
         if unknown_fields:
             return _error_response(
@@ -237,12 +237,88 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
         if notes_value is not None:
             notes_value = str(notes_value)
 
+        workflow_value = payload.get("workflow") if "workflow" in payload else None
+        if workflow_value is not None:
+            if not isinstance(workflow_value, dict):
+                return _error_response(
+                    status_code=400,
+                    code="validation_failed",
+                    message="workflow must be an object.",
+                    request_id=request_id,
+                    details=[{"field": "workflow", "issue": "value must be an object"}],
+                )
+
+            allowed_workflow_fields = {"nextActionApproval", "packetApproval", "packet"}
+            unknown_workflow_fields = [key for key in workflow_value.keys() if key not in allowed_workflow_fields]
+            if unknown_workflow_fields:
+                return _error_response(
+                    status_code=400,
+                    code="validation_failed",
+                    message="Invalid workflow payload.",
+                    request_id=request_id,
+                    details=[{"field": f"workflow.{key}", "issue": "field is not supported"} for key in unknown_workflow_fields],
+                )
+
+            for approval_field in ("nextActionApproval", "packetApproval"):
+                if approval_field in workflow_value:
+                    normalized_approval = str(workflow_value.get(approval_field) or "").strip().lower()
+                    if normalized_approval not in {"pending", "approved"}:
+                        return _error_response(
+                            status_code=400,
+                            code="validation_failed",
+                            message=f"Invalid workflow approval value for {approval_field}.",
+                            request_id=request_id,
+                            details=[{"field": f"workflow.{approval_field}", "issue": "allowed values: pending, approved"}],
+                        )
+                    workflow_value[approval_field] = normalized_approval
+
+            if "packet" in workflow_value:
+                packet_value = workflow_value.get("packet")
+                if not isinstance(packet_value, dict):
+                    return _error_response(
+                        status_code=400,
+                        code="validation_failed",
+                        message="workflow.packet must be an object.",
+                        request_id=request_id,
+                        details=[{"field": "workflow.packet", "issue": "value must be an object"}],
+                    )
+                allowed_packet_fields = {
+                    "tailoredSummary",
+                    "resumeBullets",
+                    "coverLetterDraft",
+                    "outreachNote",
+                    "interviewBrief",
+                    "talkingPoints",
+                }
+                unknown_packet_fields = [key for key in packet_value.keys() if key not in allowed_packet_fields]
+                if unknown_packet_fields:
+                    return _error_response(
+                        status_code=400,
+                        code="validation_failed",
+                        message="Invalid workflow packet payload.",
+                        request_id=request_id,
+                        details=[{"field": f"workflow.packet.{key}", "issue": "field is not supported"} for key in unknown_packet_fields],
+                    )
+                try:
+                    workflow_value["packet"] = {
+                        key: _normalize_bool(value, field_name=f"workflow.packet.{key}")
+                        for key, value in packet_value.items()
+                    }
+                except ValueError as exc:
+                    return _error_response(
+                        status_code=400,
+                        code="validation_failed",
+                        message=str(exc),
+                        request_id=request_id,
+                    )
+
         updated = phase6_update_job(
             job_id=jobId,
             status=status_value,
             applied=applied_value,
             dismissed=dismissed_value,
             notes=notes_value,
+            workflow=workflow_value,
         )
         if updated is None:
             return _error_response(

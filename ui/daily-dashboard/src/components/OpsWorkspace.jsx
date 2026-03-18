@@ -3,9 +3,8 @@ import { useEffect, useMemo, useState } from 'react'
 import CompanyLogo from './CompanyLogo'
 import JobDetail from './JobDetail'
 import StateNotice from './StateNotice'
-import { useWorkflowDemoState } from '../hooks/useWorkflowDemoState'
 import { displayCompanyName } from '../utils/displayText'
-import { buildWorkflowTimeline, deriveWorkflow, preferredDemoJob } from '../utils/workflowDemo'
+import { buildWorkflowTimeline, defaultWorkflowState, deriveWorkflow, preferredDemoJob } from '../utils/workflowDemo'
 
 function compactRelativeTime(value) {
   if (!value) {
@@ -165,7 +164,7 @@ function WorkflowRail({ job, coverLetterState, workflowState, onApproveNextActio
         <div className={`workflow-callout ${workflow.blockerTone}`}>
           <p className="section-label">Primary blocker</p>
           <strong>{workflow.blocker}</strong>
-          <p className="body-copy">This is a demo-time workflow signal derived from the current role state and fit data.</p>
+          <p className="body-copy">This workflow signal now persists with the role, so approvals and packet progress survive refreshes and demos.</p>
         </div>
       </section>
 
@@ -231,10 +230,7 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
   const filteredJobs = useMemo(() => jobs.filter((job) => opsLane(job) === lane).slice(0, 30), [jobs, lane])
   const selectedJob = jobsState.selectedJob || demoJob || filteredJobs[0] || jobs[0] || null
   const selectedLane = selectedJob ? opsLane(selectedJob) : firstAvailableLane(laneCounts)
-  const { workflowState, setNextActionApproval, setPacketApproval, togglePacketItem } = useWorkflowDemoState(
-    selectedJob?.jobId,
-    jobsState.coverLetterState
-  )
+  const workflowState = defaultWorkflowState(selectedJob)
   const workflow = deriveWorkflow(selectedJob, jobsState.coverLetterState, workflowState)
 
   useEffect(() => {
@@ -405,9 +401,15 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
               job={selectedJob}
               coverLetterState={jobsState.coverLetterState}
               workflowState={workflowState}
-              onApproveNextAction={() => setNextActionApproval('approved')}
-              onApprovePacket={() => setPacketApproval('approved')}
-              onTogglePacketItem={togglePacketItem}
+              onApproveNextAction={() => jobsState.updateWorkflow(selectedJob.jobId, { nextActionApproval: 'approved' })}
+              onApprovePacket={() => jobsState.updateWorkflow(selectedJob.jobId, { packetApproval: 'approved' })}
+              onTogglePacketItem={(key) =>
+                jobsState.updateWorkflow(selectedJob.jobId, {
+                  packet: {
+                    [key]: !workflowState?.packet?.[key],
+                  },
+                })
+              }
             />
           ) : (
             <StateNotice compact title="Workflow rail waiting on a role" body="Select a role to see blockers, packet status, and timeline." />

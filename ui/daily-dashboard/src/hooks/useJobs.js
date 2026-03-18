@@ -393,6 +393,13 @@ export function useJobs({ loadGaps = false } = {}) {
     try {
       const payload = await createCoverLetterDraft({ job_id: jobId, save_to_vault: false })
       setCoverLetterState({ jobId, loading: false, error: '', draft: payload })
+      await mutateJob(jobId, {
+        workflow: {
+          packet: {
+            coverLetterDraft: true,
+          },
+        },
+      })
     } catch (draftError) {
       setCoverLetterState({
         jobId,
@@ -434,6 +441,7 @@ export function useJobs({ loadGaps = false } = {}) {
     markApplied: (jobId) => mutateJob(jobId, { applied: true }),
     dismissJob: (jobId) => mutateJob(jobId, { dismissed: true }),
     saveNotes: (jobId, notes) => mutateJob(jobId, { notes }),
+    updateWorkflow: (jobId, workflow) => mutateJob(jobId, { workflow }),
     reevaluateJob,
     generateDraft,
   }

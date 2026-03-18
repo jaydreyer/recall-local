@@ -19,15 +19,32 @@ function packetCompletion(packet = {}) {
   return Object.values(packet).filter(Boolean).length
 }
 
+export function defaultWorkflowState(job = null) {
+  return {
+    nextActionApproval: job?.workflow?.nextActionApproval || 'pending',
+    packetApproval: job?.workflow?.packetApproval || 'pending',
+    packet: {
+      tailoredSummary: Boolean(job?.workflow?.packet?.tailoredSummary),
+      resumeBullets: Boolean(job?.workflow?.packet?.resumeBullets),
+      coverLetterDraft: Boolean(job?.workflow?.packet?.coverLetterDraft),
+      outreachNote: Boolean(job?.workflow?.packet?.outreachNote),
+      interviewBrief: Boolean(job?.workflow?.packet?.interviewBrief),
+      talkingPoints: Boolean(job?.workflow?.packet?.talkingPoints),
+    },
+    updatedAt: job?.workflow?.updatedAt || null,
+  }
+}
+
 export function deriveWorkflow(job, coverLetterState, workflowState = null) {
+  const effectiveWorkflow = workflowState || defaultWorkflowState(job)
   const status = effectiveStatus(job)
   const fitScore = Number(job?.fit_score ?? -1)
-  const draftGenerated = hasDraft(job, coverLetterState) || Boolean(workflowState?.packet?.coverLetterDraft)
+  const draftGenerated = hasDraft(job, coverLetterState) || Boolean(effectiveWorkflow?.packet?.coverLetterDraft)
   const highFit = fitScore >= 75
   const evaluated = fitScore >= 0 && status !== 'new'
-  const packetDone = packetCompletion(workflowState?.packet) > 0
-  const nextActionApproval = workflowState?.nextActionApproval || 'pending'
-  const packetApproval = workflowState?.packetApproval || 'pending'
+  const packetDone = packetCompletion(effectiveWorkflow?.packet) > 0
+  const nextActionApproval = effectiveWorkflow?.nextActionApproval || 'pending'
+  const packetApproval = effectiveWorkflow?.packetApproval || 'pending'
 
   if (status === 'dismissed' || status === 'expired') {
     return {
@@ -137,6 +154,9 @@ function buildEvent(type, label, value) {
 }
 
 export function buildWorkflowTimeline(job, coverLetterState) {
+  const persistedEvents = Array.isArray(job?.workflowTimeline)
+    ? job.workflowTimeline.map((event) => buildEvent(event.type, event.label, event.at)).filter(Boolean)
+    : []
   const events = [
     buildEvent('discovered', 'Role discovered', job?.discovered_at || job?.date_posted),
     buildEvent('evaluated', 'Role evaluated', job?.evaluated_at),
@@ -144,6 +164,7 @@ export function buildWorkflowTimeline(job, coverLetterState) {
     hasDraft(job, coverLetterState)
       ? buildEvent('draft', 'Cover letter draft available', coverLetterState?.draft?.generated_at || new Date().toISOString())
       : null,
+    ...persistedEvents,
   ]
     .filter(Boolean)
     .sort((left, right) => right.timestamp - left.timestamp)

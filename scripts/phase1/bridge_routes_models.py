@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 """Bridge OpenAPI response contracts shared by route registration modules."""
 
-from scripts.phase1 import ingest_bridge_api as _bridge_api
+import sys
+
+_main_module = sys.modules.get("__main__")
+if _main_module and str(getattr(_main_module, "__file__", "")).endswith("ingest_bridge_api.py"):
+    _bridge_api = _main_module
+else:
+    from scripts.phase1 import ingest_bridge_api as _bridge_api
 
 HealthResponse = _bridge_api.HealthResponse
 DashboardChecksResponse = _bridge_api.DashboardChecksResponse

@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 """Core bridge helper and orchestration exports for route registration."""
 
-from scripts.phase1 import ingest_bridge_api as _bridge_api
-
+import sys
 from typing import Any
+
+_main_module = sys.modules.get("__main__")
+if _main_module and str(getattr(_main_module, "__file__", "")).endswith("ingest_bridge_api.py"):
+    _bridge_api = _main_module
+else:
+    from scripts.phase1 import ingest_bridge_api as _bridge_api
 
 DEFAULT_ACTIVITY_LIMIT = _bridge_api.DEFAULT_ACTIVITY_LIMIT
 DEFAULT_RECENT_EVAL_RUNS = _bridge_api.DEFAULT_RECENT_EVAL_RUNS

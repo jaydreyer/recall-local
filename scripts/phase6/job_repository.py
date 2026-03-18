@@ -23,6 +23,14 @@ HIGH_FIT_THRESHOLD = 75
 MEDIUM_FIT_THRESHOLD = 50
 LOW_FIT_THRESHOLD = 25
 _JOBS_SCROLL_CACHE: dict[tuple[bool, str], tuple[float, list[dict[str, Any]]]] = {}
+DEFAULT_WORKFLOW_PACKET = {
+    "tailoredSummary": False,
+    "resumeBullets": False,
+    "coverLetterDraft": False,
+    "outreachNote": False,
+    "interviewBrief": False,
+    "talkingPoints": False,
+}
 
 
 def _parse_int(value: Any, default: int = 0) -> int:
@@ -54,6 +62,60 @@ def _normalize_observation(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return dict(value)
     return {}
+
+
+def _normalize_workflow(value: Any) -> dict[str, Any]:
+    source = dict(value) if isinstance(value, dict) else {}
+    packet = source.get("packet") if isinstance(source.get("packet"), dict) else {}
+    return {
+        "nextActionApproval": "approved" if str(source.get("nextActionApproval")).strip().lower() == "approved" else "pending",
+        "packetApproval": "approved" if str(source.get("packetApproval")).strip().lower() == "approved" else "pending",
+        "packet": {
+            key: bool(packet.get(key, default))
+            for key, default in DEFAULT_WORKFLOW_PACKET.items()
+        },
+        "updatedAt": str(source.get("updatedAt") or "").strip() or None,
+    }
+
+
+def _normalize_workflow_patch(value: Any) -> dict[str, Any]:
+    source = dict(value) if isinstance(value, dict) else {}
+    normalized: dict[str, Any] = {}
+    if "nextActionApproval" in source:
+        normalized["nextActionApproval"] = "approved" if str(source.get("nextActionApproval")).strip().lower() == "approved" else "pending"
+    if "packetApproval" in source:
+        normalized["packetApproval"] = "approved" if str(source.get("packetApproval")).strip().lower() == "approved" else "pending"
+    if isinstance(source.get("packet"), dict):
+        normalized["packet"] = {
+            key: bool(value)
+            for key, value in source["packet"].items()
+            if key in DEFAULT_WORKFLOW_PACKET
+        }
+    return normalized
+
+
+def _normalize_workflow_timeline(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    events: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        label = str(item.get("label") or "").strip()
+        event_type = str(item.get("type") or "").strip()
+        at = str(item.get("at") or "").strip()
+        if not label or not event_type or not at:
+            continue
+        detail = str(item.get("detail") or "").strip()
+        events.append(
+            {
+                "type": event_type,
+                "label": label,
+                "detail": detail or None,
+                "at": at,
+            }
+        )
+    return events
 
 
 def _flatten_search_value(value: Any) -> list[str]:
@@ -113,6 +175,8 @@ def _normalize_job(record: Any) -> dict[str, Any]:
     qdrant_id = str(getattr(record, "id", ""))
     job_id = str(payload.get("job_id") or payload.get("doc_id") or qdrant_id)
     company = str(payload.get("company") or "")
+    workflow = _normalize_workflow(payload.get("workflow"))
+    workflow_timeline = _normalize_workflow_timeline(payload.get("workflow_timeline"))
     normalized = {
         "jobId": job_id,
         "title": payload.get("title") or "Untitled role",
@@ -143,6 +207,8 @@ def _normalize_job(record: Any) -> dict[str, Any]:
         "applied_at": payload.get("applied_at"),
         "notes": payload.get("notes") or "",
         "dismissed": bool(payload.get("dismissed", False)),
+        "workflow": workflow,
+        "workflowTimeline": workflow_timeline,
         "_qdrant_id": qdrant_id,
         "_vector": getattr(record, "vector", None),
         "_payload": payload,
@@ -298,11 +364,50 @@ def _point_for_update(*, models_module: Any, job: dict[str, Any]) -> Any:
             "dismissed": bool(job.get("dismissed", False)),
             "applied_at": job.get("applied_at"),
             "notes": job.get("notes"),
+            "workflow": _normalize_workflow(job.get("workflow")),
+            "workflow_timeline": _normalize_workflow_timeline(job.get("workflowTimeline")),
         }
     )
     vector = job.get("_vector")
     point_id = job.get("_qdrant_id")
     return models_module.PointStruct(id=point_id, vector=vector, payload=payload)
+
+
+def _workflow_event(*, event_type: str, label: str, at: str, detail: str | None = None) -> dict[str, Any]:
+    return {
+        "type": event_type,
+        "label": label,
+        "detail": detail or None,
+        "at": at,
+    }
+
+
+def _workflow_packet_label(key: str) -> str:
+    labels = {
+        "tailoredSummary": "Tailored summary",
+        "resumeBullets": "Resume bullets",
+        "coverLetterDraft": "Cover letter draft",
+        "outreachNote": "Outreach note",
+        "interviewBrief": "Interview brief",
+        "talkingPoints": "Talking points",
+    }
+    return labels.get(key, key)
+
+
+def _append_workflow_event(
+    timeline: list[dict[str, Any]],
+    *,
+    event_type: str,
+    label: str,
+    at: str,
+    detail: str | None = None,
+) -> list[dict[str, Any]]:
+    next_timeline = list(timeline)
+    candidate = _workflow_event(event_type=event_type, label=label, at=at, detail=detail)
+    if next_timeline and next_timeline[-1].get("type") == candidate["type"] and next_timeline[-1].get("label") == candidate["label"]:
+        return next_timeline
+    next_timeline.append(candidate)
+    return next_timeline
 
 
 def update_job(
@@ -312,6 +417,7 @@ def update_job(
     applied: bool | None,
     dismissed: bool | None,
     notes: str | None,
+    workflow: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Persist status or note changes for a single Phase 6 job."""
     current = get_job_raw(job_id)
@@ -319,19 +425,78 @@ def update_job(
         return None
 
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    current["workflow"] = _normalize_workflow(current.get("workflow"))
+    current["workflowTimeline"] = _normalize_workflow_timeline(current.get("workflowTimeline"))
     if status is not None:
         current["status"] = status
+        current["workflowTimeline"] = _append_workflow_event(
+            current["workflowTimeline"],
+            event_type="status_updated",
+            label=f"Status changed to {status.replace('_', ' ')}",
+            at=now,
+        )
     if applied is not None:
         current["applied"] = bool(applied)
         if applied:
             current["applied_at"] = current.get("applied_at") or now
             current["status"] = "applied"
+            current["workflowTimeline"] = _append_workflow_event(
+                current["workflowTimeline"],
+                event_type="applied",
+                label="Application recorded",
+                at=now,
+            )
     if dismissed is not None:
         current["dismissed"] = bool(dismissed)
         if dismissed:
             current["status"] = "dismissed"
+            current["workflowTimeline"] = _append_workflow_event(
+                current["workflowTimeline"],
+                event_type="dismissed",
+                label="Role dismissed",
+                at=now,
+            )
     if notes is not None:
         current["notes"] = notes
+    if workflow is not None:
+        existing_workflow = _normalize_workflow(current.get("workflow"))
+        incoming_workflow = _normalize_workflow_patch(workflow)
+        merged_packet = {
+            **existing_workflow.get("packet", {}),
+            **incoming_workflow.get("packet", {}),
+        }
+        next_workflow = {
+            **existing_workflow,
+            **incoming_workflow,
+            "packet": merged_packet,
+            "updatedAt": now,
+        }
+
+        if existing_workflow.get("nextActionApproval") != next_workflow.get("nextActionApproval"):
+            current["workflowTimeline"] = _append_workflow_event(
+                current["workflowTimeline"],
+                event_type="next_action_approved" if next_workflow.get("nextActionApproval") == "approved" else "next_action_pending",
+                label="Next action approved" if next_workflow.get("nextActionApproval") == "approved" else "Next action sent back for review",
+                at=now,
+            )
+        if existing_workflow.get("packetApproval") != next_workflow.get("packetApproval"):
+            current["workflowTimeline"] = _append_workflow_event(
+                current["workflowTimeline"],
+                event_type="packet_approved" if next_workflow.get("packetApproval") == "approved" else "packet_pending",
+                label="Packet approved" if next_workflow.get("packetApproval") == "approved" else "Packet returned to draft state",
+                at=now,
+            )
+        for key, value in merged_packet.items():
+            if not value or existing_workflow.get("packet", {}).get(key) == value:
+                continue
+            current["workflowTimeline"] = _append_workflow_event(
+                current["workflowTimeline"],
+                event_type="packet_item_completed",
+                label=f"{_workflow_packet_label(key)} completed",
+                at=now,
+            )
+
+        current["workflow"] = next_workflow
 
     from qdrant_client import models
 

@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 """Route middleware and protocol primitives for bridge endpoints."""
 
-from scripts.phase1 import ingest_bridge_api as _bridge_api
+import sys
+
+_main_module = sys.modules.get("__main__")
+if _main_module and str(getattr(_main_module, "__file__", "")).endswith("ingest_bridge_api.py"):
+    _bridge_api = _main_module
+else:
+    from scripts.phase1 import ingest_bridge_api as _bridge_api
 
 API_PREFIX = _bridge_api.API_PREFIX
 ERROR_EXAMPLE_UNAUTHORIZED = _bridge_api.ERROR_EXAMPLE_UNAUTHORIZED
@@ -40,4 +46,3 @@ __all__ = [
     "_normalize_optional_string",
     "_normalize_company_watch_payload",
 ]
-
