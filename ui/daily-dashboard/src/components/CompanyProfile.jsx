@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import CompanyLogo from './CompanyLogo'
 import StateNotice from './StateNotice'
+import { displayCompanyName } from '../utils/displayText'
 
 function metadataChips(company) {
   return [
@@ -91,7 +92,7 @@ export default function CompanyProfile({ company, loading, error, onRefresh, ref
         <div className="company-header">
           <CompanyLogo company={company} className="company-logo large" />
           <div>
-            <h2 className="section-title large">{company.company_name}</h2>
+            <h2 className="section-title large">{displayCompanyName(company.company_name)}</h2>
             <div className="chip-row">
               {metadataChips(company).map((chip) => (
                 <span key={chip} className="meta-chip">

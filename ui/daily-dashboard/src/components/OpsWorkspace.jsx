@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import CompanyLogo from './CompanyLogo'
 import JobDetail from './JobDetail'
 import StateNotice from './StateNotice'
+import { displayCompanyName } from '../utils/displayText'
 import { buildWorkflowTimeline, deriveWorkflow } from '../utils/workflowDemo'
 
 function compactRelativeTime(value) {
@@ -225,9 +226,9 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
                 >
                   <div className="queue-card-topline">
                     <div className="queue-card-brand">
-                      <CompanyLogo company={{ company_name: job.company, company_id: job.company_id || job.company_normalized }} className="company-logo small" />
+                      <CompanyLogo company={{ company_name: displayCompanyName(job.company), company_id: job.company_id || job.company_normalized }} className="company-logo small" />
                       <div>
-                        <p className="queue-company">{job.company}</p>
+                        <p className="queue-company">{displayCompanyName(job.company)}</p>
                         <p className="queue-title">{job.title}</p>
                       </div>
                     </div>
@@ -262,9 +263,9 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
               <section className="ops-hero-card">
                 <div className="spotlight-brand-row">
                   <div className="spotlight-brand">
-                    <CompanyLogo company={{ company_name: selectedJob.company, company_id: selectedJob.company_id || selectedJob.company_normalized }} className="company-logo large" />
+                    <CompanyLogo company={{ company_name: displayCompanyName(selectedJob.company), company_id: selectedJob.company_id || selectedJob.company_normalized }} className="company-logo large" />
                     <div>
-                      <p className="queue-company">{selectedJob.company}</p>
+                      <p className="queue-company">{displayCompanyName(selectedJob.company)}</p>
                       <h3 className="spotlight-title">{selectedJob.title}</h3>
                       <div className="spotlight-meta-row">
                         <span>{selectedJob.location || 'Unknown location'}</span>

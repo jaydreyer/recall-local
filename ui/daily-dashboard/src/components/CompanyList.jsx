@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 import CompanyLogo from './CompanyLogo'
 import StateNotice from './StateNotice'
+import { displayCompanyName } from '../utils/displayText'
 
 const TIER_LANES = [
   { tier: 1, label: 'Tier 1', title: 'Immediate focus' },
@@ -33,7 +34,7 @@ function sortCompanies(a, b) {
   if (rolesB !== rolesA) {
     return rolesB - rolesA
   }
-  return String(a.company_name || '').localeCompare(String(b.company_name || ''))
+  return displayCompanyName(a.company_name, '').localeCompare(displayCompanyName(b.company_name, ''))
 }
 
 function bestFitLabel(company) {
@@ -136,7 +137,7 @@ export default function CompanyList({
                     >
                       <CompanyLogo company={company} className="company-logo" />
                       <div className="company-card-copy">
-                        <h3 className="job-title">{company.company_name}</h3>
+                        <h3 className="job-title">{displayCompanyName(company.company_name)}</h3>
                         <span className={`tier-badge ${tierClass(company.tier)}`}>
                           <span className="tier-dot" />
                           Tier {company.tier || 3}

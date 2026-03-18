@@ -3,6 +3,7 @@ import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import CompanyLogo from './CompanyLogo'
 import JobDetail from './JobDetail'
 import StateNotice from './StateNotice'
+import { displayCompanyName, displaySourceLabel } from '../utils/displayText'
 import { summarizeAngle, summarizeTopGap, summarizeTopMatch } from '../utils/jobSummary'
 import { deriveWorkflow } from '../utils/workflowDemo'
 
@@ -121,7 +122,7 @@ function queueHeadline(job) {
 }
 
 function uniqueCompanies(jobs) {
-  return new Set(jobs.map((job) => job.company_id || job.company_normalized || job.company).filter(Boolean)).size
+  return new Set(jobs.map((job) => job.company_id || job.company_normalized || displayCompanyName(job.company, '')).filter(Boolean)).size
 }
 
 function aggregateCompanies(jobs) {
@@ -133,7 +134,7 @@ function aggregateCompanies(jobs) {
     }
     const current = grouped.get(key) || {
       company_id: job.company_id || job.company_normalized || key,
-      company_name: job.company,
+      company_name: displayCompanyName(job.company),
       company_tier: job.company_tier || 3,
       job_count: 0,
       high_fit: 0,
@@ -209,9 +210,9 @@ function QueueCard({ job, selected, onSelect }) {
     <button type="button" className={selected ? 'queue-card selected' : 'queue-card'} onClick={() => onSelect(job.jobId)}>
       <div className="queue-card-topline">
         <div className="queue-card-brand">
-          <CompanyLogo company={{ company_name: job.company, company_id: job.company_id || job.company_normalized }} className="company-logo small" />
+          <CompanyLogo company={{ company_name: displayCompanyName(job.company), company_id: job.company_id || job.company_normalized }} className="company-logo small" />
           <div>
-            <p className="queue-company">{job.company}</p>
+            <p className="queue-company">{displayCompanyName(job.company)}</p>
             <p className="queue-title">{job.title}</p>
           </div>
         </div>
@@ -256,7 +257,7 @@ function DetailDrawer({ open, job, jobsState, loading, onClose, onOpenOps }) {
         <div className="section-rule" />
         {job && workflow && (
           <div className="detail-drawer-meta">
-            <span className="meta-chip">{job.company}</span>
+            <span className="meta-chip">{displayCompanyName(job.company)}</span>
             <span className="meta-chip">{workflow.stateLabel}</span>
             <span className="meta-chip">{workflow.nextActionLabel}</span>
             <button type="button" className="text-button accent" onClick={() => onOpenOps(job.jobId)}>
@@ -499,19 +500,19 @@ export default function JobsCommandCenter({ jobsState, settings, onOpenSettings,
           <section className="spotlight-card">
             <div className="spotlight-brand-row">
               <div className="spotlight-brand">
-                <CompanyLogo company={{ company_name: heroJob.company, company_id: heroJob.company_id || heroJob.company_normalized }} className="company-logo large" />
+                <CompanyLogo company={{ company_name: displayCompanyName(heroJob.company), company_id: heroJob.company_id || heroJob.company_normalized }} className="company-logo large" />
                 <div>
                   <button
                     type="button"
                     className="meta-link"
                     onClick={() => onOpenCompany(heroJob.company_id || heroJob.company_normalized)}
                   >
-                    {heroJob.company}
+                    {displayCompanyName(heroJob.company)}
                   </button>
                   <h3 className="spotlight-title">{heroJob.title}</h3>
                   <div className="spotlight-meta-row">
                     <span>{heroJob.location || 'Unknown location'}</span>
-                    <span>{heroJob.source || 'Unknown source'}</span>
+                    <span>{displaySourceLabel(heroJob.source)}</span>
                     <span>{heroWorkflow?.stateLabel || 'Queued'}</span>
                     <span>{compactRelativeTime(heroJob.evaluated_at || heroJob.discovered_at || heroJob.date_posted)}</span>
                   </div>
