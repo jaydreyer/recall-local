@@ -2542,7 +2542,8 @@ body {
 .ops-queue-list,
 .ops-lane-list,
 .ops-status-stack,
-.workflow-timeline {
+.workflow-timeline,
+.packet-checklist {
   display: flex;
   flex-direction: column;
 }
@@ -2609,6 +2610,31 @@ body {
 
 .workflow-timeline {
   gap: 14px;
+}
+
+.workflow-action-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
+.packet-checklist {
+  gap: 12px;
+}
+
+.packet-check-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.packet-check-row input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
 }
 
 .timeline-row {

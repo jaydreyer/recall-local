@@ -15,12 +15,19 @@ function hasDraft(job, coverLetterState) {
   return Boolean(job?.cover_letter_angle)
 }
 
-export function deriveWorkflow(job, coverLetterState) {
+function packetCompletion(packet = {}) {
+  return Object.values(packet).filter(Boolean).length
+}
+
+export function deriveWorkflow(job, coverLetterState, workflowState = null) {
   const status = effectiveStatus(job)
   const fitScore = Number(job?.fit_score ?? -1)
-  const draftGenerated = hasDraft(job, coverLetterState)
+  const draftGenerated = hasDraft(job, coverLetterState) || Boolean(workflowState?.packet?.coverLetterDraft)
   const highFit = fitScore >= 75
   const evaluated = fitScore >= 0 && status !== 'new'
+  const packetDone = packetCompletion(workflowState?.packet) > 0
+  const nextActionApproval = workflowState?.nextActionApproval || 'pending'
+  const packetApproval = workflowState?.packetApproval || 'pending'
 
   if (status === 'dismissed' || status === 'expired') {
     return {
@@ -47,7 +54,7 @@ export function deriveWorkflow(job, coverLetterState) {
       blockerTone: 'warning',
       packetStatus: draftGenerated ? 'draft_generated' : 'not_started',
       packetLabel: draftGenerated ? 'Draft generated' : 'Not started',
-      approvalLabel: 'Application recorded',
+      approvalLabel: packetApproval === 'approved' ? 'Packet approved' : 'Application recorded',
       priorityLabel: 'Keep momentum',
     }
   }
@@ -73,11 +80,23 @@ export function deriveWorkflow(job, coverLetterState) {
       stateLabel: 'Target',
       nextAction: 'tailor_resume',
       nextActionLabel: 'Tailor resume',
-      blocker: draftGenerated ? 'Waiting on packet review' : 'Tailored packet missing',
-      blockerTone: draftGenerated ? 'pending' : 'warning',
-      packetStatus: draftGenerated ? 'draft_generated' : 'not_started',
-      packetLabel: draftGenerated ? 'Draft generated' : 'Not started',
-      approvalLabel: draftGenerated ? 'Needs approval' : 'Draft not reviewed',
+      blocker:
+        packetApproval === 'approved'
+          ? 'Ready to move forward'
+          : draftGenerated || packetDone
+            ? 'Waiting on packet review'
+            : nextActionApproval === 'approved'
+              ? 'Tailored packet missing'
+              : 'Next action not approved',
+      blockerTone: packetApproval === 'approved' ? 'pending' : draftGenerated || packetDone ? 'pending' : 'warning',
+      packetStatus: packetApproval === 'approved' ? 'approved' : draftGenerated || packetDone ? 'draft_generated' : 'not_started',
+      packetLabel: packetApproval === 'approved' ? 'Approved' : draftGenerated || packetDone ? 'Draft generated' : 'Not started',
+      approvalLabel:
+        packetApproval === 'approved'
+          ? 'Packet approved'
+          : nextActionApproval === 'approved'
+            ? 'Next action approved'
+            : 'Needs approval',
       priorityLabel: 'Focus now',
     }
   }

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import CompanyLogo from './CompanyLogo'
 import JobDetail from './JobDetail'
 import StateNotice from './StateNotice'
+import { useWorkflowDemoState } from '../hooks/useWorkflowDemoState'
 import { displayCompanyName } from '../utils/displayText'
 import { buildWorkflowTimeline, deriveWorkflow } from '../utils/workflowDemo'
 
@@ -69,8 +70,17 @@ function firstAvailableLane(laneCounts) {
   return 'monitor'
 }
 
-function WorkflowRail({ job, coverLetterState }) {
-  const workflow = deriveWorkflow(job, coverLetterState)
+const PACKET_ITEMS = [
+  { key: 'tailoredSummary', label: 'Tailored summary' },
+  { key: 'resumeBullets', label: 'Resume bullets' },
+  { key: 'coverLetterDraft', label: 'Cover letter draft' },
+  { key: 'outreachNote', label: 'Outreach note' },
+  { key: 'interviewBrief', label: 'Interview brief' },
+  { key: 'talkingPoints', label: 'Talking points' },
+]
+
+function WorkflowRail({ job, coverLetterState, workflowState, onApproveNextAction, onApprovePacket, onTogglePacketItem }) {
+  const workflow = deriveWorkflow(job, coverLetterState, workflowState)
   const timeline = buildWorkflowTimeline(job, coverLetterState)
 
   return (
@@ -101,6 +111,14 @@ function WorkflowRail({ job, coverLetterState }) {
             <strong>{workflow.approvalLabel}</strong>
           </div>
         </div>
+        <div className="section-inline-actions workflow-action-row">
+          <button type="button" className="text-button accent" onClick={onApproveNextAction}>
+            Approve next action
+          </button>
+          <button type="button" className="ghost-button" onClick={onApprovePacket}>
+            Approve packet
+          </button>
+        </div>
       </section>
 
       <section className="ops-rail-card">
@@ -115,6 +133,28 @@ function WorkflowRail({ job, coverLetterState }) {
           <p className="section-label">Primary blocker</p>
           <strong>{workflow.blocker}</strong>
           <p className="body-copy">This is a demo-time workflow signal derived from the current role state and fit data.</p>
+        </div>
+      </section>
+
+      <section className="ops-rail-card">
+        <div className="panel-heading compact">
+          <div>
+            <p className="section-label">Application packet</p>
+            <h3 className="card-title">Draft and approval checklist</h3>
+          </div>
+        </div>
+        <div className="section-rule" />
+        <div className="packet-checklist">
+          {PACKET_ITEMS.map((item) => (
+            <label key={item.key} className="packet-check-row">
+              <input
+                type="checkbox"
+                checked={Boolean(workflowState?.packet?.[item.key])}
+                onChange={() => onTogglePacketItem(item.key)}
+              />
+              <span>{item.label}</span>
+            </label>
+          ))}
         </div>
       </section>
 
@@ -157,7 +197,11 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
   const filteredJobs = useMemo(() => jobs.filter((job) => opsLane(job) === lane).slice(0, 30), [jobs, lane])
   const selectedJob = jobsState.selectedJob || filteredJobs[0] || jobs[0] || null
   const selectedLane = selectedJob ? opsLane(selectedJob) : firstAvailableLane(laneCounts)
-  const workflow = deriveWorkflow(selectedJob, jobsState.coverLetterState)
+  const { workflowState, setNextActionApproval, setPacketApproval, togglePacketItem } = useWorkflowDemoState(
+    selectedJob?.jobId,
+    jobsState.coverLetterState
+  )
+  const workflow = deriveWorkflow(selectedJob, jobsState.coverLetterState, workflowState)
 
   useEffect(() => {
     if (!jobs.length) {
@@ -323,7 +367,14 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
 
         <aside className="ops-rail-panel">
           {selectedJob ? (
-            <WorkflowRail job={selectedJob} coverLetterState={jobsState.coverLetterState} />
+            <WorkflowRail
+              job={selectedJob}
+              coverLetterState={jobsState.coverLetterState}
+              workflowState={workflowState}
+              onApproveNextAction={() => setNextActionApproval('approved')}
+              onApprovePacket={() => setPacketApproval('approved')}
+              onTogglePacketItem={togglePacketItem}
+            />
           ) : (
             <StateNotice compact title="Workflow rail waiting on a role" body="Select a role to see blockers, packet status, and timeline." />
           )}
