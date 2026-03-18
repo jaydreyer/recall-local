@@ -48,11 +48,15 @@ export default function JobCard({
   onSaveNotes,
   onGenerateDraft,
   onGenerateTailoredSummary,
+  onGenerateResumeBullets,
   onGenerateOutreachNote,
+  onGenerateTalkingPoints,
   onReevaluate,
   coverLetterState,
   tailoredSummaryState,
   outreachNoteState,
+  resumeBulletsState,
+  talkingPointsState,
 }) {
   return (
     <article className={selected ? 'job-card selected' : 'job-card'}>
@@ -119,11 +123,15 @@ export default function JobCard({
           onSaveNotes={onSaveNotes}
           onGenerateDraft={onGenerateDraft}
           onGenerateTailoredSummary={onGenerateTailoredSummary}
+          onGenerateResumeBullets={onGenerateResumeBullets}
           onGenerateOutreachNote={onGenerateOutreachNote}
+          onGenerateTalkingPoints={onGenerateTalkingPoints}
           onReevaluate={onReevaluate}
           coverLetterState={coverLetterState}
           tailoredSummaryState={tailoredSummaryState}
           outreachNoteState={outreachNoteState}
+          resumeBulletsState={resumeBulletsState}
+          talkingPointsState={talkingPointsState}
         />
       )}
     </article>

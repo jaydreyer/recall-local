@@ -45,6 +45,8 @@ The live app now includes:
 - packet checklist and approval state persisted through the backend
 - packet artifact metadata now persists for cover letter drafts, tailored summaries, and operator-linked packet deliverables
 - outreach note generation via `POST /v1/outreach-notes` now persists a third real packet artifact flow
+- resume bullets generation via `POST /v1/resume-bullets` now backs a required packet item with real generated output
+- talking points generation via `POST /v1/talking-points` now backs interview prep with a real generated artifact flow
 - packet readiness now reconciles checklist state with artifact truth
 - persisted next-action recommendations now include action, rationale, confidence, and due date
 - persisted follow-up metadata now supports due dates and completion tracking
@@ -140,7 +142,7 @@ What is done:
 
 What is still missing:
 
-- resume bullets, interview brief, and talking points do not yet have dedicated generators/services
+- interview brief does not yet have a dedicated generator/service
 - a more explicit packet schema and packet API surface may still be warranted
 
 #### 6. Approval workflow
@@ -242,8 +244,10 @@ Implemented:
 - packet artifact metadata persisted through the backend
 - richer workflow timeline metadata persisted through the backend
 - tailored summary artifact generation via `POST /v1/tailored-summaries`
+- resume bullets generation via `POST /v1/resume-bullets`
 - cover letter draft generation via `POST /v1/cover-letter-drafts`
 - outreach note generation via `POST /v1/outreach-notes`
+- talking points generation via `POST /v1/talking-points`
 - packet readiness reconciled from checklist state plus artifact truth
 - Ops UI for packet and approval workflows
 - queue filters:
@@ -391,12 +395,12 @@ If continuing from here, use this order:
 
 The best next implementation slice is:
 
-### Packet artifact expansion
+### Final packet artifact expansion
 
 Scope:
 
-- add the next real packet artifact flow after outreach note:
-  - resume bullets
+- add the next real packet artifact flow after talking points:
+  - interview brief
 - persist generated artifact metadata into workflow packet state
 - expose generation directly in the role workspace
 - let packet readiness benefit from the new artifact truth automatically
@@ -423,4 +427,4 @@ Helpful companion references:
 
 Suggested kickoff prompt for a future session:
 
-"Read [Recall_local_Application_Ops_Roadmap.md](/Users/jaydreyer/projects/recall-local/docs/Recall_local_Application_Ops_Roadmap.md), confirm the current live state against the PRD and implementation checklist, and implement the next slice: add the next real packet artifact flow after outreach note, preferably resume bullets."
+"Read [Recall_local_Application_Ops_Roadmap.md](/Users/jaydreyer/projects/recall-local/docs/Recall_local_Application_Ops_Roadmap.md), confirm the current live state against the PRD and implementation checklist, and implement the next slice: add the final packet artifact flow by generating the interview brief."

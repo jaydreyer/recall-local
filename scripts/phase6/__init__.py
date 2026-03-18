@@ -11,7 +11,9 @@ __all__ = [
     "job_metadata_extractor",
     "job_repository",
     "outreach_note_drafter",
+    "resume_bullets_drafter",
     "setup_collections",
     "storage",
+    "talking_points_drafter",
     "telegram_notifier",
 ]

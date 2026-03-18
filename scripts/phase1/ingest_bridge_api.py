@@ -67,8 +67,10 @@ from scripts.phase6.job_repository import list_jobs as phase6_list_jobs  # noqa:
 from scripts.phase6.job_repository import update_company_tier as phase6_update_company_tier  # noqa: F401,E402
 from scripts.phase6.job_repository import update_job as phase6_update_job  # noqa: F401,E402
 from scripts.phase6.outreach_note_drafter import generate_outreach_note as phase6_generate_outreach_note  # noqa: F401,E402
+from scripts.phase6.resume_bullets_drafter import generate_resume_bullets as phase6_generate_resume_bullets  # noqa: F401,E402
 from scripts.phase6.setup_collections import ensure_phase6_collections as phase6_ensure_collections  # noqa: F401,E402
 from scripts.phase6.tailored_summary_drafter import generate_tailored_summary as phase6_generate_tailored_summary  # noqa: F401,E402
+from scripts.phase6.talking_points_drafter import generate_talking_points as phase6_generate_talking_points  # noqa: F401,E402
 
 
 ALLOWED_INGEST_CHANNELS = ("webhook", "bookmarklet", "ios-share", "gmail-forward")
@@ -380,6 +382,34 @@ class OutreachNoteResponse(BaseModel):
     generated_at: str
     word_count: int
     note: str
+    saved_to_vault: bool
+    vault_path: Optional[str] = None
+
+
+class ResumeBulletsResponse(BaseModel):
+    workflow: Literal["workflow_06a_resume_bullets"]
+    resume_bullets_id: str
+    job_id: str
+    provider: str
+    model: str
+    generated_at: str
+    bullet_count: int
+    word_count: int
+    bullets: str
+    saved_to_vault: bool
+    vault_path: Optional[str] = None
+
+
+class TalkingPointsResponse(BaseModel):
+    workflow: Literal["workflow_06a_talking_points"]
+    talking_points_id: str
+    job_id: str
+    provider: str
+    model: str
+    generated_at: str
+    point_count: int
+    word_count: int
+    talking_points: str
     saved_to_vault: bool
     vault_path: Optional[str] = None
 
@@ -941,6 +971,34 @@ OUTREACH_NOTE_SUCCESS_EXAMPLE = {
     "generated_at": "2026-03-18T16:10:00+00:00",
     "word_count": 67,
     "note": "Hi team,\n\nI’m reaching out because the Solutions Engineer role looks closely aligned with my background leading customer-facing AI platform rollouts and API adoption work. I’d love to be considered and would be glad to share more context on the fit.\n\nBest,\nJay",
+    "saved_to_vault": False,
+    "vault_path": None,
+}
+
+RESUME_BULLETS_SUCCESS_EXAMPLE = {
+    "workflow": "workflow_06a_resume_bullets",
+    "resume_bullets_id": "resume_bullets_job-001",
+    "job_id": "job-001",
+    "provider": "ollama",
+    "model": "llama3.2:3b",
+    "generated_at": "2026-03-18T16:20:00+00:00",
+    "bullet_count": 4,
+    "word_count": 46,
+    "bullets": "- Led customer-facing AI workflow rollouts with strong operator empathy.\n- Translated API platform complexity into adoption-focused execution.\n- Partnered directly with technical stakeholders to unblock implementation work.\n- Built practical delivery systems that connect product goals to real usage.",
+    "saved_to_vault": False,
+    "vault_path": None,
+}
+
+TALKING_POINTS_SUCCESS_EXAMPLE = {
+    "workflow": "workflow_06a_talking_points",
+    "talking_points_id": "talking_points_job-001",
+    "job_id": "job-001",
+    "provider": "ollama",
+    "model": "llama3.2:3b",
+    "generated_at": "2026-03-18T16:35:00+00:00",
+    "point_count": 5,
+    "word_count": 55,
+    "talking_points": "- Lead with customer-facing AI rollout experience.\n- Emphasize API platform work tied to real adoption.\n- Highlight translating technical complexity into operator-friendly execution.\n- Show collaboration across product, technical, and business stakeholders.\n- Connect delivery discipline to practical outcomes for this role.",
     "saved_to_vault": False,
     "vault_path": None,
 }
@@ -1579,6 +1637,78 @@ OUTREACH_NOTE_REQUEST_BODY = {
     },
 }
 
+RESUME_BULLETS_REQUEST_BODY = {
+    "required": True,
+    "content": {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "required": ["job_id"],
+                "properties": {
+                    "job_id": {"type": "string", "description": "Evaluated job identifier."},
+                    "save_to_vault": {"type": "boolean", "default": False},
+                    "settings": {
+                        "type": "object",
+                        "description": "Optional runtime override for resume-bullet generation model settings.",
+                        "properties": {
+                            "evaluation_model": {"type": "string", "enum": ["local", "cloud"]},
+                            "cloud_provider": {"type": "string", "enum": ["anthropic", "openai", "gemini"]},
+                            "cloud_model": {"type": "string"},
+                            "auto_escalate": {"type": "boolean"},
+                            "local_model": {"type": "string"},
+                            "max_tokens": {"type": "integer", "minimum": 128},
+                        },
+                        "additionalProperties": False,
+                    },
+                },
+                "additionalProperties": False,
+            },
+            "examples": {
+                "default": {
+                    "summary": "Generate resume bullets",
+                    "value": {"job_id": "job_001", "save_to_vault": False},
+                }
+            },
+        }
+    },
+}
+
+TALKING_POINTS_REQUEST_BODY = {
+    "required": True,
+    "content": {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "required": ["job_id"],
+                "properties": {
+                    "job_id": {"type": "string", "description": "Evaluated job identifier."},
+                    "save_to_vault": {"type": "boolean", "default": False},
+                    "settings": {
+                        "type": "object",
+                        "description": "Optional runtime override for talking-points generation model settings.",
+                        "properties": {
+                            "evaluation_model": {"type": "string", "enum": ["local", "cloud"]},
+                            "cloud_provider": {"type": "string", "enum": ["anthropic", "openai", "gemini"]},
+                            "cloud_model": {"type": "string"},
+                            "auto_escalate": {"type": "boolean"},
+                            "local_model": {"type": "string"},
+                            "max_tokens": {"type": "integer", "minimum": 128},
+                        },
+                        "additionalProperties": False,
+                    },
+                },
+                "additionalProperties": False,
+            },
+            "examples": {
+                "default": {
+                    "summary": "Generate talking points",
+                    "value": {"job_id": "job_001", "save_to_vault": False},
+                }
+            },
+        }
+    },
+}
+
 COMPANY_CREATE_REQUEST_BODY = {
     "required": True,
     "content": {
@@ -1710,8 +1840,10 @@ def create_app() -> FastAPI:
             {"name": "Companies", "description": "List and refresh company profile summaries for job intelligence."},
             {"name": "LLM Settings", "description": "Read and update Phase 6 evaluation model settings."},
             {"name": "Cover Letter Drafts", "description": "Generate cover letter drafts from the current resume and job context."},
+            {"name": "Resume Bullets", "description": "Generate tailored resume bullets from the current resume and job context."},
             {"name": "Tailored Summaries", "description": "Generate tailored summaries from the current resume and job context."},
             {"name": "Outreach Notes", "description": "Generate outreach notes from the current resume and job context."},
+            {"name": "Talking Points", "description": "Generate interview talking points from the current resume and job context."},
         ],
     )
     cors_origins = _cors_origins_from_env()

@@ -220,6 +220,14 @@ export function createTailoredSummary(payload) {
   return sendJson('/v1/tailored-summaries', 'POST', payload)
 }
 
+export function createResumeBullets(payload) {
+  return sendJson('/v1/resume-bullets', 'POST', payload)
+}
+
 export function createOutreachNote(payload) {
   return sendJson('/v1/outreach-notes', 'POST', payload)
+}
+
+export function createTalkingPoints(payload) {
+  return sendJson('/v1/talking-points', 'POST', payload)
 }

@@ -2,6 +2,84 @@
 
 Public-repo note: historical entries use placeholder hostnames and paths where the original logs referenced private machine details. Older file references remain as evidence-first text and may no longer be directly clickable.
 
+## 2026-03-18 - Talking points artifact flow added to the Application Ops packet
+
+### What was executed
+
+- Added a first-class talking-points generator in:
+  - `<repo-root>/scripts/phase6/talking_points_drafter.py`
+  - generates five interview-oriented talking points from evaluated job context plus the active resume
+  - supports the same local/cloud runtime settings pattern as the other packet artifact flows
+  - optionally writes a packet artifact into the vault when write-back is enabled
+- Added a new collection-style API endpoint in:
+  - `<repo-root>/scripts/phase1/bridge_routes_phase6.py`
+  - `POST /v1/talking-points`
+  - persists the result back into workflow packet state and packet artifact metadata so Ops can now back interview prep with a generated deliverable instead of only manual linkage
+- Added API models/examples and helper exports in:
+  - `<repo-root>/scripts/phase1/ingest_bridge_api.py`
+  - `<repo-root>/scripts/phase1/bridge_routes_models.py`
+  - `<repo-root>/scripts/phase1/bridge_routes_phase6_helpers.py`
+- Added dashboard support in:
+  - `<repo-root>/ui/daily-dashboard/src/api.js`
+  - `<repo-root>/ui/daily-dashboard/src/hooks/useJobs.js`
+  - `<repo-root>/ui/daily-dashboard/src/components/JobDetail.jsx`
+  - `<repo-root>/ui/daily-dashboard/src/components/TalkingPointsDraft.jsx`
+  - the role workspace can now trigger talking-point generation, show the generated prep notes immediately, and surface the persisted artifact metadata inside the packet flow
+- Added regression coverage in:
+  - `<repo-root>/tests/test_phase6_talking_points_drafter_pytest.py`
+  - `<repo-root>/tests/test_phase1_phase6_talking_points_flow_pytest.py`
+  - `<repo-root>/tests/test_bridge_api_contract.py`
+
+### Validation
+
+- Local validation:
+  - `./.venv/bin/python -m pytest -q tests/test_phase6_talking_points_drafter_pytest.py tests/test_phase1_phase6_talking_points_flow_pytest.py tests/test_bridge_api_contract.py -k "talking_points or openapi_schema_lists_canonical_paths_only"`
+  - `npm run build` (from `ui/daily-dashboard/`)
+
+### Results
+
+- The packet now has a real generated interview-prep artifact flow instead of relying only on checklist state or manually linked metadata for talking points.
+- Ops can now back both application packet work and prep work with generated artifacts inside the same workflow model.
+
+## 2026-03-18 - Resume bullets artifact flow added to the Application Ops packet
+
+### What was executed
+
+- Added a first-class resume-bullets generator in:
+  - `<repo-root>/scripts/phase6/resume_bullets_drafter.py`
+  - generates four tailored resume bullets from evaluated job context plus the active resume
+  - supports the same local/cloud runtime settings pattern as the other packet artifact flows
+  - optionally writes a packet artifact into the vault when write-back is enabled
+- Added a new collection-style API endpoint in:
+  - `<repo-root>/scripts/phase1/bridge_routes_phase6.py`
+  - `POST /v1/resume-bullets`
+  - persists the result back into workflow packet state and packet artifact metadata so a required packet item is now backed by real generated output
+- Added API models/examples and helper exports in:
+  - `<repo-root>/scripts/phase1/ingest_bridge_api.py`
+  - `<repo-root>/scripts/phase1/bridge_routes_models.py`
+  - `<repo-root>/scripts/phase1/bridge_routes_phase6_helpers.py`
+- Added dashboard support in:
+  - `<repo-root>/ui/daily-dashboard/src/api.js`
+  - `<repo-root>/ui/daily-dashboard/src/hooks/useJobs.js`
+  - `<repo-root>/ui/daily-dashboard/src/components/JobDetail.jsx`
+  - `<repo-root>/ui/daily-dashboard/src/components/ResumeBulletsDraft.jsx`
+  - the role workspace can now trigger resume-bullet generation, show the generated bullet set immediately, and surface the persisted artifact metadata inside the packet flow
+- Added regression coverage in:
+  - `<repo-root>/tests/test_phase6_resume_bullets_drafter_pytest.py`
+  - `<repo-root>/tests/test_phase1_phase6_resume_bullets_flow_pytest.py`
+  - `<repo-root>/tests/test_bridge_api_contract.py`
+
+### Validation
+
+- Local validation:
+  - `./.venv/bin/python -m pytest -q tests/test_phase6_resume_bullets_drafter_pytest.py tests/test_phase1_phase6_resume_bullets_flow_pytest.py tests/test_bridge_api_contract.py -k "resume_bullets or openapi_schema_lists_canonical_paths_only"`
+  - `npm run build` (from `ui/daily-dashboard/`)
+
+### Results
+
+- The packet now has a real generated flow for a required application component instead of relying on manual linkage for resume bullets.
+- Approval readiness can now benefit from artifact-backed truth across tailored summary, resume bullets, and cover letter draft together.
+
 ## 2026-03-18 - Outreach note artifact flow added to the Application Ops packet
 
 ### What was executed

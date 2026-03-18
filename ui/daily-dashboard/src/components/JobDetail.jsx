@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 
 import CoverLetterDraft from './CoverLetterDraft'
 import OutreachNoteDraft from './OutreachNoteDraft'
+import ResumeBulletsDraft from './ResumeBulletsDraft'
 import TailoredSummaryDraft from './TailoredSummaryDraft'
+import TalkingPointsDraft from './TalkingPointsDraft'
 import { recommendationUrl } from '../utils/recommendationLinks'
 
 function recommendationKey(item) {
@@ -228,16 +230,22 @@ export default function JobDetail({
   onSaveNotes,
   onGenerateDraft,
   onGenerateTailoredSummary,
+  onGenerateResumeBullets,
   onGenerateOutreachNote,
+  onGenerateTalkingPoints,
   onReevaluate,
   coverLetterState,
   tailoredSummaryState,
   outreachNoteState,
+  resumeBulletsState,
+  talkingPointsState,
 }) {
   const [notes, setNotes] = useState(job.notes || '')
   const persistedDraft = job?.workflow?.artifacts?.coverLetterDraft || null
   const persistedTailoredSummary = job?.workflow?.artifacts?.tailoredSummary || null
   const persistedOutreachNote = job?.workflow?.artifacts?.outreachNote || null
+  const persistedResumeBullets = job?.workflow?.artifacts?.resumeBullets || null
+  const persistedTalkingPoints = job?.workflow?.artifacts?.talkingPoints || null
 
   useEffect(() => {
     setNotes(job.notes || '')
@@ -313,8 +321,14 @@ export default function JobDetail({
             <button type="button" className="ghost-button detail-inline-action" onClick={() => onGenerateTailoredSummary(job.jobId)} disabled={busy}>
               Generate Tailored Summary
             </button>
+            <button type="button" className="ghost-button detail-inline-action" onClick={() => onGenerateResumeBullets(job.jobId)} disabled={busy}>
+              Generate Resume Bullets
+            </button>
             <button type="button" className="ghost-button detail-inline-action" onClick={() => onGenerateOutreachNote(job.jobId)} disabled={busy}>
               Generate Outreach Note
+            </button>
+            <button type="button" className="ghost-button detail-inline-action" onClick={() => onGenerateTalkingPoints(job.jobId)} disabled={busy}>
+              Generate Talking Points
             </button>
             <button type="button" className="accent-button detail-primary-action" onClick={() => onGenerateDraft(job.jobId)} disabled={busy}>
               Generate Cover Letter Draft
@@ -326,6 +340,26 @@ export default function JobDetail({
                 <p className="meta-text">
                   Updated {new Date(persistedTailoredSummary.updatedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                   {persistedTailoredSummary.vaultPath ? ` · ${persistedTailoredSummary.vaultPath}` : ''}
+                </p>
+              </div>
+            ) : null}
+            {persistedResumeBullets?.updatedAt ? (
+              <div className="detail-artifact-note">
+                <p className="section-label">Latest resume bullets artifact</p>
+                <p className="body-copy">{persistedResumeBullets.notes || 'Resume bullets artifact linked.'}</p>
+                <p className="meta-text">
+                  Updated {new Date(persistedResumeBullets.updatedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                  {persistedResumeBullets.vaultPath ? ` · ${persistedResumeBullets.vaultPath}` : ''}
+                </p>
+              </div>
+            ) : null}
+            {persistedTalkingPoints?.updatedAt ? (
+              <div className="detail-artifact-note">
+                <p className="section-label">Latest talking points artifact</p>
+                <p className="body-copy">{persistedTalkingPoints.notes || 'Talking points artifact linked.'}</p>
+                <p className="meta-text">
+                  Updated {new Date(persistedTalkingPoints.updatedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                  {persistedTalkingPoints.vaultPath ? ` · ${persistedTalkingPoints.vaultPath}` : ''}
                 </p>
               </div>
             ) : null}
@@ -364,6 +398,8 @@ export default function JobDetail({
       </div>
 
       <TailoredSummaryDraft state={tailoredSummaryState} visible={tailoredSummaryState.jobId === job.jobId} />
+      <ResumeBulletsDraft state={resumeBulletsState} visible={resumeBulletsState.jobId === job.jobId} />
+      <TalkingPointsDraft state={talkingPointsState} visible={talkingPointsState.jobId === job.jobId} />
       <OutreachNoteDraft state={outreachNoteState} visible={outreachNoteState.jobId === job.jobId} />
       <CoverLetterDraft state={coverLetterState} visible={coverLetterState.jobId === job.jobId} />
     </div>

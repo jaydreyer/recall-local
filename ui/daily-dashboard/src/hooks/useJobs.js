@@ -4,7 +4,9 @@ import {
   createCoverLetterDraft,
   createJobEvaluationRun,
   createOutreachNote,
+  createResumeBullets,
   createTailoredSummary,
+  createTalkingPoints,
   fetchJob,
   fetchJobGaps,
   fetchJobStats,
@@ -117,6 +119,18 @@ export function useJobs({ loadGaps = false } = {}) {
     loading: false,
     error: '',
     note: null,
+  })
+  const [resumeBulletsState, setResumeBulletsState] = useState({
+    jobId: '',
+    loading: false,
+    error: '',
+    bullets: null,
+  })
+  const [talkingPointsState, setTalkingPointsState] = useState({
+    jobId: '',
+    loading: false,
+    error: '',
+    talkingPoints: null,
   })
   const jobsLengthRef = useRef(jobs.length)
   const hasStatsRef = useRef(Boolean(stats))
@@ -434,6 +448,22 @@ export function useJobs({ loadGaps = false } = {}) {
     }
   }
 
+  async function generateResumeBullets(jobId) {
+    setResumeBulletsState({ jobId, loading: true, error: '', bullets: null })
+    try {
+      const payload = await createResumeBullets({ job_id: jobId, save_to_vault: false })
+      setResumeBulletsState({ jobId, loading: false, error: '', bullets: payload })
+      await loadJobsData({ background: true })
+    } catch (bulletsError) {
+      setResumeBulletsState({
+        jobId,
+        loading: false,
+        error: bulletsError.message || 'Resume bullet generation failed.',
+        bullets: null,
+      })
+    }
+  }
+
   async function generateOutreachNote(jobId) {
     setOutreachNoteState({ jobId, loading: true, error: '', note: null })
     try {
@@ -446,6 +476,22 @@ export function useJobs({ loadGaps = false } = {}) {
         loading: false,
         error: noteError.message || 'Outreach note generation failed.',
         note: null,
+      })
+    }
+  }
+
+  async function generateTalkingPoints(jobId) {
+    setTalkingPointsState({ jobId, loading: true, error: '', talkingPoints: null })
+    try {
+      const payload = await createTalkingPoints({ job_id: jobId, save_to_vault: false })
+      setTalkingPointsState({ jobId, loading: false, error: '', talkingPoints: payload })
+      await loadJobsData({ background: true })
+    } catch (pointsError) {
+      setTalkingPointsState({
+        jobId,
+        loading: false,
+        error: pointsError.message || 'Talking points generation failed.',
+        talkingPoints: null,
       })
     }
   }
@@ -476,6 +522,8 @@ export function useJobs({ loadGaps = false } = {}) {
     coverLetterState,
     tailoredSummaryState,
     outreachNoteState,
+    resumeBulletsState,
+    talkingPointsState,
     setSelectedJobId: selectJob,
     setFilter: updateFilter,
     refresh,
@@ -487,6 +535,8 @@ export function useJobs({ loadGaps = false } = {}) {
     reevaluateJob,
     generateDraft,
     generateTailoredSummary,
+    generateResumeBullets,
     generateOutreachNote,
+    generateTalkingPoints,
   }
 }

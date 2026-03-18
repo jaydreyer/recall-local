@@ -1426,6 +1426,116 @@ class BridgeApiContractTests(unittest.TestCase):
             },
         )
 
+    def test_phase6_resume_bullets_endpoint_returns_generated_bullets(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        fake_result = {
+            "resume_bullets_id": "resume_bullets_job-1",
+            "job_id": "job-1",
+            "provider": "ollama",
+            "model": "llama3.2:3b",
+            "generated_at": "2026-03-18T16:20:00+00:00",
+            "bullet_count": 4,
+            "word_count": 49,
+            "bullets": "- Built customer-facing AI rollout systems.\n- Led API adoption work with operators.\n- Turned technical requirements into delivery plans.\n- Partnered directly with stakeholders on implementation.",
+            "saved_to_vault": False,
+            "vault_path": None,
+        }
+        with patch("scripts.phase1.ingest_bridge_api.phase6_generate_resume_bullets", return_value=fake_result) as mocked, patch(
+            "scripts.phase1.ingest_bridge_api.phase6_update_job",
+            return_value={"jobId": "job-1"},
+        ) as update_mock:
+            with build_client(env) as client:
+                response = client.post(
+                    "/v1/resume-bullets",
+                    json={"job_id": "job-1", "save_to_vault": False, "settings": {"evaluation_model": "local"}},
+                )
+                invalid = client.post("/v1/resume-bullets", json={})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["workflow"], "workflow_06a_resume_bullets")
+        self.assertEqual(response.json()["job_id"], "job-1")
+        self.assertEqual(invalid.status_code, 400)
+        self.assertEqual(mocked.call_args.kwargs["job_id"], "job-1")
+        self.assertFalse(mocked.call_args.kwargs["save_to_vault"])
+        update_mock.assert_called_once_with(
+            job_id="job-1",
+            status=None,
+            applied=None,
+            dismissed=None,
+            notes=None,
+            workflow={
+                "packet": {"resumeBullets": True},
+                "artifacts": {
+                    "resumeBullets": {
+                        "status": "ready",
+                        "updatedAt": "2026-03-18T16:20:00+00:00",
+                        "source": "generated",
+                        "vaultPath": None,
+                        "notes": "- Built customer-facing AI rollout systems.\n- Led API adoption work with operators.\n- Turned technical requirements into delivery plans.\n- Partnered directly with stakeholders on implementation.",
+                    }
+                },
+            },
+        )
+
+    def test_phase6_talking_points_endpoint_returns_generated_points(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        fake_result = {
+            "talking_points_id": "talking_points_job-1",
+            "job_id": "job-1",
+            "provider": "ollama",
+            "model": "llama3.2:3b",
+            "generated_at": "2026-03-18T16:35:00+00:00",
+            "point_count": 5,
+            "word_count": 58,
+            "talking_points": "- Lead with customer-facing AI rollout work.\n- Emphasize API adoption and platform execution.\n- Show translation of technical complexity into clear plans.\n- Highlight cross-functional stakeholder partnership.\n- Connect delivery discipline to real operator outcomes.",
+            "saved_to_vault": False,
+            "vault_path": None,
+        }
+        with patch("scripts.phase1.ingest_bridge_api.phase6_generate_talking_points", return_value=fake_result) as mocked, patch(
+            "scripts.phase1.ingest_bridge_api.phase6_update_job",
+            return_value={"jobId": "job-1"},
+        ) as update_mock:
+            with build_client(env) as client:
+                response = client.post(
+                    "/v1/talking-points",
+                    json={"job_id": "job-1", "save_to_vault": False, "settings": {"evaluation_model": "local"}},
+                )
+                invalid = client.post("/v1/talking-points", json={})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["workflow"], "workflow_06a_talking_points")
+        self.assertEqual(response.json()["job_id"], "job-1")
+        self.assertEqual(invalid.status_code, 400)
+        self.assertEqual(mocked.call_args.kwargs["job_id"], "job-1")
+        self.assertFalse(mocked.call_args.kwargs["save_to_vault"])
+        update_mock.assert_called_once_with(
+            job_id="job-1",
+            status=None,
+            applied=None,
+            dismissed=None,
+            notes=None,
+            workflow={
+                "packet": {"talkingPoints": True},
+                "artifacts": {
+                    "talkingPoints": {
+                        "status": "ready",
+                        "updatedAt": "2026-03-18T16:35:00+00:00",
+                        "source": "generated",
+                        "vaultPath": None,
+                        "notes": "- Lead with customer-facing AI rollout work.\n- Emphasize API adoption and platform execution.\n- Show translation of technical complexity into clear plans.\n- Highlight cross-functional stakeholder partnership.\n- Connect delivery discipline to real operator outcomes.",
+                    }
+                },
+            },
+        )
+
     def test_phase6_resume_endpoint_accepts_markdown_payload(self) -> None:
         env = {
             "RECALL_API_KEY": "",

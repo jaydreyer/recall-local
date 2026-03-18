@@ -18,6 +18,8 @@ export default function JobHuntPanel({
   coverLetterState,
   tailoredSummaryState,
   outreachNoteState,
+  resumeBulletsState,
+  talkingPointsState,
   setSelectedJobId,
   setFilter,
   refresh,
@@ -27,7 +29,9 @@ export default function JobHuntPanel({
   reevaluateJob,
   generateDraft,
   generateTailoredSummary,
+  generateResumeBullets,
   generateOutreachNote,
+  generateTalkingPoints,
 }) {
   const [expandedJobId, setExpandedJobId] = useState('')
   const deferredJobs = useDeferredValue(jobs)
@@ -88,11 +92,15 @@ export default function JobHuntPanel({
                 onSaveNotes={saveNotes}
                 onGenerateDraft={generateDraft}
                 onGenerateTailoredSummary={generateTailoredSummary}
+                onGenerateResumeBullets={generateResumeBullets}
                 onGenerateOutreachNote={generateOutreachNote}
+                onGenerateTalkingPoints={generateTalkingPoints}
                 onReevaluate={reevaluateJob}
                 coverLetterState={coverLetterState}
                 tailoredSummaryState={tailoredSummaryState}
                 outreachNoteState={outreachNoteState}
+                resumeBulletsState={resumeBulletsState}
+                talkingPointsState={talkingPointsState}
               />
             ))}
           </div>
