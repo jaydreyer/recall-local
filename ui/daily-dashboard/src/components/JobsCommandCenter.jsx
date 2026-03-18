@@ -1,9 +1,10 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 
 import CompanyLogo from './CompanyLogo'
 import JobDetail from './JobDetail'
 import StateNotice from './StateNotice'
 import { summarizeAngle, summarizeTopGap, summarizeTopMatch } from '../utils/jobSummary'
+import { deriveWorkflow } from '../utils/workflowDemo'
 
 const LANE_COPY = {
   focus: 'Best-fit evaluated roles ready for outreach or drafting.',
@@ -232,11 +233,61 @@ function QueueCard({ job, selected, onSelect }) {
   )
 }
 
-export default function JobsCommandCenter({ jobsState, settings, onOpenSettings, onOpenCompany }) {
+function DetailDrawer({ open, job, jobsState, loading, onClose, onOpenOps }) {
+  if (!open) {
+    return null
+  }
+
+  const workflow = job ? deriveWorkflow(job, jobsState.coverLetterState) : null
+
+  return (
+    <div className="detail-drawer-shell" role="dialog" aria-modal="true" aria-label="Role dossier">
+      <button type="button" className="detail-drawer-backdrop" aria-label="Close dossier" onClick={onClose} />
+      <aside className="detail-drawer-panel">
+        <div className="panel-heading compact">
+          <div>
+            <p className="section-label">Role dossier</p>
+            <h3 className="card-title">{job ? job.title : 'Select a role'}</h3>
+          </div>
+          <button type="button" className="ghost-button detail-close-button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <div className="section-rule" />
+        {job && workflow && (
+          <div className="detail-drawer-meta">
+            <span className="meta-chip">{job.company}</span>
+            <span className="meta-chip">{workflow.stateLabel}</span>
+            <span className="meta-chip">{workflow.nextActionLabel}</span>
+            <button type="button" className="text-button accent" onClick={() => onOpenOps(job.jobId)}>
+              Open in Ops
+            </button>
+          </div>
+        )}
+        {loading && <p className="section-message">Loading role detail...</p>}
+        {!loading && job && (
+          <JobDetail
+            job={job}
+            busy={jobsState.actionJobId === job.jobId}
+            onMarkApplied={jobsState.markApplied}
+            onDismiss={jobsState.dismissJob}
+            onSaveNotes={jobsState.saveNotes}
+            onGenerateDraft={jobsState.generateDraft}
+            onReevaluate={jobsState.reevaluateJob}
+            coverLetterState={jobsState.coverLetterState}
+          />
+        )}
+        {!loading && !job && <p className="section-message">Select a role to load its dossier.</p>}
+      </aside>
+    </div>
+  )
+}
+
+export default function JobsCommandCenter({ jobsState, settings, onOpenSettings, onOpenCompany, onOpenOps }) {
   const [activeLane, setActiveLane] = useState('focus')
   const [search, setSearch] = useState('')
+  const [detailOpen, setDetailOpen] = useState(false)
   const deferredSearch = useDeferredValue(search)
-  const detailPanelRef = useRef(null)
   const jobs = Array.isArray(jobsState.jobs) ? jobsState.jobs : []
   const query = deferredSearch.trim().toLowerCase()
 
@@ -250,25 +301,21 @@ export default function JobsCommandCenter({ jobsState, settings, onOpenSettings,
     [jobs]
   )
 
-  const visibleJobs = useMemo(() => {
-    const base = laneJobs(jobs, activeLane)
-    return base.slice(0, 24)
-  }, [activeLane, jobs])
+  const visibleJobs = useMemo(() => laneJobs(jobs, activeLane).slice(0, 24), [activeLane, jobs])
 
   const selectedJob = jobsState.selectedJob
   const isInitialLoad = jobsState.loading && jobs.length === 0 && !jobsState.lastLoadedAt
   const isRefreshing = jobsState.loading && !isInitialLoad
   const selectedVisible = selectedJob && visibleJobs.some((job) => job.jobId === selectedJob.jobId)
   const heroJob = selectedVisible ? selectedJob : visibleJobs[0] || jobs[0] || null
+  const heroWorkflow = heroJob ? deriveWorkflow(heroJob, jobsState.coverLetterState) : null
 
   const companyPulse = useMemo(() => aggregateCompanies(jobs), [jobs])
   const appliedCount = jobs.filter((job) => effectiveStatus(job) === 'applied').length
 
   function openDossier(jobId) {
     jobsState.setSelectedJobId(jobId)
-    window.setTimeout(() => {
-      detailPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }, 40)
+    setDetailOpen(true)
   }
 
   useEffect(() => {
@@ -413,244 +460,218 @@ export default function JobsCommandCenter({ jobsState, settings, onOpenSettings,
         </div>
       </div>
 
-      <div className="operator-layout">
-        <div className="operator-main">
-          {isInitialLoad ? (
-            <section className="spotlight-card skeleton-card">
-              <div className="spotlight-brand-row">
-                <div className="spotlight-brand">
-                  <span className="company-logo large skeleton-line square" />
-                  <div className="skeleton-stack">
-                    <span className="skeleton-line short" />
-                    <span className="skeleton-line long title" />
-                    <span className="skeleton-line medium" />
+      <div className="overview-stack">
+        {isInitialLoad ? (
+          <section className="spotlight-card skeleton-card">
+            <div className="spotlight-brand-row">
+              <div className="spotlight-brand">
+                <span className="company-logo large skeleton-line square" />
+                <div className="skeleton-stack">
+                  <span className="skeleton-line short" />
+                  <span className="skeleton-line long title" />
+                  <span className="skeleton-line medium" />
+                </div>
+              </div>
+              <div className="spotlight-score-block">
+                <span className="mini-label">Fit score</span>
+                <span className="spotlight-score skeleton-line value" />
+              </div>
+            </div>
+            <div className="spotlight-insights">
+              <div className="spotlight-insight skeleton-stack">
+                <span className="mini-label">Top match</span>
+                <span className="skeleton-line medium" />
+                <span className="skeleton-line short" />
+              </div>
+              <div className="spotlight-insight skeleton-stack">
+                <span className="mini-label">Biggest gap</span>
+                <span className="skeleton-line medium" />
+                <span className="skeleton-line short" />
+              </div>
+              <div className="spotlight-insight skeleton-stack">
+                <span className="mini-label">Angle</span>
+                <span className="skeleton-line long" />
+                <span className="skeleton-line medium" />
+              </div>
+            </div>
+          </section>
+        ) : heroJob ? (
+          <section className="spotlight-card">
+            <div className="spotlight-brand-row">
+              <div className="spotlight-brand">
+                <CompanyLogo company={{ company_name: heroJob.company, company_id: heroJob.company_id || heroJob.company_normalized }} className="company-logo large" />
+                <div>
+                  <button
+                    type="button"
+                    className="meta-link"
+                    onClick={() => onOpenCompany(heroJob.company_id || heroJob.company_normalized)}
+                  >
+                    {heroJob.company}
+                  </button>
+                  <h3 className="spotlight-title">{heroJob.title}</h3>
+                  <div className="spotlight-meta-row">
+                    <span>{heroJob.location || 'Unknown location'}</span>
+                    <span>{heroJob.source || 'Unknown source'}</span>
+                    <span>{heroWorkflow?.stateLabel || 'Queued'}</span>
+                    <span>{compactRelativeTime(heroJob.evaluated_at || heroJob.discovered_at || heroJob.date_posted)}</span>
                   </div>
                 </div>
-                <div className="spotlight-score-block">
-                  <span className="mini-label">Fit score</span>
-                  <span className="spotlight-score skeleton-line value" />
-                </div>
-              </div>
-              <div className="spotlight-insights">
-                <div className="spotlight-insight skeleton-stack">
-                  <span className="mini-label">Top match</span>
-                  <span className="skeleton-line medium" />
-                  <span className="skeleton-line short" />
-                </div>
-                <div className="spotlight-insight skeleton-stack">
-                  <span className="mini-label">Biggest gap</span>
-                  <span className="skeleton-line medium" />
-                  <span className="skeleton-line short" />
-                </div>
-                <div className="spotlight-insight skeleton-stack">
-                  <span className="mini-label">Angle</span>
-                  <span className="skeleton-line long" />
-                  <span className="skeleton-line medium" />
-                </div>
-              </div>
-            </section>
-          ) : heroJob ? (
-            <section className="spotlight-card">
-              <div className="spotlight-brand-row">
-                <div className="spotlight-brand">
-                  <CompanyLogo company={{ company_name: heroJob.company, company_id: heroJob.company_id || heroJob.company_normalized }} className="company-logo large" />
-                  <div>
-                    <button
-                      type="button"
-                      className="meta-link"
-                      onClick={() => onOpenCompany(heroJob.company_id || heroJob.company_normalized)}
-                    >
-                      {heroJob.company}
-                    </button>
-                    <h3 className="spotlight-title">{heroJob.title}</h3>
-                    <div className="spotlight-meta-row">
-                      <span>{heroJob.location || 'Unknown location'}</span>
-                      <span>{heroJob.source || 'Unknown source'}</span>
-                      <span>T{heroJob.company_tier || 3}</span>
-                      <span>{compactRelativeTime(heroJob.evaluated_at || heroJob.discovered_at || heroJob.date_posted)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="spotlight-score-block">
-                  <span className="mini-label">Fit score</span>
-                  <strong className={`spotlight-score ${scoreTone(heroJob.fit_score || 0)}`}>{scoreLabel(heroJob)}</strong>
-                </div>
               </div>
 
-              <div className="spotlight-insights">
-                <div className="spotlight-insight">
-                  <span className="mini-label">Top match</span>
-                  <p>{summarizeTopMatch(heroJob, { maxLength: 112 })}</p>
-                </div>
-                <div className="spotlight-insight">
-                  <span className="mini-label">Biggest gap</span>
-                  <p>{summarizeTopGap(heroJob, { maxLength: 112 })}</p>
-                </div>
-                <div className="spotlight-insight">
-                  <span className="mini-label">Angle</span>
-                  <p>{queueHeadline(heroJob)}</p>
-                </div>
+              <div className="spotlight-score-block">
+                <span className="mini-label">Fit score</span>
+                <strong className={`spotlight-score ${scoreTone(heroJob.fit_score || 0)}`}>{scoreLabel(heroJob)}</strong>
               </div>
+            </div>
 
-              <div className="spotlight-actions">
-                <button type="button" className="mission-primary-button inline" onClick={() => openDossier(heroJob.jobId)}>
-                  Open dossier
-                </button>
-                <button
-                  type="button"
-                  className="ghost-button"
-                  onClick={() => jobsState.reevaluateJob(heroJob.jobId)}
-                  disabled={jobsState.actionJobId === heroJob.jobId}
-                >
-                  {(heroJob.fit_score ?? -1) >= 0 ? 'Re-evaluate' : 'Evaluate role'}
-                </button>
-                <button
-                  type="button"
-                  className="ghost-button"
-                  onClick={() => jobsState.generateDraft(heroJob.jobId)}
-                  disabled={jobsState.actionJobId === heroJob.jobId || (heroJob.fit_score ?? -1) < 0}
-                >
-                  Draft cover letter
-                </button>
-                {heroJob.url && (
-                  <a className="text-button accent" href={heroJob.url} target="_blank" rel="noreferrer">
-                    Open posting
-                  </a>
-                )}
+            <div className="spotlight-insights">
+              <div className="spotlight-insight">
+                <span className="mini-label">Top match</span>
+                <p>{summarizeTopMatch(heroJob, { maxLength: 112 })}</p>
               </div>
-            </section>
-          ) : (
-            <section className="panel-section">
+              <div className="spotlight-insight">
+                <span className="mini-label">Biggest gap</span>
+                <p>{summarizeTopGap(heroJob, { maxLength: 112 })}</p>
+              </div>
+              <div className="spotlight-insight">
+                <span className="mini-label">Next best action</span>
+                <p>{heroWorkflow?.nextActionLabel || queueHeadline(heroJob)}</p>
+              </div>
+            </div>
+
+            <div className="spotlight-actions">
+              <button type="button" className="mission-primary-button inline" onClick={() => openDossier(heroJob.jobId)}>
+                Open dossier
+              </button>
+              <button type="button" className="ghost-button" onClick={() => onOpenOps(heroJob.jobId)}>
+                Open in Ops
+              </button>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => jobsState.generateDraft(heroJob.jobId)}
+                disabled={jobsState.actionJobId === heroJob.jobId || (heroJob.fit_score ?? -1) < 0}
+              >
+                Draft cover letter
+              </button>
+              {heroJob.url && (
+                <a className="text-button accent" href={heroJob.url} target="_blank" rel="noreferrer">
+                  Open posting
+                </a>
+              )}
+            </div>
+          </section>
+        ) : (
+          <section className="panel-section">
+            <StateNotice
+              title="No roles are on the board yet"
+              body="Try refreshing the board. If this persists, the bridge may still be warming caches or the current filters may be too narrow."
+              actionLabel="Refresh data"
+              onAction={jobsState.refresh}
+            />
+          </section>
+        )}
+
+        <div className="operator-subgrid">
+          <section className="queue-panel">
+            <div className="panel-heading compact">
+              <div>
+                <p className="section-label">{activeLane} lane</p>
+                <h3 className="card-title">{visibleJobs.length} visible roles</h3>
+              </div>
+              <span className="meta-text">{LANE_COPY[activeLane]}</span>
+            </div>
+            <div className="section-rule" />
+            {jobsState.error && visibleJobs.length > 0 && (
               <StateNotice
-                title="No roles are on the board yet"
-                body="Try refreshing the board. If this persists, the bridge may still be warming caches or the current filters may be too narrow."
-                actionLabel="Refresh data"
+                tone="warning"
+                compact
+                title="Working from the last good board snapshot"
+                body={jobsState.error}
+                actionLabel="Retry now"
                 onAction={jobsState.refresh}
               />
-            </section>
-          )}
-
-          <div className="operator-subgrid">
-            <section className="queue-panel">
-              <div className="panel-heading compact">
-                <div>
-                  <p className="section-label">{activeLane} lane</p>
-                  <h3 className="card-title">{visibleJobs.length} visible roles</h3>
-                </div>
-                <span className="meta-text">{LANE_COPY[activeLane]}</span>
-              </div>
-              <div className="section-rule" />
-              {jobsState.error && visibleJobs.length > 0 && (
-                <StateNotice
-                  tone="warning"
-                  compact
-                  title="Working from the last good board snapshot"
-                  body={jobsState.error}
-                  actionLabel="Retry now"
-                  onAction={jobsState.refresh}
-                />
-              )}
-              {isRefreshing && <p className="section-message">Refreshing jobs while keeping the current board in view…</p>}
-              {isInitialLoad && (
-                <p className="section-message">Loading the first live set of roles from the bridge…</p>
-              )}
-              {!jobsState.loading && visibleJobs.length === 0 && (
-                <StateNotice
-                  compact
-                  title={jobs.length === 0 ? 'No roles loaded yet' : 'No roles matched this lane'}
-                  body={
-                    jobs.length === 0
-                      ? 'The board does not have any visible roles yet. Refresh to try the live bridge again.'
-                      : 'Try another lane, clear the search box, or broaden the source and score filters.'
-                  }
-                  actionLabel={jobs.length === 0 ? 'Refresh data' : 'Show all scores'}
-                  onAction={jobs.length === 0 ? jobsState.refresh : () => jobsState.setFilter('scoreRange', 'all')}
-                />
-              )}
-              <div className="queue-list">
-                {isInitialLoad
-                  ? Array.from({ length: 4 }, (_, index) => <QueueSkeletonCard key={`queue-skeleton-${index}`} />)
-                  : visibleJobs.map((job) => (
-                      <QueueCard
-                        key={job.jobId}
-                        job={job}
-                        selected={heroJob?.jobId === job.jobId}
-                        onSelect={jobsState.setSelectedJobId}
-                      />
-                    ))}
-              </div>
-            </section>
-
-            <section className="company-pulse-panel">
-              <div className="panel-heading compact">
-                <div>
-                  <p className="section-label">Company pulse</p>
-                  <h3 className="card-title">Where the board is hottest</h3>
-                </div>
-              </div>
-              <div className="section-rule" />
-              <div className="company-pulse-list">
-                {isInitialLoad
-                  ? Array.from({ length: 4 }, (_, index) => (
-                      <div key={`pulse-skeleton-${index}`} className="company-pulse-card skeleton-card" aria-hidden="true">
-                        <span className="company-logo small skeleton-line square" />
-                        <div className="skeleton-stack">
-                          <span className="skeleton-line short" />
-                          <span className="skeleton-line medium" />
-                        </div>
-                      </div>
-                    ))
-                  : companyPulse.map((company) => (
-                      <button key={company.company_id} type="button" className="company-pulse-card" onClick={() => onOpenCompany(company.company_id)}>
-                        <CompanyLogo company={company} className="company-logo small" />
-                        <div>
-                          <strong>{company.company_name}</strong>
-                          <span>{company.job_count} roles · best {company.best_score > -1 ? company.best_score : 'n/a'}</span>
-                        </div>
-                      </button>
-                    ))}
-                {!isInitialLoad && companyPulse.length === 0 && (
-                  <StateNotice
-                    compact
-                    title="Company pulse is waiting on more roles"
-                    body="This panel fills in once the current board has enough matching roles to surface company heat."
-                  />
-                )}
-              </div>
-            </section>
-          </div>
-        </div>
-
-        <aside ref={detailPanelRef} className="operator-detail-panel">
-          <div className="panel-heading compact">
-            <div>
-              <p className="section-label">Role dossier</p>
-              <h3 className="card-title">{jobsState.selectedJob ? jobsState.selectedJob.title : 'Select a role'}</h3>
+            )}
+            {isRefreshing && <p className="section-message">Refreshing jobs while keeping the current board in view…</p>}
+            {isInitialLoad && <p className="section-message">Loading the first live set of roles from the bridge…</p>}
+            {!jobsState.loading && visibleJobs.length === 0 && (
+              <StateNotice
+                compact
+                title={jobs.length === 0 ? 'No roles loaded yet' : 'No roles matched this lane'}
+                body={
+                  jobs.length === 0
+                    ? 'The board does not have any visible roles yet. Refresh to try the live bridge again.'
+                    : 'Try another lane, clear the search box, or broaden the source and score filters.'
+                }
+                actionLabel={jobs.length === 0 ? 'Refresh data' : 'Show all scores'}
+                onAction={jobs.length === 0 ? jobsState.refresh : () => jobsState.setFilter('scoreRange', 'all')}
+              />
+            )}
+            <div className="queue-list">
+              {isInitialLoad
+                ? Array.from({ length: 4 }, (_, index) => <QueueSkeletonCard key={`queue-skeleton-${index}`} />)
+                : visibleJobs.map((job) => (
+                    <QueueCard
+                      key={job.jobId}
+                      job={job}
+                      selected={heroJob?.jobId === job.jobId}
+                      onSelect={openDossier}
+                    />
+                  ))}
             </div>
-            <span className="meta-text">
-              {jobsState.selectedJob ? `${jobsState.selectedJob.company} · ${scoreLabel(jobsState.selectedJob)}` : 'Waiting for selection'}
-            </span>
-          </div>
-          <div className="section-rule" />
-          {(isInitialLoad || jobsState.detailLoading) && <p className="section-message">{isInitialLoad ? 'Preparing the first dossier…' : 'Loading role detail...'}</p>}
-          {!jobsState.detailLoading && jobsState.selectedJob && (
-            <JobDetail
-              job={jobsState.selectedJob}
-              busy={jobsState.actionJobId === jobsState.selectedJob.jobId}
-              onMarkApplied={jobsState.markApplied}
-              onDismiss={jobsState.dismissJob}
-              onSaveNotes={jobsState.saveNotes}
-              onGenerateDraft={jobsState.generateDraft}
-              onReevaluate={jobsState.reevaluateJob}
-              coverLetterState={jobsState.coverLetterState}
-            />
-          )}
-          {!isInitialLoad && !jobsState.detailLoading && !jobsState.selectedJob && (
-            <p className="section-message">Select a role to load its dossier.</p>
-          )}
-        </aside>
+          </section>
+
+          <section className="company-pulse-panel">
+            <div className="panel-heading compact">
+              <div>
+                <p className="section-label">Company pulse</p>
+                <h3 className="card-title">Where the board is hottest</h3>
+              </div>
+            </div>
+            <div className="section-rule" />
+            <div className="company-pulse-list">
+              {isInitialLoad
+                ? Array.from({ length: 4 }, (_, index) => (
+                    <div key={`pulse-skeleton-${index}`} className="company-pulse-card skeleton-card" aria-hidden="true">
+                      <span className="company-logo small skeleton-line square" />
+                      <div className="skeleton-stack">
+                        <span className="skeleton-line short" />
+                        <span className="skeleton-line medium" />
+                      </div>
+                    </div>
+                  ))
+                : companyPulse.map((company) => (
+                    <button key={company.company_id} type="button" className="company-pulse-card" onClick={() => onOpenCompany(company.company_id)}>
+                      <CompanyLogo company={company} className="company-logo small" />
+                      <div>
+                        <strong>{company.company_name}</strong>
+                        <span>{company.job_count} roles · best {company.best_score > -1 ? company.best_score : 'n/a'}</span>
+                      </div>
+                    </button>
+                  ))}
+              {!isInitialLoad && companyPulse.length === 0 && (
+                <StateNotice
+                  compact
+                  title="Company pulse is waiting on more roles"
+                  body="This panel fills in once the current board has enough matching roles to surface company heat."
+                />
+              )}
+            </div>
+          </section>
+        </div>
       </div>
+
+      <DetailDrawer
+        open={detailOpen}
+        job={jobsState.selectedJob}
+        jobsState={jobsState}
+        loading={jobsState.detailLoading}
+        onClose={() => setDetailOpen(false)}
+        onOpenOps={(jobId) => {
+          setDetailOpen(false)
+          onOpenOps(jobId)
+        }}
+      />
     </section>
   )
 }

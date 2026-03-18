@@ -285,27 +285,27 @@ export default function JobDetail({
             />
           </div>
 
-          <div className="detail-actions">
-            <button type="button" className="text-button accent" onClick={() => onMarkApplied(job.jobId)} disabled={busy}>
+          <div className="detail-actions detail-actions-grid">
+            <button type="button" className="text-button accent detail-inline-action" onClick={() => onMarkApplied(job.jobId)} disabled={busy}>
               Mark Applied
             </button>
-            <button type="button" className="ghost-button" onClick={() => onDismiss(job.jobId)} disabled={busy}>
+            <button type="button" className="ghost-button detail-inline-action" onClick={() => onDismiss(job.jobId)} disabled={busy}>
               Dismiss
             </button>
-            <button type="button" className="ghost-button" onClick={() => onSaveNotes(job.jobId, notes)} disabled={busy}>
+            <button type="button" className="ghost-button detail-inline-action" onClick={() => onSaveNotes(job.jobId, notes)} disabled={busy}>
               Save Notes
             </button>
-            <button type="button" className="ghost-button" onClick={() => onReevaluate(job.jobId)} disabled={busy}>
+            <button type="button" className="ghost-button detail-inline-action" onClick={() => onReevaluate(job.jobId)} disabled={busy}>
               Re-evaluate
             </button>
           </div>
 
-          <div className="detail-actions">
-            <button type="button" className="accent-button" onClick={() => onGenerateDraft(job.jobId)} disabled={busy}>
+          <div className="detail-actions detail-actions-stack">
+            <button type="button" className="accent-button detail-primary-action" onClick={() => onGenerateDraft(job.jobId)} disabled={busy}>
               Generate Cover Letter Draft
             </button>
             {job.url && (
-              <a className="text-button" href={job.url} target="_blank" rel="noreferrer">
+              <a className="text-button detail-inline-action" href={job.url} target="_blank" rel="noreferrer">
                 Open posting
               </a>
             )}
