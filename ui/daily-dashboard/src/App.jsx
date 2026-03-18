@@ -15,6 +15,9 @@ import { useSettings } from './hooks/useSettings'
 const TAB_KEYS = ['Jobs', 'Companies', 'Skill Gaps']
 const VIEW_KEYS = ['Overview', 'Ops']
 const ACTIVE_TAB_STORAGE_KEY = 'daily-dashboard-active-tab-v1'
+const OPS_LANES = ['focus', 'review', 'follow_up', 'monitor', 'closed']
+const OPS_FILTERS = ['all', 'needs_approval', 'packet_in_progress', 'ready_to_apply', 'follow_up_due']
+const OPS_SORTS = ['readiness', 'fit', 'updated', 'follow_up_due']
 
 function companionAppUrl(port) {
   if (typeof window === 'undefined') {
@@ -63,14 +66,20 @@ function parseLocationState() {
   const params = new URLSearchParams(window.location.search)
   const requestedView = String(params.get('view') || 'overview').trim().toLowerCase()
   const requestedTab = String(params.get('tab') || '').trim()
+  const requestedLane = String(params.get('opsLane') || '').trim()
+  const requestedFilter = String(params.get('opsFilter') || '').trim()
+  const requestedSort = String(params.get('opsSort') || '').trim()
   return {
     view: requestedView === 'ops' ? 'Ops' : 'Overview',
     tab: TAB_KEYS.includes(requestedTab) ? requestedTab : 'Jobs',
     jobId: String(params.get('jobId') || '').trim(),
+    opsLane: OPS_LANES.includes(requestedLane) ? requestedLane : 'focus',
+    opsFilter: OPS_FILTERS.includes(requestedFilter) ? requestedFilter : 'all',
+    opsSort: OPS_SORTS.includes(requestedSort) ? requestedSort : 'readiness',
   }
 }
 
-function syncLocationState({ view, tab, jobId }) {
+function syncLocationState({ view, tab, jobId, opsLane, opsFilter, opsSort }) {
   if (typeof window === 'undefined') {
     return
   }
@@ -85,6 +94,27 @@ function syncLocationState({ view, tab, jobId }) {
     params.set('jobId', jobId)
   } else {
     params.delete('jobId')
+  }
+  if (String(view || 'Overview') === 'Ops') {
+    if (opsLane && opsLane !== 'focus') {
+      params.set('opsLane', opsLane)
+    } else {
+      params.delete('opsLane')
+    }
+    if (opsFilter && opsFilter !== 'all') {
+      params.set('opsFilter', opsFilter)
+    } else {
+      params.delete('opsFilter')
+    }
+    if (opsSort && opsSort !== 'readiness') {
+      params.set('opsSort', opsSort)
+    } else {
+      params.delete('opsSort')
+    }
+  } else {
+    params.delete('opsLane')
+    params.delete('opsFilter')
+    params.delete('opsSort')
   }
   const next = `${window.location.pathname}?${params.toString()}`
   window.history.replaceState({}, '', next)
@@ -103,6 +133,9 @@ export default function App() {
     const stored = String(window.localStorage.getItem(ACTIVE_TAB_STORAGE_KEY) || '').trim()
     return TAB_KEYS.includes(stored) ? stored : 'Jobs'
   })
+  const [opsLane, setOpsLane] = useState(locationState.opsLane)
+  const [opsFilter, setOpsFilter] = useState(locationState.opsFilter)
+  const [opsSort, setOpsSort] = useState(locationState.opsSort)
   const [now, setNow] = useState(new Date())
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [addCompanyOpen, setAddCompanyOpen] = useState(false)
@@ -124,8 +157,15 @@ export default function App() {
   }, [activeTab])
 
   useEffect(() => {
-    syncLocationState({ view: activeView, tab: activeTab, jobId: jobsState.selectedJobId })
-  }, [activeView, activeTab, jobsState.selectedJobId])
+    syncLocationState({
+      view: activeView,
+      tab: activeTab,
+      jobId: jobsState.selectedJobId,
+      opsLane,
+      opsFilter,
+      opsSort,
+    })
+  }, [activeView, activeTab, jobsState.selectedJobId, opsLane, opsFilter, opsSort])
 
   useEffect(() => {
     if (locationState.jobId && locationState.jobId !== jobsState.selectedJobId) {
@@ -142,6 +182,9 @@ export default function App() {
       const next = parseLocationState()
       setActiveView(next.view)
       setActiveTab(next.tab)
+      setOpsLane(next.opsLane)
+      setOpsFilter(next.opsFilter)
+      setOpsSort(next.opsSort)
       if (next.jobId) {
         jobsState.setSelectedJobId(next.jobId)
       }
@@ -359,6 +402,12 @@ export default function App() {
       {activeView === 'Ops' && (
         <OpsWorkspace
           jobsState={jobsState}
+          lane={opsLane}
+          onLaneChange={setOpsLane}
+          queueFilter={opsFilter}
+          onQueueFilterChange={setOpsFilter}
+          queueSort={opsSort}
+          onQueueSortChange={setOpsSort}
           onBackToOverview={() => setActiveView('Overview')}
         />
       )}

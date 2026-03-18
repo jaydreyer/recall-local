@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 
 import CompanyLogo from './CompanyLogo'
 import JobDetail from './JobDetail'
@@ -409,10 +409,16 @@ function WorkflowRail({
   )
 }
 
-export default function OpsWorkspace({ jobsState, onBackToOverview }) {
-  const [lane, setLane] = useState('focus')
-  const [queueFilter, setQueueFilter] = useState('all')
-  const [queueSort, setQueueSort] = useState('readiness')
+export default function OpsWorkspace({
+  jobsState,
+  lane,
+  onLaneChange,
+  queueFilter,
+  onQueueFilterChange,
+  queueSort,
+  onQueueSortChange,
+  onBackToOverview,
+}) {
   const jobs = Array.isArray(jobsState.jobs) ? jobsState.jobs : []
   const demoJob = useMemo(() => preferredDemoJob(jobs), [jobs])
   const laneCounts = useMemo(
@@ -526,21 +532,21 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
     }
 
     if (selectedJob && selectedLane !== lane) {
-      setLane(selectedLane)
+      onLaneChange(selectedLane)
       return
     }
 
     if (!selectedJob && laneCounts[lane] === 0) {
-      setLane(firstAvailableLane(laneCounts))
+      onLaneChange(firstAvailableLane(laneCounts))
     }
-  }, [jobs.length, lane, laneCounts, selectedJob, selectedLane])
+  }, [jobs.length, lane, laneCounts, onLaneChange, selectedJob, selectedLane])
 
   useEffect(() => {
     if (filteredJobs.length > 0) {
       return
     }
-    setQueueFilter('all')
-  }, [filteredJobs.length, lane])
+    onQueueFilterChange('all')
+  }, [filteredJobs.length, lane, onQueueFilterChange])
 
   return (
     <section className="ops-workspace reveal reveal-delay-3">
@@ -566,12 +572,12 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
             key={key}
             type="button"
             className={queueFilter === key ? 'ops-summary-card active' : 'ops-summary-card'}
-            onClick={() => {
-              if (queueFilter === key) {
-                setQueueFilter('all')
+              onClick={() => {
+                if (queueFilter === key) {
+                onQueueFilterChange('all')
                 return
               }
-              setQueueFilter(key)
+              onQueueFilterChange(key)
             }}
           >
             <span className="mini-label">{QUEUE_FILTERS[key]}</span>
@@ -596,7 +602,7 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
                 key={key}
                 type="button"
                 className={lane === key ? 'lane-button active' : 'lane-button'}
-                onClick={() => setLane(key)}
+                onClick={() => onLaneChange(key)}
               >
                 <span>{label}</span>
                 <strong>{laneCounts[key]}</strong>
@@ -609,7 +615,7 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
                 key={key}
                 type="button"
                 className={queueFilter === key ? 'queue-filter-chip active' : 'queue-filter-chip'}
-                onClick={() => setQueueFilter(key)}
+                onClick={() => onQueueFilterChange(key)}
               >
                 {label}
               </button>
@@ -623,7 +629,7 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
                   key={key}
                   type="button"
                   className={queueSort === key ? 'queue-filter-chip active' : 'queue-filter-chip'}
-                  onClick={() => setQueueSort(key)}
+                  onClick={() => onQueueSortChange(key)}
                 >
                   {label}
                 </button>
