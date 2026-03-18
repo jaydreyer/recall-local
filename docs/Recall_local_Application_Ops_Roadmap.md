@@ -43,6 +43,9 @@ The live app now includes:
 - persisted workflow state on jobs
 - persisted workflow stages driving Ops lanes
 - packet checklist and approval state persisted through the backend
+- packet artifact metadata now persists for cover letter drafts and operator-linked packet deliverables
+- persisted next-action recommendations now include action, rationale, confidence, and due date
+- persisted follow-up metadata now supports due dates and completion tracking
 - workflow timeline support
 - summary strip for high-attention work
 - queue filters
@@ -75,22 +78,23 @@ What is still off from the original docs:
 
 #### 2. Next-best action engine
 
-Status: `partial`
+Status: `mostly done for v1, partial for deeper copilot logic`
 
 What is done:
 
 - next action is visible in the product
 - action framing exists in Ops and supports the demo story
+- persisted `nextAction` now stores action, rationale, confidence, and due date
+- Ops can sync the recommendation into durable workflow state
 
 What is still missing:
 
-- persisted `next_action`, rationale, confidence, and due date are not yet fully realized as first-class backend-backed workflow fields
 - action selection is still simpler than the PRD's intended copilot logic
 - recalculation behavior is not yet a fully formalized workflow service
 
 #### 3. Blocker detection
 
-Status: `partial`
+Status: `partial to mostly done`
 
 What is done:
 
@@ -128,11 +132,13 @@ What is done:
 - packet concept exists in the product
 - packet checklist state exists and persists
 - cover letter generation is already part of the broader Recall.local product story
+- cover letter draft status is now linked to persisted artifact metadata
+- non-cover-letter packet items can now carry persisted linked-artifact metadata from Ops
 
 What is still missing:
 
-- packet state is not yet deeply linked to real saved/generated artifacts
-- packet readiness still needs stronger artifact truth behind it
+- packet state is still lighter than a full artifact-backed packet system
+- resume tailoring, outreach, and prep outputs do not yet have dedicated generators/services
 - a more explicit packet schema and packet API surface may still be warranted
 
 #### 6. Approval workflow
@@ -153,17 +159,17 @@ What is still missing:
 
 #### 7. Follow-up automation
 
-Status: `not done / early partial`
+Status: `partial`
 
 What is done:
 
 - follow-up exists as a workflow concept and lane direction
 - applied roles can be framed as moving into follow-up work
+- persisted follow-up due dates and completion state now exist
+- Ops now has a real `Follow-up due` filter/summary and follow-up controls
 
 What is still missing:
 
-- follow-up due dates
-- persisted follow-up task metadata
 - reminder UI
 - n8n-backed reminder/automation flow
 - follow-up dashboarding that matches the checklist/PRD vision
@@ -229,6 +235,9 @@ Implemented:
 
 - packet checklist persisted through the backend
 - approval state persisted through the backend
+- next-action recommendation persisted through the backend
+- follow-up workflow persisted through the backend
+- packet artifact metadata persisted through the backend
 - Ops UI for packet and approval workflows
 - queue filters:
   - `All roles`
