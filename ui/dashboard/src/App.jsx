@@ -29,15 +29,36 @@ const INGEST_QUICK_ACTIONS = [
 ];
 
 function inferDefaultBaseUrl() {
-  if (typeof window === "undefined") {
+  if (DEFAULT_BASE_URL) {
     return DEFAULT_BASE_URL;
   }
 
-  const hostname = String(window.location.hostname || "").trim().toLowerCase();
-  if (!hostname || hostname === "localhost" || hostname === "127.0.0.1") {
-    return DEFAULT_BASE_URL;
+  if (typeof window === "undefined") {
+    return "http://localhost:8090";
   }
-  return `http://${hostname}:8090`;
+
+  // In deployed environments, the dashboard should use its own origin and let
+  // nginx proxy API calls to the bridge.
+  return "";
+}
+
+function sanitizeDashboardBaseUrl(rawUrl) {
+  const candidate = String(rawUrl || "").trim().replace(/\/+$/, "");
+  if (!candidate || typeof window === "undefined") {
+    return candidate;
+  }
+
+  const hostname = String(window.location.hostname || "").trim().toLowerCase();
+  const port = String(window.location.port || "").trim();
+  const legacyTargets = new Set(
+    [
+      "http://localhost:8090",
+      "http://127.0.0.1:8090",
+      hostname ? `http://${hostname}:8090` : "",
+    ].filter(Boolean),
+  );
+
+  return legacyTargets.has(candidate) && port && port !== "8090" ? "" : candidate;
 }
 
 function inferSiblingAppUrl(port) {
@@ -445,8 +466,26 @@ function readStoredSettings() {
       return { baseUrl: fallbackBaseUrl, apiKey: "" };
     }
     const parsed = JSON.parse(raw);
+    const storedBaseUrl = sanitizeDashboardBaseUrl(parsed.baseUrl);
+    const currentHostname =
+      typeof window === "undefined"
+        ? ""
+        : String(window.location.hostname || "").trim().toLowerCase();
+    const legacyHostBaseUrls = new Set(
+      [
+        currentHostname ? `http://${currentHostname}:8090` : "",
+        "http://localhost:8090",
+        "http://127.0.0.1:8090",
+      ].filter(Boolean),
+    );
+    const shouldUseFallbackBaseUrl =
+      !storedBaseUrl ||
+      legacyHostBaseUrls.has(storedBaseUrl) ||
+      storedBaseUrl.startsWith("http://localhost:8090/") ||
+      storedBaseUrl.startsWith("http://127.0.0.1:8090/") ||
+      (currentHostname && storedBaseUrl.startsWith(`http://${currentHostname}:8090/`));
     return {
-      baseUrl: String(parsed.baseUrl || fallbackBaseUrl),
+      baseUrl: shouldUseFallbackBaseUrl ? fallbackBaseUrl : storedBaseUrl,
       apiKey: String(parsed.apiKey || ""),
     };
   } catch {
@@ -600,7 +639,15 @@ function App() {
           </label>
         </div>
         <div className="settings-actions">
-          <button type="button" onClick={() => setSettings(settingsDraft)}>
+          <button
+            type="button"
+            onClick={() =>
+              setSettings({
+                baseUrl: sanitizeDashboardBaseUrl(settingsDraft.baseUrl),
+                apiKey: settingsDraft.apiKey,
+              })
+            }
+          >
             Apply
           </button>
         </div>
