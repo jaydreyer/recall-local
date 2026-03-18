@@ -15,7 +15,7 @@ If a new session starts cold, use this file as the primary reference for:
 - what is actually implemented now
 - what remains to be built next
 
-Last refreshed: 2026-03-17
+Last refreshed: 2026-03-18
 
 ## Snapshot
 
@@ -29,8 +29,8 @@ Practical status:
 
 Estimated completion against the original docs:
 
-- around 65-75% of the intended product
-- around 85% of the visible demo and UX shape
+- around 72-82% of the intended product
+- around 88-92% of the visible demo and UX shape
 
 ## Current Live State
 
@@ -43,10 +43,11 @@ The live app now includes:
 - persisted workflow state on jobs
 - persisted workflow stages driving Ops lanes
 - packet checklist and approval state persisted through the backend
-- packet artifact metadata now persists for cover letter drafts and operator-linked packet deliverables
+- packet artifact metadata now persists for cover letter drafts, tailored summaries, and operator-linked packet deliverables
+- packet readiness now reconciles checklist state with artifact truth
 - persisted next-action recommendations now include action, rationale, confidence, and due date
 - persisted follow-up metadata now supports due dates and completion tracking
-- workflow timeline support
+- workflow timeline support with richer persisted event semantics
 - summary strip for high-attention work
 - queue filters
 - queue sorting controls
@@ -108,24 +109,23 @@ What is still missing:
 
 #### 4. Activity timeline and event logging
 
-Status: `partial`
+Status: `mostly done for v1 UI semantics, partial for deeper backend durability`
 
 What is done:
 
 - timeline support exists in Ops
 - workflow-oriented events are visible enough for demo and basic operator context
+- persisted timeline events now distinguish approvals, workflow changes, packet milestones, follow-up milestones, artifacts, and application history
+- timeline labels are now more human-readable and the right rail better separates persisted versus derived history
 
 What is still missing:
 
-- richer event taxonomy
-- clearer distinction between event types
 - more durable event logging model
-- better human-readable event labels
-- deeper backend/API/test coverage around event creation and retrieval
+- deeper backend/API/test coverage around event creation and retrieval beyond the current workflow payload model
 
 #### 5. Application packet generation
 
-Status: `partial`
+Status: `partial to mostly done for the current demo/product slice`
 
 What is done:
 
@@ -133,12 +133,13 @@ What is done:
 - packet checklist state exists and persists
 - cover letter generation is already part of the broader Recall.local product story
 - cover letter draft status is now linked to persisted artifact metadata
+- tailored summary generation is now a first-class packet artifact flow
 - non-cover-letter packet items can now carry persisted linked-artifact metadata from Ops
+- packet readiness now depends on both checklist state and artifact truth in Ops queue logic
 
 What is still missing:
 
-- packet state is still lighter than a full artifact-backed packet system
-- resume tailoring, outreach, and prep outputs do not yet have dedicated generators/services
+- resume bullets, outreach note, interview brief, and talking points do not yet have dedicated generators/services
 - a more explicit packet schema and packet API surface may still be warranted
 
 #### 6. Approval workflow
@@ -238,6 +239,10 @@ Implemented:
 - next-action recommendation persisted through the backend
 - follow-up workflow persisted through the backend
 - packet artifact metadata persisted through the backend
+- richer workflow timeline metadata persisted through the backend
+- tailored summary artifact generation via `POST /v1/tailored-summaries`
+- cover letter draft generation via `POST /v1/cover-letter-drafts`
+- packet readiness reconciled from checklist state plus artifact truth
 - Ops UI for packet and approval workflows
 - queue filters:
   - `All roles`
@@ -274,53 +279,38 @@ Validation workflow already used successfully:
 
 These are the highest-value remaining items if the goal is to fulfill the original docs more honestly.
 
-#### 1. Richer timeline and workflow history
+#### 1. Real packet / artifact linkage
 
-- make timeline entries more specific and human-readable
-- distinguish clearly between:
-  - stage move
-  - approval granted
-  - approval revoked
-  - packet item completed
-  - packet item reopened
-  - application recorded
-  - follow-up scheduled
-  - follow-up completed
-- improve ordering and presentation of synthetic versus persisted events
-- make the right rail feel like real application history
+- add dedicated generators/services for:
+  - resume bullets
+  - outreach note
+  - interview brief
+  - talking points
+- connect remaining packet checklist items to actual generated or saved artifacts where possible
+- expand durable references to packet components beyond summary + cover letter
+- continue tightening packet readiness so approval depends on actual artifact-backed packet truth
 
-#### 2. Real packet / artifact linkage
+#### 2. Follow-up workflow and reminders
 
-- connect packet checklist items to actual generated or saved artifacts where possible
-- tie cover letter state to real generated drafts more explicitly
-- add durable references to packet components if available
-- make packet readiness depend on both checklist state and artifact truth
-
-#### 3. Follow-up workflow and reminders
-
-- add persisted follow-up metadata
-- support fields such as:
-  - follow-up due date
-  - last follow-up date
-  - follow-up status
-  - reminder created flag or reminder metadata
-- expose a queue or summary for follow-up due work
-- add timeline events for follow-up changes
+- support richer reminder metadata such as:
+  - reminder created flag
+  - reminder delivery metadata
+  - reminder status / last reminder run
 - wire follow-up reminder automation into n8n if desired
 
-#### 4. Next-best-action and blocker depth
+#### 3. Next-best-action and blocker depth
 
 - formalize persisted next action fields
 - add rationale, confidence, and suggested due date as real workflow data
 - improve blocker generation from real workflow/artifact state
 - make action recalculation more intentional and testable
 
-#### 5. API and test hardening
+#### 4. API and test hardening
 
-- add contract coverage for workflow stage changes
-- add contract coverage for packet and approval updates
-- add contract coverage for timeline behavior
-- add coverage for follow-up workflow once implemented
+- add broader contract coverage for workflow stage changes
+- add broader contract coverage for packet and approval updates
+- add broader contract coverage for timeline behavior
+- add broader contract coverage for follow-up workflow beyond the focused cases already added
 - document the workflow patch surface more formally if it continues to expand
 - reduce remaining repo/server drift risk
 
@@ -387,11 +377,11 @@ These are high-value improvements that strengthen daily usability and product qu
 
 If continuing from here, use this order:
 
-1. richer timeline events
-2. follow-up state and follow-up queue
-3. packet / artifact linkage
-4. persisted next-action and blocker depth
-5. API and test hardening
+1. packet / artifact linkage
+2. follow-up reminders and automation
+3. persisted next-action and blocker depth
+4. API and test hardening
+5. UX polish pass
 6. UX polish pass
 7. saved views and recommendation improvements
 8. portfolio packaging
@@ -400,25 +390,22 @@ If continuing from here, use this order:
 
 The best next implementation slice is:
 
-### Follow-up workflow + richer timeline
+### Packet artifact expansion
 
 Scope:
 
-- add persisted follow-up metadata to workflow state
-- add queue support for follow-up due work
-- add timeline events for:
-  - stage changes
-  - approvals
-  - packet milestones
-  - follow-up milestones
-- improve timeline labels in the right rail
+- add the next real packet artifact flow after tailored summary:
+  - outreach note, or
+  - resume bullets
+- persist generated artifact metadata into workflow packet state
+- expose generation directly in the role workspace
+- let packet readiness benefit from the new artifact truth automatically
 
 Why this slice next:
 
-- it is the biggest remaining gap versus both original docs
-- it deepens the current model instead of changing direction
-- it makes the `follow_up` lane genuinely operational
-- it improves both daily usability and demo clarity
+- it is now the clearest remaining gap between the current demo and a genuinely artifact-backed application packet
+- it deepens the model that is already working instead of introducing a new workflow direction
+- it improves both daily usability and the product story immediately
 
 ## How To Use This In A New Session
 
@@ -436,4 +423,4 @@ Helpful companion references:
 
 Suggested kickoff prompt for a future session:
 
-"Read [Recall_local_Application_Ops_Roadmap.md](/Users/jaydreyer/projects/recall-local/docs/Recall_local_Application_Ops_Roadmap.md), confirm the current live state against the PRD and implementation checklist, and implement the next slice: follow-up workflow + richer timeline."
+"Read [Recall_local_Application_Ops_Roadmap.md](/Users/jaydreyer/projects/recall-local/docs/Recall_local_Application_Ops_Roadmap.md), confirm the current live state against the PRD and implementation checklist, and implement the next slice: add the next real packet artifact flow after tailored summary."
