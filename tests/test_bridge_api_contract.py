@@ -254,6 +254,15 @@ class BridgeApiContractTests(unittest.TestCase):
                     "interviewBrief": False,
                     "talkingPoints": False,
                 },
+                "artifacts": {
+                    "resumeBullets": {
+                        "status": "ready",
+                        "updatedAt": "2026-03-24T15:30:00Z",
+                        "source": "manual",
+                        "vaultPath": "career/packets/job-123/resume-bullets.md",
+                        "notes": "Tailored bullet set linked in Ops.",
+                    }
+                },
                 "followUp": {
                     "status": "scheduled",
                     "dueAt": "2026-03-24T16:00:00Z",
@@ -288,6 +297,15 @@ class BridgeApiContractTests(unittest.TestCase):
                             "packet": {
                                 "tailoredSummary": True,
                             },
+                            "artifacts": {
+                                "resumeBullets": {
+                                    "status": "ready",
+                                    "updatedAt": "2026-03-24T15:30:00Z",
+                                    "source": "manual",
+                                    "vaultPath": "career/packets/job-123/resume-bullets.md",
+                                    "notes": "Tailored bullet set linked in Ops.",
+                                }
+                            },
                             "followUp": {
                                 "status": "scheduled",
                                 "dueAt": "2026-03-24T16:00:00Z",
@@ -300,6 +318,7 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(response.json()["workflow"]["nextActionApproval"], "approved")
         self.assertEqual(response.json()["workflow"]["nextAction"]["action"], "send_follow_up")
         self.assertEqual(response.json()["workflow"]["packet"]["tailoredSummary"], True)
+        self.assertEqual(response.json()["workflow"]["artifacts"]["resumeBullets"]["status"], "ready")
         self.assertEqual(response.json()["workflow"]["followUp"]["status"], "scheduled")
         update_mock.assert_called_once_with(
             job_id="job-123",
@@ -318,6 +337,15 @@ class BridgeApiContractTests(unittest.TestCase):
                 },
                 "packet": {
                     "tailoredSummary": True,
+                },
+                "artifacts": {
+                    "resumeBullets": {
+                        "status": "ready",
+                        "updatedAt": "2026-03-24T15:30:00Z",
+                        "source": "manual",
+                        "vaultPath": "career/packets/job-123/resume-bullets.md",
+                        "notes": "Tailored bullet set linked in Ops.",
+                    }
                 },
                 "followUp": {
                     "status": "scheduled",
@@ -369,6 +397,30 @@ class BridgeApiContractTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"]["details"][0]["field"], "workflow.nextAction.confidence")
+
+    def test_patch_job_rejects_invalid_packet_artifact_source(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        with build_client(env) as client:
+            response = client.patch(
+                "/v1/jobs/job-123",
+                json={
+                    "workflow": {
+                        "artifacts": {
+                            "resumeBullets": {
+                                "status": "ready",
+                                "source": "clipboard",
+                            }
+                        }
+                    },
+                },
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"]["details"][0]["field"], "workflow.artifacts.resumeBullets.source")
 
     def test_auto_tag_rules_endpoint_is_canonical_only(self) -> None:
         env = {

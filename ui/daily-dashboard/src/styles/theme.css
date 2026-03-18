@@ -2756,24 +2756,58 @@ body {
 
 .packet-check-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
-  flex-wrap: wrap;
   color: var(--text);
   font-size: 14px;
+}
+
+.packet-check-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
 }
 
 .packet-artifact-meta {
   color: var(--text-secondary);
   font-size: 12px;
-  margin-left: 28px;
-  width: 100%;
+  line-height: 1.45;
 }
 
 .packet-check-row input {
   width: 16px;
   height: 16px;
   accent-color: var(--accent);
+  margin-top: 2px;
+}
+
+.ops-artifact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.ops-artifact-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(216, 207, 191, 0.6);
+}
+
+.packet-artifact-pill {
+  flex-shrink: 0;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(160, 145, 107, 0.12);
+  color: var(--text-secondary);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .timeline-row {

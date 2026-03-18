@@ -40,7 +40,42 @@ DEFAULT_WORKFLOW_ARTIFACTS = {
         "wordCount": None,
         "savedToVault": False,
         "vaultPath": None,
-    }
+    },
+    "tailoredSummary": {
+        "status": None,
+        "updatedAt": None,
+        "source": None,
+        "vaultPath": None,
+        "notes": None,
+    },
+    "resumeBullets": {
+        "status": None,
+        "updatedAt": None,
+        "source": None,
+        "vaultPath": None,
+        "notes": None,
+    },
+    "outreachNote": {
+        "status": None,
+        "updatedAt": None,
+        "source": None,
+        "vaultPath": None,
+        "notes": None,
+    },
+    "interviewBrief": {
+        "status": None,
+        "updatedAt": None,
+        "source": None,
+        "vaultPath": None,
+        "notes": None,
+    },
+    "talkingPoints": {
+        "status": None,
+        "updatedAt": None,
+        "source": None,
+        "vaultPath": None,
+        "notes": None,
+    },
 }
 DEFAULT_WORKFLOW_FOLLOW_UP = {
     "status": "not_scheduled",
@@ -67,6 +102,9 @@ WORKFLOW_NEXT_ACTIONS = {
     "send_follow_up",
 }
 WORKFLOW_NEXT_ACTION_CONFIDENCE = {"low", "medium", "high"}
+PACKET_ARTIFACT_KEYS = ("tailoredSummary", "resumeBullets", "outreachNote", "interviewBrief", "talkingPoints")
+WORKFLOW_PACKET_ARTIFACT_STATUSES = {"draft", "ready"}
+WORKFLOW_PACKET_ARTIFACT_SOURCES = {"manual", "generated", "imported"}
 
 
 def _parse_int(value: Any, default: int = 0) -> int:
@@ -131,9 +169,7 @@ def _normalize_workflow(value: Any) -> dict[str, Any]:
             for key, default in DEFAULT_WORKFLOW_PACKET.items()
         },
         "nextAction": _normalize_next_action(next_action),
-        "artifacts": {
-            "coverLetterDraft": _normalize_cover_letter_artifact(artifacts.get("coverLetterDraft")),
-        },
+        "artifacts": _normalize_workflow_artifacts(artifacts),
         "followUp": {
             "status": follow_up_status if follow_up_status in WORKFLOW_FOLLOW_UP_STATUSES else DEFAULT_WORKFLOW_FOLLOW_UP["status"],
             "dueAt": str(follow_up.get("dueAt") or "").strip() or None,
@@ -167,6 +203,9 @@ def _normalize_workflow_patch(value: Any) -> dict[str, Any]:
         next_artifacts: dict[str, Any] = {}
         if "coverLetterDraft" in artifacts:
             next_artifacts["coverLetterDraft"] = _normalize_cover_letter_artifact(artifacts.get("coverLetterDraft"))
+        for key in PACKET_ARTIFACT_KEYS:
+            if key in artifacts:
+                next_artifacts[key] = _normalize_packet_artifact(artifacts.get(key), key=key)
         normalized["artifacts"] = next_artifacts
     if isinstance(source.get("followUp"), dict):
         follow_up = source["followUp"]
@@ -542,6 +581,33 @@ def _normalize_cover_letter_artifact(value: Any) -> dict[str, Any]:
     return normalized
 
 
+def _normalize_packet_artifact(value: Any, *, key: str) -> dict[str, Any]:
+    source = dict(value) if isinstance(value, dict) else {}
+    normalized = dict(DEFAULT_WORKFLOW_ARTIFACTS[key])
+    status = str(source.get("status") or "").strip().lower()
+    source_value = str(source.get("source") or "").strip().lower()
+    normalized.update(
+        {
+            "status": status if status in WORKFLOW_PACKET_ARTIFACT_STATUSES else None,
+            "updatedAt": str(source.get("updatedAt") or "").strip() or None,
+            "source": source_value if source_value in WORKFLOW_PACKET_ARTIFACT_SOURCES else None,
+            "vaultPath": str(source.get("vaultPath") or "").strip() or None,
+            "notes": str(source.get("notes") or "").strip() or None,
+        }
+    )
+    return normalized
+
+
+def _normalize_workflow_artifacts(value: Any) -> dict[str, Any]:
+    source = dict(value) if isinstance(value, dict) else {}
+    normalized = {
+        "coverLetterDraft": _normalize_cover_letter_artifact(source.get("coverLetterDraft")),
+    }
+    for key in PACKET_ARTIFACT_KEYS:
+        normalized[key] = _normalize_packet_artifact(source.get(key), key=key)
+    return normalized
+
+
 def _normalize_next_action(value: Any) -> dict[str, Any]:
     source = dict(value) if isinstance(value, dict) else {}
     normalized = dict(DEFAULT_WORKFLOW_NEXT_ACTION)
@@ -676,8 +742,7 @@ def update_job(
             **existing_workflow.get("artifacts", {}),
             **incoming_workflow.get("artifacts", {}),
         }
-        if "coverLetterDraft" in merged_artifacts:
-            merged_artifacts["coverLetterDraft"] = _normalize_cover_letter_artifact(merged_artifacts.get("coverLetterDraft"))
+        merged_artifacts = _normalize_workflow_artifacts(merged_artifacts)
         merged_follow_up = {
             **_normalize_follow_up_state(existing_workflow.get("followUp")),
             **incoming_workflow.get("followUp", {}),
@@ -770,6 +835,29 @@ def update_job(
                 label="Cover letter draft generated",
                 detail=" | ".join(detail_parts) if detail_parts else None,
                 at=next_cover_letter.get("generatedAt") or now,
+            )
+        for key in PACKET_ARTIFACT_KEYS:
+            existing_artifact = _normalize_packet_artifact(existing_artifacts.get(key), key=key)
+            next_artifact = _normalize_packet_artifact(next_artifacts.get(key), key=key)
+            if existing_artifact == next_artifact:
+                continue
+            if not (next_artifact.get("updatedAt") or next_artifact.get("vaultPath") or next_artifact.get("notes")):
+                continue
+            detail_parts = []
+            if next_artifact.get("status"):
+                detail_parts.append(f"Status: {next_artifact['status']}")
+            if next_artifact.get("source"):
+                detail_parts.append(f"Source: {next_artifact['source']}")
+            if next_artifact.get("vaultPath"):
+                detail_parts.append(f"Path: {next_artifact['vaultPath']}")
+            if next_artifact.get("notes"):
+                detail_parts.append(next_artifact["notes"])
+            current["workflowTimeline"] = _append_workflow_event(
+                current["workflowTimeline"],
+                event_type="packet_artifact_updated",
+                label=f"{_workflow_packet_label(key)} artifact linked",
+                detail=" | ".join(detail_parts) if detail_parts else None,
+                at=next_artifact.get("updatedAt") or now,
             )
         existing_follow_up = _normalize_follow_up_state(existing_workflow.get("followUp"))
         next_follow_up = _normalize_follow_up_state(next_workflow.get("followUp"))

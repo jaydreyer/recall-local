@@ -4,7 +4,15 @@ import CompanyLogo from './CompanyLogo'
 import JobDetail from './JobDetail'
 import StateNotice from './StateNotice'
 import { displayCompanyName } from '../utils/displayText'
-import { buildWorkflowTimeline, defaultWorkflowState, deriveWorkflow, isFollowUpDue, preferredDemoJob, WORKFLOW_STAGE_LABELS } from '../utils/workflowDemo'
+import {
+  buildWorkflowTimeline,
+  defaultWorkflowState,
+  deriveWorkflow,
+  isFollowUpDue,
+  PACKET_ARTIFACT_LABELS,
+  preferredDemoJob,
+  WORKFLOW_STAGE_LABELS,
+} from '../utils/workflowDemo'
 
 function compactRelativeTime(value) {
   if (!value) {
@@ -89,6 +97,22 @@ const PACKET_ITEMS = [
   { key: 'interviewBrief', label: 'Interview brief' },
   { key: 'talkingPoints', label: 'Talking points' },
 ]
+
+function packetArtifactMeta(artifact) {
+  if (!artifact?.available) {
+    return null
+  }
+  const parts = []
+  if (artifact.source) {
+    parts.push(artifact.source === 'manual' ? 'Operator-linked' : artifact.source)
+  }
+  if (artifact.vaultPath) {
+    parts.push(artifact.vaultPath)
+  } else if (artifact.updatedAt) {
+    parts.push(compactRelativeTime(artifact.updatedAt))
+  }
+  return parts.join(' · ') || artifact.label || null
+}
 
 function WorkflowRail({
   job,
@@ -245,10 +269,12 @@ function WorkflowRail({
                 checked={Boolean(workflowState?.packet?.[item.key])}
                 onChange={() => onTogglePacketItem(item.key)}
               />
-              <span>{item.label}</span>
-              {item.key === 'coverLetterDraft' ? (
-                <span className="packet-artifact-meta">{workflow.coverLetterArtifactLabel}</span>
-              ) : null}
+              <div className="packet-check-copy">
+                <span>{item.label}</span>
+                {packetArtifactMeta(workflow.packetArtifacts?.[item.key]) ? (
+                  <span className="packet-artifact-meta">{packetArtifactMeta(workflow.packetArtifacts?.[item.key])}</span>
+                ) : null}
+              </div>
             </label>
           ))}
         </div>
@@ -267,6 +293,20 @@ function WorkflowRail({
             ) : null}
           </div>
         ) : null}
+        <div className="ops-artifact-list">
+          {PACKET_ITEMS.filter((item) => item.key !== 'coverLetterDraft')
+            .map((item) => ({ ...item, artifact: workflow.packetArtifacts?.[item.key] }))
+            .filter((item) => item.artifact?.available)
+            .map((item) => (
+              <div key={item.key} className="ops-artifact-row">
+                <div>
+                  <strong>{item.label}</strong>
+                  <p className="meta-text">{packetArtifactMeta(item.artifact)}</p>
+                </div>
+                <span className="packet-artifact-pill">{item.artifact?.status || 'linked'}</span>
+              </div>
+            ))}
+        </div>
       </section>
 
       <section className="ops-rail-card">
@@ -684,6 +724,18 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
                   packet: {
                     [key]: !workflowState?.packet?.[key],
                   },
+                  ...(key === 'coverLetterDraft'
+                    ? {}
+                    : {
+                        artifacts: {
+                          [key]: {
+                            status: !workflowState?.packet?.[key] ? 'ready' : 'draft',
+                            updatedAt: new Date().toISOString(),
+                            source: 'manual',
+                            notes: `${PACKET_ARTIFACT_LABELS[key]} ${!workflowState?.packet?.[key] ? 'linked' : 'reopened'} in Ops.`,
+                          },
+                        },
+                      }),
                 })
               }
               onMoveStage={(stage) => jobsState.updateWorkflow(selectedJob.jobId, { stage })}

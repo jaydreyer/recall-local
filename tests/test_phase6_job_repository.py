@@ -29,7 +29,14 @@ class JobRepositoryTests(unittest.TestCase):
                         "wordCount": 132,
                         "savedToVault": True,
                         "vaultPath": "/tmp/example.md",
-                    }
+                    },
+                    "resumeBullets": {
+                        "status": "ready",
+                        "updatedAt": "2026-03-18T09:15:00Z",
+                        "source": "manual",
+                        "vaultPath": "career/packets/job-1/resume-bullets.md",
+                        "notes": "Stored in the packet folder.",
+                    },
                 },
             }
         )
@@ -40,6 +47,8 @@ class JobRepositoryTests(unittest.TestCase):
         self.assertEqual(normalized["artifacts"]["coverLetterDraft"]["draftId"], "cover_letter_job-1")
         self.assertEqual(normalized["artifacts"]["coverLetterDraft"]["wordCount"], 132)
         self.assertTrue(normalized["artifacts"]["coverLetterDraft"]["savedToVault"])
+        self.assertEqual(normalized["artifacts"]["resumeBullets"]["status"], "ready")
+        self.assertEqual(normalized["artifacts"]["resumeBullets"]["source"], "manual")
 
     def test_list_jobs_search_matches_company_gap_and_notes_fields(self) -> None:
         jobs = [

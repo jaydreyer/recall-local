@@ -461,7 +461,14 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                         request_id=request_id,
                         details=[{"field": "workflow.artifacts", "issue": "value must be an object"}],
                     )
-                allowed_artifact_fields = {"coverLetterDraft"}
+                allowed_artifact_fields = {
+                    "coverLetterDraft",
+                    "tailoredSummary",
+                    "resumeBullets",
+                    "outreachNote",
+                    "interviewBrief",
+                    "talkingPoints",
+                }
                 unknown_artifact_fields = [key for key in artifacts_value.keys() if key not in allowed_artifact_fields]
                 if unknown_artifact_fields:
                     return _error_response(
@@ -511,6 +518,77 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                             message=str(exc),
                             request_id=request_id,
                         )
+                for artifact_key in ("tailoredSummary", "resumeBullets", "outreachNote", "interviewBrief", "talkingPoints"):
+                    if artifact_key not in artifacts_value:
+                        continue
+                    packet_artifact_value = artifacts_value.get(artifact_key)
+                    if not isinstance(packet_artifact_value, dict):
+                        return _error_response(
+                            status_code=400,
+                            code="validation_failed",
+                            message=f"workflow.artifacts.{artifact_key} must be an object.",
+                            request_id=request_id,
+                            details=[{"field": f"workflow.artifacts.{artifact_key}", "issue": "value must be an object"}],
+                        )
+                    allowed_packet_artifact_fields = {"status", "updatedAt", "source", "vaultPath", "notes"}
+                    unknown_packet_artifact_fields = [
+                        key for key in packet_artifact_value.keys() if key not in allowed_packet_artifact_fields
+                    ]
+                    if unknown_packet_artifact_fields:
+                        return _error_response(
+                            status_code=400,
+                            code="validation_failed",
+                            message=f"Invalid workflow artifact payload for {artifact_key}.",
+                            request_id=request_id,
+                            details=[
+                                {"field": f"workflow.artifacts.{artifact_key}.{key}", "issue": "field is not supported"}
+                                for key in unknown_packet_artifact_fields
+                            ],
+                        )
+                    if "status" in packet_artifact_value:
+                        normalized_status = str(packet_artifact_value.get("status") or "").strip().lower()
+                        if normalized_status not in {"draft", "ready"}:
+                            return _error_response(
+                                status_code=400,
+                                code="validation_failed",
+                                message=f"Invalid workflow artifact status for {artifact_key}.",
+                                request_id=request_id,
+                                details=[{"field": f"workflow.artifacts.{artifact_key}.status", "issue": "allowed values: draft, ready"}],
+                            )
+                        packet_artifact_value["status"] = normalized_status
+                    if "source" in packet_artifact_value:
+                        normalized_source = str(packet_artifact_value.get("source") or "").strip().lower()
+                        if normalized_source not in {"manual", "generated", "imported"}:
+                            return _error_response(
+                                status_code=400,
+                                code="validation_failed",
+                                message=f"Invalid workflow artifact source for {artifact_key}.",
+                                request_id=request_id,
+                                details=[
+                                    {
+                                        "field": f"workflow.artifacts.{artifact_key}.source",
+                                        "issue": "allowed values: manual, generated, imported",
+                                    }
+                                ],
+                            )
+                        packet_artifact_value["source"] = normalized_source
+                    if "updatedAt" in packet_artifact_value:
+                        try:
+                            packet_artifact_value["updatedAt"] = _normalize_optional_iso8601(
+                                packet_artifact_value.get("updatedAt"),
+                                field_name=f"workflow.artifacts.{artifact_key}.updatedAt",
+                            )
+                        except ValueError as exc:
+                            return _error_response(
+                                status_code=400,
+                                code="validation_failed",
+                                message=str(exc),
+                                request_id=request_id,
+                            )
+                    if "vaultPath" in packet_artifact_value:
+                        packet_artifact_value["vaultPath"] = str(packet_artifact_value.get("vaultPath") or "").strip() or None
+                    if "notes" in packet_artifact_value:
+                        packet_artifact_value["notes"] = str(packet_artifact_value.get("notes") or "").strip() or None
 
         updated = phase6_update_job(
             job_id=jobId,

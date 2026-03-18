@@ -1,6 +1,14 @@
 export const WORKFLOW_STAGES = ['focus', 'review', 'follow_up', 'monitor', 'closed']
 export const FOLLOW_UP_STATUSES = ['not_scheduled', 'scheduled', 'completed']
 export const NEXT_ACTIONS = ['none', 'review_role', 'tailor_resume', 'hold', 'skip', 'follow_up', 'monitor_response', 'schedule_follow_up', 'send_follow_up']
+export const PACKET_ARTIFACT_KEYS = ['tailoredSummary', 'resumeBullets', 'outreachNote', 'interviewBrief', 'talkingPoints']
+export const PACKET_ARTIFACT_LABELS = {
+  tailoredSummary: 'Tailored summary',
+  resumeBullets: 'Resume bullets',
+  outreachNote: 'Outreach note',
+  interviewBrief: 'Interview brief',
+  talkingPoints: 'Talking points',
+}
 
 export const WORKFLOW_STAGE_LABELS = {
   focus: 'Focus queue',
@@ -95,6 +103,47 @@ function titleCaseAction(value) {
     .join(' ')
 }
 
+function packetArtifactState(job, key) {
+  const artifact = job?.workflow?.artifacts?.[key]
+  if (!artifact) {
+    return {
+      status: null,
+      updatedAt: null,
+      source: null,
+      vaultPath: null,
+      notes: null,
+      available: false,
+      label: 'No linked artifact yet',
+    }
+  }
+
+  const updatedAt = artifact.updatedAt || null
+  const source = artifact.source || null
+  const vaultPath = artifact.vaultPath || null
+  const notes = artifact.notes || null
+  const status = artifact.status || null
+  const available = Boolean(updatedAt || vaultPath || notes || status)
+  let label = 'No linked artifact yet'
+
+  if (vaultPath) {
+    label = `Linked ${formatDateTime(updatedAt, 'recently')}`
+  } else if (updatedAt) {
+    label = `${source === 'manual' ? 'Updated' : 'Linked'} ${formatDateTime(updatedAt, 'recently')}`
+  } else if (status === 'ready') {
+    label = 'Linked artifact ready'
+  }
+
+  return {
+    status,
+    updatedAt,
+    source,
+    vaultPath,
+    notes,
+    available,
+    label,
+  }
+}
+
 function nextActionState(job, workflowState, fallback) {
   const raw = workflowState?.nextAction || {}
   const action = NEXT_ACTIONS.includes(raw.action) ? raw.action : fallback.action
@@ -182,6 +231,11 @@ export function defaultWorkflowState(job = null) {
     },
     artifacts: {
       coverLetterDraft: coverLetterArtifact(job, null),
+      tailoredSummary: packetArtifactState(job, 'tailoredSummary'),
+      resumeBullets: packetArtifactState(job, 'resumeBullets'),
+      outreachNote: packetArtifactState(job, 'outreachNote'),
+      interviewBrief: packetArtifactState(job, 'interviewBrief'),
+      talkingPoints: packetArtifactState(job, 'talkingPoints'),
     },
     followUp: {
       status: FOLLOW_UP_STATUSES.includes(job?.workflow?.followUp?.status) ? job.workflow.followUp.status : 'not_scheduled',
@@ -212,6 +266,15 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
         ? `Draft generated ${formatDateTime(draftArtifact.generatedAt, 'recently')}`
         : 'Draft generated'
     : 'No draft artifact yet'
+  const packetArtifacts = {
+    coverLetterDraft: {
+      ...draftArtifact,
+      label: draftArtifactLabel,
+    },
+  }
+  for (const key of PACKET_ARTIFACT_KEYS) {
+    packetArtifacts[key] = packetArtifactState(job, key)
+  }
 
   if (status === 'dismissed' || status === 'expired') {
     const nextActionStateValue = nextActionState(job, effectiveWorkflow, {
@@ -239,6 +302,7 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       followUpDueLabel: followUp.dueLabel,
       coverLetterArtifactLabel: draftArtifactLabel,
       coverLetterArtifact: draftArtifact,
+      packetArtifacts,
       nextActionRationale: nextActionStateValue.rationale,
       nextActionConfidence: nextActionStateValue.confidence,
       nextActionDueLabel: nextActionStateValue.dueLabel,
@@ -306,6 +370,7 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       followUpCompletedLabel: followUp.completedLabel,
       coverLetterArtifactLabel: draftArtifactLabel,
       coverLetterArtifact: draftArtifact,
+      packetArtifacts,
       nextActionRationale: nextActionStateValue.rationale,
       nextActionConfidence: nextActionStateValue.confidence,
       nextActionDueLabel: nextActionStateValue.dueLabel,
@@ -339,6 +404,7 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       followUpDueLabel: followUp.dueLabel,
       coverLetterArtifactLabel: draftArtifactLabel,
       coverLetterArtifact: draftArtifact,
+      packetArtifacts,
       nextActionRationale: nextActionStateValue.rationale,
       nextActionConfidence: nextActionStateValue.confidence,
       nextActionDueLabel: nextActionStateValue.dueLabel,
@@ -387,6 +453,7 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       followUpDueLabel: followUp.dueLabel,
       coverLetterArtifactLabel: draftArtifactLabel,
       coverLetterArtifact: draftArtifact,
+      packetArtifacts,
       nextActionRationale: nextActionStateValue.rationale,
       nextActionConfidence: nextActionStateValue.confidence,
       nextActionDueLabel: nextActionStateValue.dueLabel,
@@ -422,6 +489,7 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
     followUpDueLabel: followUp.dueLabel,
     coverLetterArtifactLabel: draftArtifactLabel,
     coverLetterArtifact: draftArtifact,
+    packetArtifacts,
     nextActionRationale: nextActionStateValue.rationale,
     nextActionConfidence: nextActionStateValue.confidence,
     nextActionDueLabel: nextActionStateValue.dueLabel,
