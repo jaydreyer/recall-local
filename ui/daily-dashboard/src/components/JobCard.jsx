@@ -50,12 +50,14 @@ export default function JobCard({
   onGenerateTailoredSummary,
   onGenerateResumeBullets,
   onGenerateOutreachNote,
+  onGenerateInterviewBrief,
   onGenerateTalkingPoints,
   onReevaluate,
   coverLetterState,
   tailoredSummaryState,
   outreachNoteState,
   resumeBulletsState,
+  interviewBriefState,
   talkingPointsState,
 }) {
   return (
@@ -125,12 +127,14 @@ export default function JobCard({
           onGenerateTailoredSummary={onGenerateTailoredSummary}
           onGenerateResumeBullets={onGenerateResumeBullets}
           onGenerateOutreachNote={onGenerateOutreachNote}
+          onGenerateInterviewBrief={onGenerateInterviewBrief}
           onGenerateTalkingPoints={onGenerateTalkingPoints}
           onReevaluate={onReevaluate}
           coverLetterState={coverLetterState}
           tailoredSummaryState={tailoredSummaryState}
           outreachNoteState={outreachNoteState}
           resumeBulletsState={resumeBulletsState}
+          interviewBriefState={interviewBriefState}
           talkingPointsState={talkingPointsState}
         />
       )}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import CoverLetterDraft from './CoverLetterDraft'
+import InterviewBriefDraft from './InterviewBriefDraft'
 import OutreachNoteDraft from './OutreachNoteDraft'
 import ResumeBulletsDraft from './ResumeBulletsDraft'
 import TailoredSummaryDraft from './TailoredSummaryDraft'
@@ -232,12 +233,14 @@ export default function JobDetail({
   onGenerateTailoredSummary,
   onGenerateResumeBullets,
   onGenerateOutreachNote,
+  onGenerateInterviewBrief,
   onGenerateTalkingPoints,
   onReevaluate,
   coverLetterState,
   tailoredSummaryState,
   outreachNoteState,
   resumeBulletsState,
+  interviewBriefState,
   talkingPointsState,
 }) {
   const [notes, setNotes] = useState(job.notes || '')
@@ -245,6 +248,7 @@ export default function JobDetail({
   const persistedTailoredSummary = job?.workflow?.artifacts?.tailoredSummary || null
   const persistedOutreachNote = job?.workflow?.artifacts?.outreachNote || null
   const persistedResumeBullets = job?.workflow?.artifacts?.resumeBullets || null
+  const persistedInterviewBrief = job?.workflow?.artifacts?.interviewBrief || null
   const persistedTalkingPoints = job?.workflow?.artifacts?.talkingPoints || null
 
   useEffect(() => {
@@ -327,6 +331,9 @@ export default function JobDetail({
             <button type="button" className="ghost-button detail-inline-action" onClick={() => onGenerateOutreachNote(job.jobId)} disabled={busy}>
               Generate Outreach Note
             </button>
+            <button type="button" className="ghost-button detail-inline-action" onClick={() => onGenerateInterviewBrief(job.jobId)} disabled={busy}>
+              Generate Interview Brief
+            </button>
             <button type="button" className="ghost-button detail-inline-action" onClick={() => onGenerateTalkingPoints(job.jobId)} disabled={busy}>
               Generate Talking Points
             </button>
@@ -360,6 +367,16 @@ export default function JobDetail({
                 <p className="meta-text">
                   Updated {new Date(persistedTalkingPoints.updatedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                   {persistedTalkingPoints.vaultPath ? ` · ${persistedTalkingPoints.vaultPath}` : ''}
+                </p>
+              </div>
+            ) : null}
+            {persistedInterviewBrief?.updatedAt ? (
+              <div className="detail-artifact-note">
+                <p className="section-label">Latest interview brief artifact</p>
+                <p className="body-copy">{persistedInterviewBrief.notes || 'Interview brief artifact linked.'}</p>
+                <p className="meta-text">
+                  Updated {new Date(persistedInterviewBrief.updatedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                  {persistedInterviewBrief.vaultPath ? ` · ${persistedInterviewBrief.vaultPath}` : ''}
                 </p>
               </div>
             ) : null}
@@ -399,6 +416,7 @@ export default function JobDetail({
 
       <TailoredSummaryDraft state={tailoredSummaryState} visible={tailoredSummaryState.jobId === job.jobId} />
       <ResumeBulletsDraft state={resumeBulletsState} visible={resumeBulletsState.jobId === job.jobId} />
+      <InterviewBriefDraft state={interviewBriefState} visible={interviewBriefState.jobId === job.jobId} />
       <TalkingPointsDraft state={talkingPointsState} visible={talkingPointsState.jobId === job.jobId} />
       <OutreachNoteDraft state={outreachNoteState} visible={outreachNoteState.jobId === job.jobId} />
       <CoverLetterDraft state={coverLetterState} visible={coverLetterState.jobId === job.jobId} />

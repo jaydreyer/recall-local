@@ -27,6 +27,7 @@ JobEvaluationRunResponse = _bridge_api.JobEvaluationRunResponse
 TailoredSummaryResponse = _bridge_api.TailoredSummaryResponse
 OutreachNoteResponse = _bridge_api.OutreachNoteResponse
 ResumeBulletsResponse = _bridge_api.ResumeBulletsResponse
+InterviewBriefResponse = _bridge_api.InterviewBriefResponse
 TalkingPointsResponse = _bridge_api.TalkingPointsResponse
 ResumeIngestionResponse = _bridge_api.ResumeIngestionResponse
 
@@ -70,6 +71,8 @@ OUTREACH_NOTE_SUCCESS_EXAMPLE = _bridge_api.OUTREACH_NOTE_SUCCESS_EXAMPLE
 OUTREACH_NOTE_REQUEST_BODY = _bridge_api.OUTREACH_NOTE_REQUEST_BODY
 RESUME_BULLETS_SUCCESS_EXAMPLE = _bridge_api.RESUME_BULLETS_SUCCESS_EXAMPLE
 RESUME_BULLETS_REQUEST_BODY = _bridge_api.RESUME_BULLETS_REQUEST_BODY
+INTERVIEW_BRIEF_SUCCESS_EXAMPLE = _bridge_api.INTERVIEW_BRIEF_SUCCESS_EXAMPLE
+INTERVIEW_BRIEF_REQUEST_BODY = _bridge_api.INTERVIEW_BRIEF_REQUEST_BODY
 TALKING_POINTS_SUCCESS_EXAMPLE = _bridge_api.TALKING_POINTS_SUCCESS_EXAMPLE
 TALKING_POINTS_REQUEST_BODY = _bridge_api.TALKING_POINTS_REQUEST_BODY
 LLM_SETTINGS_SUCCESS_EXAMPLE = _bridge_api.LLM_SETTINGS_SUCCESS_EXAMPLE
@@ -94,6 +97,7 @@ __all__ = [
     "TailoredSummaryResponse",
     "OutreachNoteResponse",
     "ResumeBulletsResponse",
+    "InterviewBriefResponse",
     "TalkingPointsResponse",
     "ResumeIngestionResponse",
     "AUTO_TAG_RULES_SUCCESS_EXAMPLE",
@@ -136,6 +140,8 @@ __all__ = [
     "OUTREACH_NOTE_REQUEST_BODY",
     "RESUME_BULLETS_SUCCESS_EXAMPLE",
     "RESUME_BULLETS_REQUEST_BODY",
+    "INTERVIEW_BRIEF_SUCCESS_EXAMPLE",
+    "INTERVIEW_BRIEF_REQUEST_BODY",
     "TALKING_POINTS_SUCCESS_EXAMPLE",
     "TALKING_POINTS_REQUEST_BODY",
     "LLM_SETTINGS_SUCCESS_EXAMPLE",

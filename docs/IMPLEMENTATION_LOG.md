@@ -2,6 +2,43 @@
 
 Public-repo note: historical entries use placeholder hostnames and paths where the original logs referenced private machine details. Older file references remain as evidence-first text and may no longer be directly clickable.
 
+## 2026-03-18 - Interview brief artifact flow added to the Application Ops packet
+
+### What was executed
+
+- Added a first-class interview-brief generator in:
+  - `<repo-root>/scripts/phase6/interview_brief_drafter.py`
+  - generates a structured interview-prep brief from evaluated job context plus the active resume
+  - supports the same local/cloud runtime settings pattern as the other packet artifact flows
+  - optionally writes a packet artifact into the vault when write-back is enabled
+- Added a new collection-style API endpoint in:
+  - `<repo-root>/scripts/phase1/bridge_routes_phase6.py`
+  - `POST /v1/interview-briefs`
+  - persists the result back into workflow packet state and packet artifact metadata so the final modeled packet artifact now has a real generated flow
+- Added API models/examples and helper exports in:
+  - `<repo-root>/scripts/phase1/ingest_bridge_api.py`
+  - `<repo-root>/scripts/phase1/bridge_routes_phase6_helpers.py`
+- Added dashboard support in:
+  - `<repo-root>/ui/daily-dashboard/src/api.js`
+  - `<repo-root>/ui/daily-dashboard/src/hooks/useJobs.js`
+  - `<repo-root>/ui/daily-dashboard/src/components/JobDetail.jsx`
+  - `<repo-root>/ui/daily-dashboard/src/components/InterviewBriefDraft.jsx`
+  - the role workspace can now trigger interview-brief generation, show the generated prep document immediately, and surface the persisted artifact metadata alongside the rest of the packet
+- Added regression coverage in:
+  - `<repo-root>/tests/test_phase1_phase6_interview_brief_flow_pytest.py`
+  - `<repo-root>/tests/test_bridge_api_contract.py`
+
+### Validation
+
+- Local validation:
+  - `./.venv/bin/python -m pytest -q tests/test_phase1_phase6_interview_brief_flow_pytest.py tests/test_bridge_api_contract.py -k "interview_brief or openapi_schema_lists_canonical_paths_only"`
+  - `npm run build` (from `ui/daily-dashboard/`)
+
+### Results
+
+- The final packet artifact that was already modeled in readiness logic now has a real generated flow instead of a placeholder-only state.
+- Ops can now back interview prep with both talking points and a structured interview brief inside the same packet workflow.
+
 ## 2026-03-18 - Talking points artifact flow added to the Application Ops packet
 
 ### What was executed

@@ -55,6 +55,7 @@ from scripts.phase6.company_profiler import upsert_tracked_company_config as pha
 from scripts.phase6.cover_letter_drafter import generate_cover_letter_draft as phase6_generate_cover_letter_draft  # noqa: F401,E402
 from scripts.phase6.gap_aggregator import aggregate_gaps as phase6_aggregate_gaps  # noqa: E402
 from scripts.phase6.ingest_resume import ingest_resume as phase6_ingest_resume  # noqa: F401,E402
+from scripts.phase6.interview_brief_drafter import generate_interview_brief as phase6_generate_interview_brief  # noqa: F401,E402
 from scripts.phase6.job_dedup import check_job_duplicate as phase6_check_job_duplicate  # noqa: F401,E402
 from scripts.phase6.job_discovery_runner import run_discovery as phase6_run_discovery  # noqa: E402
 from scripts.phase6.job_evaluator import queue_job_evaluations as phase6_queue_job_evaluations  # noqa: E402
@@ -396,6 +397,19 @@ class ResumeBulletsResponse(BaseModel):
     bullet_count: int
     word_count: int
     bullets: str
+    saved_to_vault: bool
+    vault_path: Optional[str] = None
+
+
+class InterviewBriefResponse(BaseModel):
+    workflow: Literal["workflow_06a_interview_brief"]
+    brief_id: str
+    job_id: str
+    provider: str
+    model: str
+    generated_at: str
+    word_count: int
+    brief: str
     saved_to_vault: bool
     vault_path: Optional[str] = None
 
@@ -985,6 +999,19 @@ RESUME_BULLETS_SUCCESS_EXAMPLE = {
     "bullet_count": 4,
     "word_count": 46,
     "bullets": "- Led customer-facing AI workflow rollouts with strong operator empathy.\n- Translated API platform complexity into adoption-focused execution.\n- Partnered directly with technical stakeholders to unblock implementation work.\n- Built practical delivery systems that connect product goals to real usage.",
+    "saved_to_vault": False,
+    "vault_path": None,
+}
+
+INTERVIEW_BRIEF_SUCCESS_EXAMPLE = {
+    "workflow": "workflow_06a_interview_brief",
+    "brief_id": "interview_brief_job-001",
+    "job_id": "job-001",
+    "provider": "ollama",
+    "model": "llama3.2:3b",
+    "generated_at": "2026-03-18T16:28:00+00:00",
+    "word_count": 109,
+    "brief": "## Role Snapshot\n- The role centers on customer-facing AI platform adoption and technical guidance.\n- The strongest fit comes from translating complex systems into practical operator outcomes.\n\n## Why You Match\n- Your background shows hands-on API and workflow delivery with direct stakeholder partnership.\n- The resume supports a story around execution, enablement, and cross-functional communication.\n\n## Stories To Prepare\n- Prepare one story about leading an AI implementation from ambiguity to adoption.\n- Prepare one story about helping technical and non-technical partners align on delivery.\n\n## Risks To Address\n- Be ready to frame any missing domain depth honestly while emphasizing transferability.\n- Avoid overstating tools or process ownership that is not clearly backed by the resume.\n\n## Questions To Ask\n- Ask how success is measured for customer-facing technical work in the first 90 days.\n- Ask where the team most needs better translation between product, platform, and operators.",
     "saved_to_vault": False,
     "vault_path": None,
 }
@@ -1666,6 +1693,42 @@ RESUME_BULLETS_REQUEST_BODY = {
             "examples": {
                 "default": {
                     "summary": "Generate resume bullets",
+                    "value": {"job_id": "job_001", "save_to_vault": False},
+                }
+            },
+        }
+    },
+}
+
+INTERVIEW_BRIEF_REQUEST_BODY = {
+    "required": True,
+    "content": {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "required": ["job_id"],
+                "properties": {
+                    "job_id": {"type": "string", "description": "Evaluated job identifier."},
+                    "save_to_vault": {"type": "boolean", "default": False},
+                    "settings": {
+                        "type": "object",
+                        "description": "Optional runtime override for interview-brief generation model settings.",
+                        "properties": {
+                            "evaluation_model": {"type": "string", "enum": ["local", "cloud"]},
+                            "cloud_provider": {"type": "string", "enum": ["anthropic", "openai", "gemini"]},
+                            "cloud_model": {"type": "string"},
+                            "auto_escalate": {"type": "boolean"},
+                            "local_model": {"type": "string"},
+                            "max_tokens": {"type": "integer", "minimum": 128},
+                        },
+                        "additionalProperties": False,
+                    },
+                },
+                "additionalProperties": False,
+            },
+            "examples": {
+                "default": {
+                    "summary": "Generate interview brief",
                     "value": {"job_id": "job_001", "save_to_vault": False},
                 }
             },

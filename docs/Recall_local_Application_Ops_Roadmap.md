@@ -46,6 +46,7 @@ The live app now includes:
 - packet artifact metadata now persists for cover letter drafts, tailored summaries, and operator-linked packet deliverables
 - outreach note generation via `POST /v1/outreach-notes` now persists a third real packet artifact flow
 - resume bullets generation via `POST /v1/resume-bullets` now backs a required packet item with real generated output
+- interview brief generation via `POST /v1/interview-briefs` now backs the packet's interview-prep brief with a real generated artifact flow
 - talking points generation via `POST /v1/talking-points` now backs interview prep with a real generated artifact flow
 - packet readiness now reconciles checklist state with artifact truth
 - persisted next-action recommendations now include action, rationale, confidence, and due date
@@ -142,7 +143,6 @@ What is done:
 
 What is still missing:
 
-- interview brief does not yet have a dedicated generator/service
 - a more explicit packet schema and packet API surface may still be warranted
 
 #### 6. Approval workflow
@@ -247,6 +247,7 @@ Implemented:
 - resume bullets generation via `POST /v1/resume-bullets`
 - cover letter draft generation via `POST /v1/cover-letter-drafts`
 - outreach note generation via `POST /v1/outreach-notes`
+- interview brief generation via `POST /v1/interview-briefs`
 - talking points generation via `POST /v1/talking-points`
 - packet readiness reconciled from checklist state plus artifact truth
 - Ops UI for packet and approval workflows
@@ -288,9 +289,7 @@ These are the highest-value remaining items if the goal is to fulfill the origin
 #### 1. Real packet / artifact linkage
 
 - add dedicated generators/services for:
-  - resume bullets
   - interview brief
-  - talking points
 - connect remaining packet checklist items to actual generated or saved artifacts where possible
 - expand durable references to packet components beyond summary + cover letter
 - continue tightening packet readiness so approval depends on actual artifact-backed packet truth
@@ -395,21 +394,22 @@ If continuing from here, use this order:
 
 The best next implementation slice is:
 
-### Final packet artifact expansion
+### Follow-up workflow depth
 
 Scope:
 
-- add the next real packet artifact flow after talking points:
-  - interview brief
-- persist generated artifact metadata into workflow packet state
-- expose generation directly in the role workspace
-- let packet readiness benefit from the new artifact truth automatically
+- support richer reminder metadata such as:
+  - reminder created flag
+  - reminder delivery metadata
+  - reminder status / last reminder run
+- expose reminder state clearly in Ops
+- prepare the workflow model for optional n8n-backed reminder automation
 
 Why this slice next:
 
-- it is now the clearest remaining gap between the current demo and a genuinely artifact-backed application packet
-- it deepens the model that is already working instead of introducing a new workflow direction
-- it improves both daily usability and the product story immediately
+- it is now the clearest remaining gap between the current workflow model and a genuinely operational follow-up lane
+- it extends persisted workflow data instead of inventing a disconnected feature branch
+- it improves daily operator usefulness while setting up the next automation step cleanly
 
 ## How To Use This In A New Session
 
@@ -427,4 +427,4 @@ Helpful companion references:
 
 Suggested kickoff prompt for a future session:
 
-"Read [Recall_local_Application_Ops_Roadmap.md](/Users/jaydreyer/projects/recall-local/docs/Recall_local_Application_Ops_Roadmap.md), confirm the current live state against the PRD and implementation checklist, and implement the next slice: add the final packet artifact flow by generating the interview brief."
+"Read [Recall_local_Application_Ops_Roadmap.md](/Users/jaydreyer/projects/recall-local/docs/Recall_local_Application_Ops_Roadmap.md), confirm the current live state against the PRD and implementation checklist, and implement the next slice: deepen follow-up workflow metadata and reminder readiness."

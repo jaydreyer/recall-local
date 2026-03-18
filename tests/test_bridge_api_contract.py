@@ -932,6 +932,10 @@ class BridgeApiContractTests(unittest.TestCase):
             "/v1/llm-settings",
             "/v1/cover-letter-drafts",
             "/v1/tailored-summaries",
+            "/v1/interview-briefs",
+            "/v1/outreach-notes",
+            "/v1/resume-bullets",
+            "/v1/talking-points",
         }
         forbidden_paths = {
             "/config/auto-tags",
@@ -1476,6 +1480,60 @@ class BridgeApiContractTests(unittest.TestCase):
                         "source": "generated",
                         "vaultPath": None,
                         "notes": "- Built customer-facing AI rollout systems.\n- Led API adoption work with operators.\n- Turned technical requirements into delivery plans.\n- Partnered directly with stakeholders on implementation.",
+                    }
+                },
+            },
+        )
+
+    def test_phase6_interview_brief_endpoint_returns_generated_brief(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        fake_result = {
+            "brief_id": "interview_brief_job-1",
+            "job_id": "job-1",
+            "provider": "ollama",
+            "model": "llama3.2:3b",
+            "generated_at": "2026-03-18T16:28:00+00:00",
+            "word_count": 96,
+            "brief": "## Role Snapshot\n- The role centers on technical customer guidance.\n- The strongest angle is operator-friendly AI delivery.\n\n## Why You Match\n- Your background shows API and workflow rollout experience.\n- The resume supports strong cross-functional execution stories.\n\n## Stories To Prepare\n- Prepare one story about leading implementation under ambiguity.\n- Prepare one story about translating complexity for stakeholders.\n\n## Risks To Address\n- Be honest about any domain gaps while showing transferability.\n- Avoid claiming tooling depth that is not resume-backed.\n\n## Questions To Ask\n- Ask how the team measures success in the first 90 days.\n- Ask where customer-facing technical work most often gets blocked.",
+            "saved_to_vault": False,
+            "vault_path": None,
+        }
+        with patch("scripts.phase1.ingest_bridge_api.phase6_generate_interview_brief", return_value=fake_result) as mocked, patch(
+            "scripts.phase1.ingest_bridge_api.phase6_update_job",
+            return_value={"jobId": "job-1"},
+        ) as update_mock:
+            with build_client(env) as client:
+                response = client.post(
+                    "/v1/interview-briefs",
+                    json={"job_id": "job-1", "save_to_vault": False, "settings": {"evaluation_model": "local"}},
+                )
+                invalid = client.post("/v1/interview-briefs", json={})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["workflow"], "workflow_06a_interview_brief")
+        self.assertEqual(response.json()["job_id"], "job-1")
+        self.assertEqual(invalid.status_code, 400)
+        self.assertEqual(mocked.call_args.kwargs["job_id"], "job-1")
+        self.assertFalse(mocked.call_args.kwargs["save_to_vault"])
+        update_mock.assert_called_once_with(
+            job_id="job-1",
+            status=None,
+            applied=None,
+            dismissed=None,
+            notes=None,
+            workflow={
+                "packet": {"interviewBrief": True},
+                "artifacts": {
+                    "interviewBrief": {
+                        "status": "ready",
+                        "updatedAt": "2026-03-18T16:28:00+00:00",
+                        "source": "generated",
+                        "vaultPath": None,
+                        "notes": "## Role Snapshot\n- The role centers on technical customer guidance.\n- The strongest angle is operator-friendly AI delivery.\n\n## Why You Match\n- Your background shows API and workflow rollout experience.\n- The resume supports strong cross-functional execution stories.\n\n## Stories To Prepare\n- Prepare one story about leading implementation under ambiguity.\n- Prepare one story about translating complexity for stakeholders.\n\n## Risks To Address\n- Be honest about any domain gaps while showing transferability.\n- Avoid claiming tooling depth that is not resume-backed.\n\n## Questions To Ask\n- Ask how the team measures success in the first 90 days.\n- Ask where customer-facing technical work most often gets blocked.",
                     }
                 },
             },

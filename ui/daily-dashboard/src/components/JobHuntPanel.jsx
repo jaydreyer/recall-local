@@ -19,6 +19,7 @@ export default function JobHuntPanel({
   tailoredSummaryState,
   outreachNoteState,
   resumeBulletsState,
+  interviewBriefState,
   talkingPointsState,
   setSelectedJobId,
   setFilter,
@@ -31,6 +32,7 @@ export default function JobHuntPanel({
   generateTailoredSummary,
   generateResumeBullets,
   generateOutreachNote,
+  generateInterviewBrief,
   generateTalkingPoints,
 }) {
   const [expandedJobId, setExpandedJobId] = useState('')
@@ -94,12 +96,14 @@ export default function JobHuntPanel({
                 onGenerateTailoredSummary={generateTailoredSummary}
                 onGenerateResumeBullets={generateResumeBullets}
                 onGenerateOutreachNote={generateOutreachNote}
+                onGenerateInterviewBrief={generateInterviewBrief}
                 onGenerateTalkingPoints={generateTalkingPoints}
                 onReevaluate={reevaluateJob}
                 coverLetterState={coverLetterState}
                 tailoredSummaryState={tailoredSummaryState}
                 outreachNoteState={outreachNoteState}
                 resumeBulletsState={resumeBulletsState}
+                interviewBriefState={interviewBriefState}
                 talkingPointsState={talkingPointsState}
               />
             ))}

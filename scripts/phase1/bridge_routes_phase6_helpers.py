@@ -97,6 +97,10 @@ def phase6_generate_resume_bullets(*args: Any, **kwargs: Any) -> Any:
     return _bridge_api.phase6_generate_resume_bullets(*args, **kwargs)
 
 
+def phase6_generate_interview_brief(*args: Any, **kwargs: Any) -> Any:
+    return _bridge_api.phase6_generate_interview_brief(*args, **kwargs)
+
+
 def phase6_generate_talking_points(*args: Any, **kwargs: Any) -> Any:
     return _bridge_api.phase6_generate_talking_points(*args, **kwargs)
 
@@ -113,6 +117,7 @@ COVER_LETTER_DRAFT_REQUEST_BODY = _bridge_api.COVER_LETTER_DRAFT_REQUEST_BODY
 TAILORED_SUMMARY_REQUEST_BODY = _bridge_api.TAILORED_SUMMARY_REQUEST_BODY
 OUTREACH_NOTE_REQUEST_BODY = _bridge_api.OUTREACH_NOTE_REQUEST_BODY
 RESUME_BULLETS_REQUEST_BODY = _bridge_api.RESUME_BULLETS_REQUEST_BODY
+INTERVIEW_BRIEF_REQUEST_BODY = _bridge_api.INTERVIEW_BRIEF_REQUEST_BODY
 TALKING_POINTS_REQUEST_BODY = _bridge_api.TALKING_POINTS_REQUEST_BODY
 LLM_SETTINGS_PATCH_REQUEST_BODY = _bridge_api.LLM_SETTINGS_PATCH_REQUEST_BODY
 
@@ -153,6 +158,8 @@ __all__ = [
     "phase6_generate_outreach_note",
     "RESUME_BULLETS_REQUEST_BODY",
     "phase6_generate_resume_bullets",
+    "INTERVIEW_BRIEF_REQUEST_BODY",
+    "phase6_generate_interview_brief",
     "TALKING_POINTS_REQUEST_BODY",
     "phase6_generate_talking_points",
     "LLM_SETTINGS_PATCH_REQUEST_BODY",

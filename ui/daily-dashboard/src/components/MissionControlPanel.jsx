@@ -441,12 +441,14 @@ export default function MissionControlPanel({
               onGenerateTailoredSummary={jobsState.generateTailoredSummary}
               onGenerateResumeBullets={jobsState.generateResumeBullets}
               onGenerateOutreachNote={jobsState.generateOutreachNote}
+              onGenerateInterviewBrief={jobsState.generateInterviewBrief}
               onGenerateTalkingPoints={jobsState.generateTalkingPoints}
               onReevaluate={jobsState.reevaluateJob}
               coverLetterState={jobsState.coverLetterState}
               tailoredSummaryState={jobsState.tailoredSummaryState}
               outreachNoteState={jobsState.outreachNoteState}
               resumeBulletsState={jobsState.resumeBulletsState}
+              interviewBriefState={jobsState.interviewBriefState}
               talkingPointsState={jobsState.talkingPointsState}
             />
           </div>

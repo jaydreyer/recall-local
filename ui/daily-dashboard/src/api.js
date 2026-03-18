@@ -224,6 +224,10 @@ export function createResumeBullets(payload) {
   return sendJson('/v1/resume-bullets', 'POST', payload)
 }
 
+export function createInterviewBrief(payload) {
+  return sendJson('/v1/interview-briefs', 'POST', payload)
+}
+
 export function createOutreachNote(payload) {
   return sendJson('/v1/outreach-notes', 'POST', payload)
 }

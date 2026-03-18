@@ -2,6 +2,7 @@ import { startTransition, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   createCoverLetterDraft,
+  createInterviewBrief,
   createJobEvaluationRun,
   createOutreachNote,
   createResumeBullets,
@@ -125,6 +126,12 @@ export function useJobs({ loadGaps = false } = {}) {
     loading: false,
     error: '',
     bullets: null,
+  })
+  const [interviewBriefState, setInterviewBriefState] = useState({
+    jobId: '',
+    loading: false,
+    error: '',
+    brief: null,
   })
   const [talkingPointsState, setTalkingPointsState] = useState({
     jobId: '',
@@ -480,6 +487,22 @@ export function useJobs({ loadGaps = false } = {}) {
     }
   }
 
+  async function generateInterviewBrief(jobId) {
+    setInterviewBriefState({ jobId, loading: true, error: '', brief: null })
+    try {
+      const payload = await createInterviewBrief({ job_id: jobId, save_to_vault: false })
+      setInterviewBriefState({ jobId, loading: false, error: '', brief: payload })
+      await loadJobsData({ background: true })
+    } catch (briefError) {
+      setInterviewBriefState({
+        jobId,
+        loading: false,
+        error: briefError.message || 'Interview brief generation failed.',
+        brief: null,
+      })
+    }
+  }
+
   async function generateTalkingPoints(jobId) {
     setTalkingPointsState({ jobId, loading: true, error: '', talkingPoints: null })
     try {
@@ -523,6 +546,7 @@ export function useJobs({ loadGaps = false } = {}) {
     tailoredSummaryState,
     outreachNoteState,
     resumeBulletsState,
+    interviewBriefState,
     talkingPointsState,
     setSelectedJobId: selectJob,
     setFilter: updateFilter,
@@ -537,6 +561,7 @@ export function useJobs({ loadGaps = false } = {}) {
     generateTailoredSummary,
     generateResumeBullets,
     generateOutreachNote,
+    generateInterviewBrief,
     generateTalkingPoints,
   }
 }
