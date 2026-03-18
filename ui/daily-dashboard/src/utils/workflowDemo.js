@@ -104,6 +104,14 @@ function parseDate(value) {
   return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
+function dayDeltaFromNow(value) {
+  const parsed = parseDate(value)
+  if (!parsed) {
+    return null
+  }
+  return Math.round((parsed.getTime() - Date.now()) / 86400000)
+}
+
 function formatDateTime(value, fallback = 'Not set') {
   const parsed = parseDate(value)
   if (!parsed) {
@@ -189,9 +197,24 @@ function followUpState(job, workflowState) {
   const dueAt = raw.dueAt || null
   const lastCompletedAt = raw.lastCompletedAt || null
   const dueDate = parseDate(dueAt)
+  const daysUntilDue = dayDeltaFromNow(dueAt)
   const isDue = status !== 'completed' && Boolean(dueDate) && dueDate.getTime() <= Date.now()
   const activeFollowUp = effectiveStatus(job) === 'applied' || workflowState?.stage === 'follow_up'
   const needsAttention = activeFollowUp && (status === 'not_scheduled' || isDue)
+  const dueSoon = status === 'scheduled' && typeof daysUntilDue === 'number' && daysUntilDue >= 0 && daysUntilDue <= 3
+  const dueThisWeek = status === 'scheduled' && typeof daysUntilDue === 'number' && daysUntilDue >= 0 && daysUntilDue <= 7
+  let urgencyLabel = 'No follow-up planned'
+  if (status === 'completed') {
+    urgencyLabel = 'Completed'
+  } else if (isDue) {
+    urgencyLabel = 'Due now'
+  } else if (dueSoon) {
+    urgencyLabel = 'Due soon'
+  } else if (dueThisWeek) {
+    urgencyLabel = 'Due this week'
+  } else if (status === 'scheduled') {
+    urgencyLabel = 'Scheduled'
+  }
 
   let label = 'Not scheduled'
   if (status === 'completed') {
@@ -205,8 +228,12 @@ function followUpState(job, workflowState) {
     dueAt,
     lastCompletedAt,
     isDue,
+    dueSoon,
+    dueThisWeek,
     activeFollowUp,
     needsAttention,
+    urgencyLabel,
+    daysUntilDue,
     label,
     dueLabel: dueAt ? formatDateTime(dueAt, 'Not set') : 'Not set',
     completedLabel: lastCompletedAt ? formatDateTime(lastCompletedAt, 'Not completed') : 'Not completed',
@@ -333,6 +360,7 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       followUpLabel: followUp.label,
       followUpStatus: followUp.status,
       followUpDueLabel: followUp.dueLabel,
+      followUpUrgencyLabel: followUp.urgencyLabel,
       coverLetterArtifactLabel: draftArtifactLabel,
       coverLetterArtifact: draftArtifact,
       packetArtifacts,
@@ -404,6 +432,7 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       followUpStatus: followUp.status,
       followUpDueLabel: followUp.dueLabel,
       followUpCompletedLabel: followUp.completedLabel,
+      followUpUrgencyLabel: followUp.urgencyLabel,
       coverLetterArtifactLabel: draftArtifactLabel,
       coverLetterArtifact: draftArtifact,
       packetArtifacts,
@@ -441,6 +470,7 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       followUpLabel: followUp.label,
       followUpStatus: followUp.status,
       followUpDueLabel: followUp.dueLabel,
+      followUpUrgencyLabel: followUp.urgencyLabel,
       coverLetterArtifactLabel: draftArtifactLabel,
       coverLetterArtifact: draftArtifact,
       packetArtifacts,
@@ -502,6 +532,7 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       followUpLabel: followUp.label,
       followUpStatus: followUp.status,
       followUpDueLabel: followUp.dueLabel,
+      followUpUrgencyLabel: followUp.urgencyLabel,
       coverLetterArtifactLabel: draftArtifactLabel,
       coverLetterArtifact: draftArtifact,
       packetArtifacts,
@@ -541,6 +572,7 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
     followUpLabel: followUp.label,
     followUpStatus: followUp.status,
     followUpDueLabel: followUp.dueLabel,
+    followUpUrgencyLabel: followUp.urgencyLabel,
     coverLetterArtifactLabel: draftArtifactLabel,
     coverLetterArtifact: draftArtifact,
     packetArtifacts,

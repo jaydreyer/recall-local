@@ -68,6 +68,7 @@ const QUEUE_SORTS = {
   readiness: 'Most ready',
   fit: 'Highest fit',
   updated: 'Recently updated',
+  follow_up_due: 'Soonest follow-up',
 }
 
 function firstAvailableLane(laneCounts) {
@@ -335,6 +336,10 @@ function WorkflowRail({
             <span className="mini-label">Due</span>
             <strong>{workflow.followUpDueLabel || 'Not set'}</strong>
           </div>
+          <div className="ops-kv">
+            <span className="mini-label">Urgency</span>
+            <strong>{workflow.followUpUrgencyLabel}</strong>
+          </div>
           {workflow.followUpCompletedLabel ? (
             <div className="ops-kv">
               <span className="mini-label">Last completed</span>
@@ -360,6 +365,23 @@ function WorkflowRail({
         ) : (
           <p className="body-copy">Follow-up controls become active once a role moves into the applied lane.</p>
         )}
+        {showFollowUpActions ? (
+          <div className={`workflow-callout ${workflow.followUpUrgencyLabel === 'Due now' ? 'warning' : 'subtle'}`}>
+            <p className="section-label">Follow-up agenda</p>
+            <strong>{workflow.followUpUrgencyLabel}</strong>
+            <p className="body-copy">
+              {workflow.followUpStatus === 'completed'
+                ? 'This role is now in monitor mode while you wait for a response.'
+                : workflow.followUpUrgencyLabel === 'Due now'
+                  ? 'This role should get a touchpoint now so it does not stall in the pipeline.'
+                  : workflow.followUpUrgencyLabel === 'Due soon'
+                    ? 'This follow-up is approaching fast. Keep the note ready and send on schedule.'
+                    : workflow.followUpStatus === 'scheduled'
+                      ? 'A follow-up date is scheduled, so the next job is to keep the packet and outreach note ready.'
+                      : 'No follow-up date is on the calendar yet.'}
+            </p>
+          </div>
+        ) : null}
       </section>
 
       <section className="ops-rail-card">
@@ -463,6 +485,12 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
             const leftTime = new Date(leftWorkflowState.updatedAt || left.applied_at || left.evaluated_at || left.discovered_at || left.date_posted || 0).getTime()
             const rightTime = new Date(rightWorkflowState.updatedAt || right.applied_at || right.evaluated_at || right.discovered_at || right.date_posted || 0).getTime()
             return rightTime - leftTime
+          }
+
+          if (queueSort === 'follow_up_due') {
+            const leftTime = new Date(leftWorkflow.followUpStatus === 'completed' ? '9999-12-31T00:00:00Z' : leftWorkflowState.followUp?.dueAt || '9999-12-31T00:00:00Z').getTime()
+            const rightTime = new Date(rightWorkflow.followUpStatus === 'completed' ? '9999-12-31T00:00:00Z' : rightWorkflowState.followUp?.dueAt || '9999-12-31T00:00:00Z').getTime()
+            return leftTime - rightTime
           }
 
           const readinessScore = (job, workflow, workflowState) => {
@@ -624,7 +652,7 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
                   </div>
                   <div className="queue-meta-row">
                     <span>{WORKFLOW_STAGE_LABELS[itemWorkflow.stage] || itemWorkflow.stateLabel}</span>
-                    <span>{itemWorkflow.nextActionLabel}</span>
+                    <span>{itemWorkflow.stage === 'follow_up' ? itemWorkflow.followUpUrgencyLabel : itemWorkflow.nextActionLabel}</span>
                     <span>{compactRelativeTime(job.evaluated_at || job.discovered_at || job.date_posted)}</span>
                   </div>
                 </button>
