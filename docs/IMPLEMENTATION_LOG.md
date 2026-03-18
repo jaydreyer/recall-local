@@ -2,6 +2,45 @@
 
 Public-repo note: historical entries use placeholder hostnames and paths where the original logs referenced private machine details. Older file references remain as evidence-first text and may no longer be directly clickable.
 
+## 2026-03-18 - Tailored summary artifact flow added to the Application Ops packet
+
+### What was executed
+
+- Added a first-class tailored summary generator in:
+  - `<repo-root>/scripts/phase6/tailored_summary_drafter.py`
+  - generates a three-bullet tailored summary from evaluated job context plus the active resume
+  - supports the same local/cloud runtime settings pattern as the cover-letter flow
+  - optionally writes a packet artifact into the vault when write-back is enabled
+- Added a new collection-style API endpoint in:
+  - `<repo-root>/scripts/phase1/bridge_routes_phase6.py`
+  - `POST /v1/tailored-summaries`
+  - persists the result back into workflow packet state and packet artifact metadata so the Ops packet becomes backed by a real generated deliverable
+- Added API models/examples and helper exports in:
+  - `<repo-root>/scripts/phase1/ingest_bridge_api.py`
+  - `<repo-root>/scripts/phase1/bridge_routes_models.py`
+  - `<repo-root>/scripts/phase1/bridge_routes_phase6_helpers.py`
+- Added dashboard support in:
+  - `<repo-root>/ui/daily-dashboard/src/api.js`
+  - `<repo-root>/ui/daily-dashboard/src/hooks/useJobs.js`
+  - `<repo-root>/ui/daily-dashboard/src/components/JobDetail.jsx`
+  - `<repo-root>/ui/daily-dashboard/src/components/TailoredSummaryDraft.jsx`
+  - the role workspace can now trigger tailored summary generation and show the generated content immediately
+- Added regression coverage in:
+  - `<repo-root>/tests/test_phase6_tailored_summary_drafter_pytest.py`
+  - `<repo-root>/tests/test_phase1_phase6_tailored_summary_flow_pytest.py`
+  - `<repo-root>/tests/test_bridge_api_contract.py`
+
+### Validation
+
+- Local validation:
+  - `./.venv/bin/python -m pytest -q tests/test_phase6_tailored_summary_drafter_pytest.py tests/test_phase1_phase6_tailored_summary_flow_pytest.py tests/test_bridge_api_contract.py -k "tailored_summary or openapi_schema_lists_canonical_paths_only"`
+  - `npm run build` (from `ui/daily-dashboard/`)
+
+### Results
+
+- The packet now has a second real generated artifact flow beyond cover letters.
+- Tailored summary progress no longer has to rely only on checkbox state or manually linked artifact metadata.
+
 ## 2026-03-18 - Application Ops timeline semantics and follow-up history refined
 
 ### What was executed

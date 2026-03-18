@@ -16,6 +16,7 @@ export default function JobHuntPanel({
   detailLoading,
   actionJobId,
   coverLetterState,
+  tailoredSummaryState,
   setSelectedJobId,
   setFilter,
   refresh,
@@ -24,6 +25,7 @@ export default function JobHuntPanel({
   saveNotes,
   reevaluateJob,
   generateDraft,
+  generateTailoredSummary,
 }) {
   const [expandedJobId, setExpandedJobId] = useState('')
   const deferredJobs = useDeferredValue(jobs)
@@ -83,8 +85,10 @@ export default function JobHuntPanel({
                 onDismiss={dismissJob}
                 onSaveNotes={saveNotes}
                 onGenerateDraft={generateDraft}
+                onGenerateTailoredSummary={generateTailoredSummary}
                 onReevaluate={reevaluateJob}
                 coverLetterState={coverLetterState}
+                tailoredSummaryState={tailoredSummaryState}
               />
             ))}
           </div>

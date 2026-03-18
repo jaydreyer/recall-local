@@ -931,6 +931,7 @@ class BridgeApiContractTests(unittest.TestCase):
             "/v1/company-profile-refresh-runs",
             "/v1/llm-settings",
             "/v1/cover-letter-drafts",
+            "/v1/tailored-summaries",
         }
         forbidden_paths = {
             "/config/auto-tags",
@@ -1312,6 +1313,60 @@ class BridgeApiContractTests(unittest.TestCase):
                         "wordCount": 120,
                         "savedToVault": False,
                         "vaultPath": None,
+                    }
+                },
+            },
+        )
+
+    def test_phase6_tailored_summary_endpoint_returns_generated_summary(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        fake_result = {
+            "summary_id": "tailored_summary_job-1",
+            "job_id": "job-1",
+            "provider": "ollama",
+            "model": "llama3.2:3b",
+            "generated_at": "2026-03-06T16:05:00+00:00",
+            "word_count": 34,
+            "summary": "- Strong API and AI workflow fit.\n- Clear customer-facing delivery experience.\n- Good match for platform adoption work.",
+            "saved_to_vault": False,
+            "vault_path": None,
+        }
+        with patch("scripts.phase1.ingest_bridge_api.phase6_generate_tailored_summary", return_value=fake_result) as mocked, patch(
+            "scripts.phase1.ingest_bridge_api.phase6_update_job",
+            return_value={"jobId": "job-1"},
+        ) as update_mock:
+            with build_client(env) as client:
+                response = client.post(
+                    "/v1/tailored-summaries",
+                    json={"job_id": "job-1", "save_to_vault": False, "settings": {"evaluation_model": "local"}},
+                )
+                invalid = client.post("/v1/tailored-summaries", json={})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["workflow"], "workflow_06a_tailored_summary")
+        self.assertEqual(response.json()["job_id"], "job-1")
+        self.assertEqual(invalid.status_code, 400)
+        self.assertEqual(mocked.call_args.kwargs["job_id"], "job-1")
+        self.assertFalse(mocked.call_args.kwargs["save_to_vault"])
+        update_mock.assert_called_once_with(
+            job_id="job-1",
+            status=None,
+            applied=None,
+            dismissed=None,
+            notes=None,
+            workflow={
+                "packet": {"tailoredSummary": True},
+                "artifacts": {
+                    "tailoredSummary": {
+                        "status": "ready",
+                        "updatedAt": "2026-03-06T16:05:00+00:00",
+                        "source": "generated",
+                        "vaultPath": None,
+                        "notes": "- Strong API and AI workflow fit.\n- Clear customer-facing delivery experience.\n- Good match for platform adoption work.",
                     }
                 },
             },

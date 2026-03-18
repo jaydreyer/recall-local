@@ -19,6 +19,7 @@ Recall.local uses a collection-first `v1` API with plural noun resources:
 - `companies` and `company-profile-refresh-runs`: company intelligence and refresh workflows
 - `llm-settings`: review and patch evaluation model settings
 - `cover-letter-drafts`: generate cover-letter drafts from current job and resume context
+- `tailored-summaries`: generate packet-ready tailored summaries from current job and resume context
 
 ## Interactive API Docs
 
@@ -48,6 +49,7 @@ The bridge currently organizes its endpoints into these tagged groups:
 - `Companies`: company profile reads and refresh runs
 - `LLM Settings`: evaluation model settings reads and partial updates
 - `Cover Letter Drafts`: draft generation from job plus resume context
+- `Tailored Summaries`: packet summary generation from job plus resume context
 
 ## Representative Endpoints
 
@@ -68,6 +70,7 @@ These are a few high-signal routes reviewers can inspect quickly:
 - `GET /v1/companies`: list tracked companies
 - `PATCH /v1/llm-settings`: update evaluation model settings
 - `POST /v1/cover-letter-drafts`: generate a tailored draft
+- `POST /v1/tailored-summaries`: generate a tailored packet summary
 
 ## Authentication And Request Conventions
 

@@ -3,6 +3,7 @@ import { startTransition, useEffect, useMemo, useRef, useState } from 'react'
 import {
   createCoverLetterDraft,
   createJobEvaluationRun,
+  createTailoredSummary,
   fetchJob,
   fetchJobGaps,
   fetchJobStats,
@@ -103,6 +104,12 @@ export function useJobs({ loadGaps = false } = {}) {
     loading: false,
     error: '',
     draft: null,
+  })
+  const [tailoredSummaryState, setTailoredSummaryState] = useState({
+    jobId: '',
+    loading: false,
+    error: '',
+    summary: null,
   })
   const jobsLengthRef = useRef(jobs.length)
   const hasStatsRef = useRef(Boolean(stats))
@@ -404,6 +411,22 @@ export function useJobs({ loadGaps = false } = {}) {
     }
   }
 
+  async function generateTailoredSummary(jobId) {
+    setTailoredSummaryState({ jobId, loading: true, error: '', summary: null })
+    try {
+      const payload = await createTailoredSummary({ job_id: jobId, save_to_vault: false })
+      setTailoredSummaryState({ jobId, loading: false, error: '', summary: payload })
+      await loadJobsData({ background: true })
+    } catch (summaryError) {
+      setTailoredSummaryState({
+        jobId,
+        loading: false,
+        error: summaryError.message || 'Tailored summary generation failed.',
+        summary: null,
+      })
+    }
+  }
+
   function updateFilter(key, value) {
     startTransition(() => {
       setFilters((current) => ({ ...current, [key]: value }))
@@ -428,6 +451,7 @@ export function useJobs({ loadGaps = false } = {}) {
     detailLoading,
     actionJobId,
     coverLetterState,
+    tailoredSummaryState,
     setSelectedJobId: selectJob,
     setFilter: updateFilter,
     refresh,
@@ -438,5 +462,6 @@ export function useJobs({ loadGaps = false } = {}) {
     updateWorkflow: (jobId, workflow) => mutateJob(jobId, { workflow }),
     reevaluateJob,
     generateDraft,
+    generateTailoredSummary,
   }
 }

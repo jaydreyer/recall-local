@@ -47,8 +47,10 @@ export default function JobCard({
   onDismiss,
   onSaveNotes,
   onGenerateDraft,
+  onGenerateTailoredSummary,
   onReevaluate,
   coverLetterState,
+  tailoredSummaryState,
 }) {
   return (
     <article className={selected ? 'job-card selected' : 'job-card'}>
@@ -114,8 +116,10 @@ export default function JobCard({
           onDismiss={onDismiss}
           onSaveNotes={onSaveNotes}
           onGenerateDraft={onGenerateDraft}
+          onGenerateTailoredSummary={onGenerateTailoredSummary}
           onReevaluate={onReevaluate}
           coverLetterState={coverLetterState}
+          tailoredSummaryState={tailoredSummaryState}
         />
       )}
     </article>

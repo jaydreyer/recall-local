@@ -746,8 +746,10 @@ export default function OpsWorkspace({
                   onDismiss={jobsState.dismissJob}
                   onSaveNotes={jobsState.saveNotes}
                   onGenerateDraft={jobsState.generateDraft}
+                  onGenerateTailoredSummary={jobsState.generateTailoredSummary}
                   onReevaluate={jobsState.reevaluateJob}
                   coverLetterState={jobsState.coverLetterState}
+                  tailoredSummaryState={jobsState.tailoredSummaryState}
                 />
               </section>
             </>

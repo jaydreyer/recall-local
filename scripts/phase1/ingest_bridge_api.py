@@ -67,6 +67,7 @@ from scripts.phase6.job_repository import list_jobs as phase6_list_jobs  # noqa:
 from scripts.phase6.job_repository import update_company_tier as phase6_update_company_tier  # noqa: F401,E402
 from scripts.phase6.job_repository import update_job as phase6_update_job  # noqa: F401,E402
 from scripts.phase6.setup_collections import ensure_phase6_collections as phase6_ensure_collections  # noqa: F401,E402
+from scripts.phase6.tailored_summary_drafter import generate_tailored_summary as phase6_generate_tailored_summary  # noqa: F401,E402
 
 
 ALLOWED_INGEST_CHANNELS = ("webhook", "bookmarklet", "ios-share", "gmail-forward")
@@ -346,6 +347,19 @@ class JobEvaluationRunResponse(BaseModel):
     evaluated: Optional[int] = None
     failed: Optional[int] = None
     results: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class TailoredSummaryResponse(BaseModel):
+    workflow: Literal["workflow_06a_tailored_summary"]
+    summary_id: str
+    job_id: str
+    provider: str
+    model: str
+    generated_at: str
+    word_count: int
+    summary: str
+    saved_to_vault: bool
+    vault_path: Optional[str] = None
 
 
 class ResumeIngestionResponse(BaseModel):
@@ -835,6 +849,19 @@ COVER_LETTER_DRAFT_SUCCESS_EXAMPLE = {
     "generated_at": "2026-03-06T16:00:00+00:00",
     "word_count": 278,
     "draft": "Dear Hiring Team,\n\nI am excited to apply for the Solutions Engineer role...",
+    "saved_to_vault": False,
+    "vault_path": None,
+}
+
+TAILORED_SUMMARY_SUCCESS_EXAMPLE = {
+    "workflow": "workflow_06a_tailored_summary",
+    "summary_id": "tailored_summary_job-001",
+    "job_id": "job-001",
+    "provider": "ollama",
+    "model": "llama3.2:3b",
+    "generated_at": "2026-03-06T16:05:00+00:00",
+    "word_count": 38,
+    "summary": "- Built customer-facing AI workflow systems.\n- Led API platform rollouts with strong operator empathy.\n- Translated technical complexity into adoption-focused execution.",
     "saved_to_vault": False,
     "vault_path": None,
 }
@@ -1349,6 +1376,42 @@ COVER_LETTER_DRAFT_REQUEST_BODY = {
             "examples": {
                 "default": {
                     "summary": "Generate cover letter draft",
+                    "value": {"job_id": "job_001", "save_to_vault": False},
+                }
+            },
+        }
+    },
+}
+
+TAILORED_SUMMARY_REQUEST_BODY = {
+    "required": True,
+    "content": {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "required": ["job_id"],
+                "properties": {
+                    "job_id": {"type": "string", "description": "Evaluated job identifier."},
+                    "save_to_vault": {"type": "boolean", "default": False},
+                    "settings": {
+                        "type": "object",
+                        "description": "Optional runtime override for summary generation model settings.",
+                        "properties": {
+                            "evaluation_model": {"type": "string", "enum": ["local", "cloud"]},
+                            "cloud_provider": {"type": "string", "enum": ["anthropic", "openai", "gemini"]},
+                            "cloud_model": {"type": "string"},
+                            "auto_escalate": {"type": "boolean"},
+                            "local_model": {"type": "string"},
+                            "max_tokens": {"type": "integer", "minimum": 128},
+                        },
+                        "additionalProperties": False,
+                    },
+                },
+                "additionalProperties": False,
+            },
+            "examples": {
+                "default": {
+                    "summary": "Generate tailored summary",
                     "value": {"job_id": "job_001", "save_to_vault": False},
                 }
             },

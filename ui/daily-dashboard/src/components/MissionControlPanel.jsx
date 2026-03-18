@@ -438,8 +438,10 @@ export default function MissionControlPanel({
               onDismiss={jobsState.dismissJob}
               onSaveNotes={jobsState.saveNotes}
               onGenerateDraft={jobsState.generateDraft}
+              onGenerateTailoredSummary={jobsState.generateTailoredSummary}
               onReevaluate={jobsState.reevaluateJob}
               coverLetterState={jobsState.coverLetterState}
+              tailoredSummaryState={jobsState.tailoredSummaryState}
             />
           </div>
         </div>

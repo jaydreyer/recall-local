@@ -1138,6 +1138,104 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
         return _json_response(200, {"workflow": "workflow_06a_company_profile_refresh", **result})
 
     @app.post(
+        f"{API_PREFIX}/tailored-summaries",
+        tags=["Tailored Summaries"],
+        summary="Create tailored summary",
+        description="Generates a tailored summary artifact from the current resume and one evaluated job.",
+        responses={
+            200: {
+                "description": "Tailored summary generated.",
+                "content": {"application/json": {"example": TAILORED_SUMMARY_SUCCESS_EXAMPLE}},
+            },
+            400: {"model": ErrorResponse, "description": "Invalid summary payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            404: {"model": ErrorResponse, "description": "Job not found."},
+            500: {"model": ErrorResponse, "description": "Summary generation failed."},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+        openapi_extra={"requestBody": TAILORED_SUMMARY_REQUEST_BODY},
+    )
+    async def create_tailored_summary(request: Request) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        try:
+            payload = await _read_json_body(request)
+        except ValueError as exc:
+            return _error_response(status_code=400, code="invalid_json", message=str(exc), request_id=request_id)
+
+        job_id = str(payload.get("job_id") or "").strip()
+        if not job_id:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message="Missing required field: job_id.",
+                request_id=request_id,
+                details=[{"field": "job_id", "issue": "value is required"}],
+            )
+
+        try:
+            save_to_vault = _normalize_bool(payload.get("save_to_vault", False), field_name="save_to_vault")
+        except ValueError as exc:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message=str(exc),
+                request_id=request_id,
+            )
+
+        settings = payload.get("settings") if isinstance(payload.get("settings"), dict) else None
+        try:
+            result = phase6_generate_tailored_summary(
+                job_id=job_id,
+                settings=settings,
+                save_to_vault=save_to_vault,
+            )
+        except FileNotFoundError:
+            return _error_response(
+                status_code=404,
+                code="not_found",
+                message=f"Job not found: {job_id}",
+                request_id=request_id,
+            )
+        except ValueError as exc:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message=str(exc),
+                request_id=request_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return _error_response(
+                status_code=500,
+                code="workflow_failed",
+                message=f"Tailored summary generation failed: {exc}",
+                request_id=request_id,
+            )
+        phase6_update_job(
+            job_id=job_id,
+            status=None,
+            applied=None,
+            dismissed=None,
+            notes=None,
+            workflow={
+                "packet": {"tailoredSummary": True},
+                "artifacts": {
+                    "tailoredSummary": {
+                        "status": "ready",
+                        "updatedAt": result.get("generated_at"),
+                        "source": "generated",
+                        "vaultPath": result.get("vault_path"),
+                        "notes": str(result.get("summary") or "").strip()[:280] or None,
+                    }
+                },
+            },
+        )
+        return _json_response(200, {"workflow": "workflow_06a_tailored_summary", **result})
+
+    @app.post(
         f"{API_PREFIX}/cover-letter-drafts",
         tags=["Cover Letter Drafts"],
         summary="Create cover letter draft",

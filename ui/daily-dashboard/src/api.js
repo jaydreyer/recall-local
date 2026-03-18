@@ -215,3 +215,7 @@ export function updateLLMSettings(patch) {
 export function createCoverLetterDraft(payload) {
   return sendJson('/v1/cover-letter-drafts', 'POST', payload)
 }
+
+export function createTailoredSummary(payload) {
+  return sendJson('/v1/tailored-summaries', 'POST', payload)
+}

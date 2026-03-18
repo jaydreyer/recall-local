@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import CoverLetterDraft from './CoverLetterDraft'
+import TailoredSummaryDraft from './TailoredSummaryDraft'
 import { recommendationUrl } from '../utils/recommendationLinks'
 
 function recommendationKey(item) {
@@ -225,11 +226,14 @@ export default function JobDetail({
   onDismiss,
   onSaveNotes,
   onGenerateDraft,
+  onGenerateTailoredSummary,
   onReevaluate,
   coverLetterState,
+  tailoredSummaryState,
 }) {
   const [notes, setNotes] = useState(job.notes || '')
   const persistedDraft = job?.workflow?.artifacts?.coverLetterDraft || null
+  const persistedTailoredSummary = job?.workflow?.artifacts?.tailoredSummary || null
 
   useEffect(() => {
     setNotes(job.notes || '')
@@ -302,9 +306,22 @@ export default function JobDetail({
           </div>
 
           <div className="detail-actions detail-actions-stack">
+            <button type="button" className="ghost-button detail-inline-action" onClick={() => onGenerateTailoredSummary(job.jobId)} disabled={busy}>
+              Generate Tailored Summary
+            </button>
             <button type="button" className="accent-button detail-primary-action" onClick={() => onGenerateDraft(job.jobId)} disabled={busy}>
               Generate Cover Letter Draft
             </button>
+            {persistedTailoredSummary?.updatedAt ? (
+              <div className="detail-artifact-note">
+                <p className="section-label">Latest tailored summary artifact</p>
+                <p className="body-copy">{persistedTailoredSummary.notes || 'Tailored summary artifact linked.'}</p>
+                <p className="meta-text">
+                  Updated {new Date(persistedTailoredSummary.updatedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                  {persistedTailoredSummary.vaultPath ? ` · ${persistedTailoredSummary.vaultPath}` : ''}
+                </p>
+              </div>
+            ) : null}
             {persistedDraft?.generatedAt ? (
               <div className="detail-artifact-note">
                 <p className="section-label">Latest draft artifact</p>
@@ -329,6 +346,7 @@ export default function JobDetail({
         </div>
       </div>
 
+      <TailoredSummaryDraft state={tailoredSummaryState} visible={tailoredSummaryState.jobId === job.jobId} />
       <CoverLetterDraft state={coverLetterState} visible={coverLetterState.jobId === job.jobId} />
     </div>
   )
