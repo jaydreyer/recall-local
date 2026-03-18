@@ -25,6 +25,7 @@ EvaluationRunAcceptedResponse = _bridge_api.EvaluationRunAcceptedResponse
 JobsCollectionResponse = _bridge_api.JobsCollectionResponse
 JobEvaluationRunResponse = _bridge_api.JobEvaluationRunResponse
 TailoredSummaryResponse = _bridge_api.TailoredSummaryResponse
+OutreachNoteResponse = _bridge_api.OutreachNoteResponse
 ResumeIngestionResponse = _bridge_api.ResumeIngestionResponse
 
 AUTO_TAG_RULES_SUCCESS_EXAMPLE = _bridge_api.AUTO_TAG_RULES_SUCCESS_EXAMPLE
@@ -63,6 +64,8 @@ COVER_LETTER_DRAFT_SUCCESS_EXAMPLE = _bridge_api.COVER_LETTER_DRAFT_SUCCESS_EXAM
 COVER_LETTER_DRAFT_REQUEST_BODY = _bridge_api.COVER_LETTER_DRAFT_REQUEST_BODY
 TAILORED_SUMMARY_SUCCESS_EXAMPLE = _bridge_api.TAILORED_SUMMARY_SUCCESS_EXAMPLE
 TAILORED_SUMMARY_REQUEST_BODY = _bridge_api.TAILORED_SUMMARY_REQUEST_BODY
+OUTREACH_NOTE_SUCCESS_EXAMPLE = _bridge_api.OUTREACH_NOTE_SUCCESS_EXAMPLE
+OUTREACH_NOTE_REQUEST_BODY = _bridge_api.OUTREACH_NOTE_REQUEST_BODY
 LLM_SETTINGS_SUCCESS_EXAMPLE = _bridge_api.LLM_SETTINGS_SUCCESS_EXAMPLE
 LLM_SETTINGS_PATCH_REQUEST_BODY = _bridge_api.LLM_SETTINGS_PATCH_REQUEST_BODY
 
@@ -83,6 +86,7 @@ __all__ = [
     "JobsCollectionResponse",
     "JobEvaluationRunResponse",
     "TailoredSummaryResponse",
+    "OutreachNoteResponse",
     "ResumeIngestionResponse",
     "AUTO_TAG_RULES_SUCCESS_EXAMPLE",
     "ERROR_EXAMPLE_CONFIG_NOT_FOUND",
@@ -120,6 +124,8 @@ __all__ = [
     "COVER_LETTER_DRAFT_REQUEST_BODY",
     "TAILORED_SUMMARY_SUCCESS_EXAMPLE",
     "TAILORED_SUMMARY_REQUEST_BODY",
+    "OUTREACH_NOTE_SUCCESS_EXAMPLE",
+    "OUTREACH_NOTE_REQUEST_BODY",
     "LLM_SETTINGS_SUCCESS_EXAMPLE",
     "LLM_SETTINGS_PATCH_REQUEST_BODY",
 ]

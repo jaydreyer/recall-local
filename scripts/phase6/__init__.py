@@ -10,6 +10,7 @@ __all__ = [
     "job_evaluator",
     "job_metadata_extractor",
     "job_repository",
+    "outreach_note_drafter",
     "setup_collections",
     "storage",
     "telegram_notifier",

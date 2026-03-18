@@ -88,6 +88,10 @@ def phase6_generate_cover_letter_draft(*args: Any, **kwargs: Any) -> Any:
 def phase6_generate_tailored_summary(*args: Any, **kwargs: Any) -> Any:
     return _bridge_api.phase6_generate_tailored_summary(*args, **kwargs)
 
+
+def phase6_generate_outreach_note(*args: Any, **kwargs: Any) -> Any:
+    return _bridge_api.phase6_generate_outreach_note(*args, **kwargs)
+
 JOB_PATCH_REQUEST_BODY = _bridge_api.JOB_PATCH_REQUEST_BODY
 JOB_EVALUATION_RUN_REQUEST_BODY = _bridge_api.JOB_EVALUATION_RUN_REQUEST_BODY
 JOB_STATS_SUCCESS_EXAMPLE = _bridge_api.JOB_STATS_SUCCESS_EXAMPLE
@@ -99,6 +103,7 @@ COMPANY_CREATE_REQUEST_BODY = _bridge_api.COMPANY_CREATE_REQUEST_BODY
 COMPANY_PATCH_REQUEST_BODY = _bridge_api.COMPANY_PATCH_REQUEST_BODY
 COVER_LETTER_DRAFT_REQUEST_BODY = _bridge_api.COVER_LETTER_DRAFT_REQUEST_BODY
 TAILORED_SUMMARY_REQUEST_BODY = _bridge_api.TAILORED_SUMMARY_REQUEST_BODY
+OUTREACH_NOTE_REQUEST_BODY = _bridge_api.OUTREACH_NOTE_REQUEST_BODY
 LLM_SETTINGS_PATCH_REQUEST_BODY = _bridge_api.LLM_SETTINGS_PATCH_REQUEST_BODY
 
 __all__ = [
@@ -134,5 +139,7 @@ __all__ = [
     "phase6_generate_cover_letter_draft",
     "TAILORED_SUMMARY_REQUEST_BODY",
     "phase6_generate_tailored_summary",
+    "OUTREACH_NOTE_REQUEST_BODY",
+    "phase6_generate_outreach_note",
     "LLM_SETTINGS_PATCH_REQUEST_BODY",
 ]

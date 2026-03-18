@@ -275,9 +275,11 @@ function DetailDrawer({ open, job, jobsState, loading, onClose, onOpenOps }) {
             onSaveNotes={jobsState.saveNotes}
             onGenerateDraft={jobsState.generateDraft}
             onGenerateTailoredSummary={jobsState.generateTailoredSummary}
+            onGenerateOutreachNote={jobsState.generateOutreachNote}
             onReevaluate={jobsState.reevaluateJob}
             coverLetterState={jobsState.coverLetterState}
             tailoredSummaryState={jobsState.tailoredSummaryState}
+            outreachNoteState={jobsState.outreachNoteState}
           />
         )}
         {!loading && !job && <p className="section-message">Select a role to load its dossier.</p>}

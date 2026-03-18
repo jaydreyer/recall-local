@@ -3,6 +3,7 @@ import { startTransition, useEffect, useMemo, useRef, useState } from 'react'
 import {
   createCoverLetterDraft,
   createJobEvaluationRun,
+  createOutreachNote,
   createTailoredSummary,
   fetchJob,
   fetchJobGaps,
@@ -110,6 +111,12 @@ export function useJobs({ loadGaps = false } = {}) {
     loading: false,
     error: '',
     summary: null,
+  })
+  const [outreachNoteState, setOutreachNoteState] = useState({
+    jobId: '',
+    loading: false,
+    error: '',
+    note: null,
   })
   const jobsLengthRef = useRef(jobs.length)
   const hasStatsRef = useRef(Boolean(stats))
@@ -427,6 +434,22 @@ export function useJobs({ loadGaps = false } = {}) {
     }
   }
 
+  async function generateOutreachNote(jobId) {
+    setOutreachNoteState({ jobId, loading: true, error: '', note: null })
+    try {
+      const payload = await createOutreachNote({ job_id: jobId, save_to_vault: false })
+      setOutreachNoteState({ jobId, loading: false, error: '', note: payload })
+      await loadJobsData({ background: true })
+    } catch (noteError) {
+      setOutreachNoteState({
+        jobId,
+        loading: false,
+        error: noteError.message || 'Outreach note generation failed.',
+        note: null,
+      })
+    }
+  }
+
   function updateFilter(key, value) {
     startTransition(() => {
       setFilters((current) => ({ ...current, [key]: value }))
@@ -452,6 +475,7 @@ export function useJobs({ loadGaps = false } = {}) {
     actionJobId,
     coverLetterState,
     tailoredSummaryState,
+    outreachNoteState,
     setSelectedJobId: selectJob,
     setFilter: updateFilter,
     refresh,
@@ -463,5 +487,6 @@ export function useJobs({ loadGaps = false } = {}) {
     reevaluateJob,
     generateDraft,
     generateTailoredSummary,
+    generateOutreachNote,
   }
 }

@@ -1372,6 +1372,60 @@ class BridgeApiContractTests(unittest.TestCase):
             },
         )
 
+    def test_phase6_outreach_note_endpoint_returns_generated_note(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        fake_result = {
+            "note_id": "outreach_note_job-1",
+            "job_id": "job-1",
+            "provider": "ollama",
+            "model": "llama3.2:3b",
+            "generated_at": "2026-03-18T16:10:00+00:00",
+            "word_count": 54,
+            "note": "Hi team,\n\nI’m reaching out because this role looks closely aligned with my customer-facing AI rollout and API adoption background.\n\nBest,\nJay",
+            "saved_to_vault": False,
+            "vault_path": None,
+        }
+        with patch("scripts.phase1.ingest_bridge_api.phase6_generate_outreach_note", return_value=fake_result) as mocked, patch(
+            "scripts.phase1.ingest_bridge_api.phase6_update_job",
+            return_value={"jobId": "job-1"},
+        ) as update_mock:
+            with build_client(env) as client:
+                response = client.post(
+                    "/v1/outreach-notes",
+                    json={"job_id": "job-1", "save_to_vault": False, "settings": {"evaluation_model": "local"}},
+                )
+                invalid = client.post("/v1/outreach-notes", json={})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["workflow"], "workflow_06a_outreach_note")
+        self.assertEqual(response.json()["job_id"], "job-1")
+        self.assertEqual(invalid.status_code, 400)
+        self.assertEqual(mocked.call_args.kwargs["job_id"], "job-1")
+        self.assertFalse(mocked.call_args.kwargs["save_to_vault"])
+        update_mock.assert_called_once_with(
+            job_id="job-1",
+            status=None,
+            applied=None,
+            dismissed=None,
+            notes=None,
+            workflow={
+                "packet": {"outreachNote": True},
+                "artifacts": {
+                    "outreachNote": {
+                        "status": "ready",
+                        "updatedAt": "2026-03-18T16:10:00+00:00",
+                        "source": "generated",
+                        "vaultPath": None,
+                        "notes": "Hi team,\n\nI’m reaching out because this role looks closely aligned with my customer-facing AI rollout and API adoption background.\n\nBest,\nJay",
+                    }
+                },
+            },
+        )
+
     def test_phase6_resume_endpoint_accepts_markdown_payload(self) -> None:
         env = {
             "RECALL_API_KEY": "",

@@ -66,6 +66,7 @@ from scripts.phase6.job_repository import job_stats as phase6_job_stats  # noqa:
 from scripts.phase6.job_repository import list_jobs as phase6_list_jobs  # noqa: E402
 from scripts.phase6.job_repository import update_company_tier as phase6_update_company_tier  # noqa: F401,E402
 from scripts.phase6.job_repository import update_job as phase6_update_job  # noqa: F401,E402
+from scripts.phase6.outreach_note_drafter import generate_outreach_note as phase6_generate_outreach_note  # noqa: F401,E402
 from scripts.phase6.setup_collections import ensure_phase6_collections as phase6_ensure_collections  # noqa: F401,E402
 from scripts.phase6.tailored_summary_drafter import generate_tailored_summary as phase6_generate_tailored_summary  # noqa: F401,E402
 
@@ -130,6 +131,7 @@ class DashboardCacheWarmer:
         self.last_started_at: str | None = None
         self.last_completed_at: str | None = None
         self.last_error: str | None = None
+        self.last_gap_section: dict[str, Any] | None = None
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -152,6 +154,12 @@ class DashboardCacheWarmer:
                 "last_error": self.last_error,
             }
 
+    def warmed_gap_section(self) -> dict[str, Any] | None:
+        with self._lock:
+            if self.last_gap_section is None:
+                return None
+            return dict(self.last_gap_section)
+
     def warm_once(self) -> None:
         started_at = now_iso()
         with self._lock:
@@ -162,13 +170,14 @@ class DashboardCacheWarmer:
             phase6_job_stats()
             phase6_list_jobs(status="all", limit=60, include_details=False)
             phase6_list_company_profiles(jobs, include_jobs=False, limit=300)
-            phase6_aggregate_gaps(jobs)
+            gaps_payload = phase6_aggregate_gaps(jobs)
         except Exception as exc:  # noqa: BLE001
             with self._lock:
                 self.last_error = str(exc)
             return
         with self._lock:
             self.last_completed_at = now_iso()
+            self.last_gap_section = _gap_section_from_payload(gaps_payload)
 
     def _run(self) -> None:
         self.warm_once()
@@ -358,6 +367,19 @@ class TailoredSummaryResponse(BaseModel):
     generated_at: str
     word_count: int
     summary: str
+    saved_to_vault: bool
+    vault_path: Optional[str] = None
+
+
+class OutreachNoteResponse(BaseModel):
+    workflow: Literal["workflow_06a_outreach_note"]
+    note_id: str
+    job_id: str
+    provider: str
+    model: str
+    generated_at: str
+    word_count: int
+    note: str
     saved_to_vault: bool
     vault_path: Optional[str] = None
 
@@ -737,6 +759,50 @@ JOBS_LIST_SUCCESS_EXAMPLE = {
             "status": "evaluated",
             "fit_score": 84,
             "source": "career_page",
+            "workflow": {
+                "stage": "focus",
+                "nextActionApproval": "approved",
+                "packetApproval": "pending",
+                "packet": {
+                    "tailoredSummary": True,
+                    "resumeBullets": True,
+                    "coverLetterDraft": False,
+                    "outreachNote": False,
+                    "interviewBrief": False,
+                    "talkingPoints": False,
+                },
+                "packetReadiness": {
+                    "totalItems": 6,
+                    "requiredItems": ["tailoredSummary", "resumeBullets", "coverLetterDraft"],
+                    "checkedItems": ["tailoredSummary", "resumeBullets"],
+                    "linkedItems": ["tailoredSummary", "resumeBullets"],
+                    "verifiedItems": ["tailoredSummary", "resumeBullets"],
+                    "checkedWithoutArtifact": [],
+                    "artifactWithoutChecklist": [],
+                    "missingItems": ["coverLetterDraft", "outreachNote", "interviewBrief", "talkingPoints"],
+                    "counts": {
+                        "checked": 2,
+                        "linked": 2,
+                        "verified": 2,
+                        "requiredVerified": 2,
+                    },
+                    "readyForApproval": False,
+                },
+                "followUp": {
+                    "status": "not_scheduled",
+                    "dueAt": None,
+                    "lastCompletedAt": None,
+                },
+                "updatedAt": "2026-03-17T21:05:00Z",
+            },
+            "workflowTimeline": [
+                {
+                    "type": "next_action_approved",
+                    "label": "Next action approved",
+                    "detail": None,
+                    "at": "2026-03-17T21:05:00Z",
+                }
+            ],
             "observation": {
                 "provider_sequence": "local",
                 "location": {"preference_bucket": "remote"},
@@ -862,6 +928,19 @@ TAILORED_SUMMARY_SUCCESS_EXAMPLE = {
     "generated_at": "2026-03-06T16:05:00+00:00",
     "word_count": 38,
     "summary": "- Built customer-facing AI workflow systems.\n- Led API platform rollouts with strong operator empathy.\n- Translated technical complexity into adoption-focused execution.",
+    "saved_to_vault": False,
+    "vault_path": None,
+}
+
+OUTREACH_NOTE_SUCCESS_EXAMPLE = {
+    "workflow": "workflow_06a_outreach_note",
+    "note_id": "outreach_note_job-001",
+    "job_id": "job-001",
+    "provider": "ollama",
+    "model": "llama3.2:3b",
+    "generated_at": "2026-03-18T16:10:00+00:00",
+    "word_count": 67,
+    "note": "Hi team,\n\nI’m reaching out because the Solutions Engineer role looks closely aligned with my background leading customer-facing AI platform rollouts and API adoption work. I’d love to be considered and would be glad to share more context on the fit.\n\nBest,\nJay",
     "saved_to_vault": False,
     "vault_path": None,
 }
@@ -1294,9 +1373,54 @@ JOB_PATCH_REQUEST_BODY = {
                     "applied": {"type": "boolean"},
                     "dismissed": {"type": "boolean"},
                     "notes": {"type": "string"},
+                    "workflow": {
+                        "type": "object",
+                        "properties": {
+                            "stage": {"type": "string", "enum": ["focus", "review", "follow_up", "monitor", "closed"]},
+                            "nextActionApproval": {"type": "string", "enum": ["pending", "approved"]},
+                            "packetApproval": {"type": "string", "enum": ["pending", "approved"]},
+                            "packet": {
+                                "type": "object",
+                                "properties": {
+                                    "tailoredSummary": {"type": "boolean"},
+                                    "resumeBullets": {"type": "boolean"},
+                                    "coverLetterDraft": {"type": "boolean"},
+                                    "outreachNote": {"type": "boolean"},
+                                    "interviewBrief": {"type": "boolean"},
+                                    "talkingPoints": {"type": "boolean"},
+                                },
+                                "additionalProperties": False,
+                            },
+                            "followUp": {
+                                "type": "object",
+                                "properties": {
+                                    "status": {"type": "string", "enum": ["not_scheduled", "scheduled", "completed"]},
+                                    "dueAt": {"type": ["string", "null"], "format": "date-time"},
+                                    "lastCompletedAt": {"type": ["string", "null"], "format": "date-time"},
+                                },
+                                "additionalProperties": False,
+                            },
+                        },
+                        "additionalProperties": False,
+                    },
                 },
                 "additionalProperties": False,
-            }
+            },
+            "example": {
+                "notes": "Strong API/platform overlap; tailor bullets around developer enablement and customer demos.",
+                "workflow": {
+                    "stage": "follow_up",
+                    "nextActionApproval": "approved",
+                    "packet": {
+                        "tailoredSummary": True,
+                        "resumeBullets": True,
+                    },
+                    "followUp": {
+                        "status": "scheduled",
+                        "dueAt": "2026-03-24T16:00:00Z",
+                    },
+                },
+            },
         }
     },
 }
@@ -1412,6 +1536,42 @@ TAILORED_SUMMARY_REQUEST_BODY = {
             "examples": {
                 "default": {
                     "summary": "Generate tailored summary",
+                    "value": {"job_id": "job_001", "save_to_vault": False},
+                }
+            },
+        }
+    },
+}
+
+OUTREACH_NOTE_REQUEST_BODY = {
+    "required": True,
+    "content": {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "required": ["job_id"],
+                "properties": {
+                    "job_id": {"type": "string", "description": "Evaluated job identifier."},
+                    "save_to_vault": {"type": "boolean", "default": False},
+                    "settings": {
+                        "type": "object",
+                        "description": "Optional runtime override for outreach note generation model settings.",
+                        "properties": {
+                            "evaluation_model": {"type": "string", "enum": ["local", "cloud"]},
+                            "cloud_provider": {"type": "string", "enum": ["anthropic", "openai", "gemini"]},
+                            "cloud_model": {"type": "string"},
+                            "auto_escalate": {"type": "boolean"},
+                            "local_model": {"type": "string"},
+                            "max_tokens": {"type": "integer", "minimum": 128},
+                        },
+                        "additionalProperties": False,
+                    },
+                },
+                "additionalProperties": False,
+            },
+            "examples": {
+                "default": {
+                    "summary": "Generate outreach note",
                     "value": {"job_id": "job_001", "save_to_vault": False},
                 }
             },
@@ -1550,6 +1710,8 @@ def create_app() -> FastAPI:
             {"name": "Companies", "description": "List and refresh company profile summaries for job intelligence."},
             {"name": "LLM Settings", "description": "Read and update Phase 6 evaluation model settings."},
             {"name": "Cover Letter Drafts", "description": "Generate cover letter drafts from the current resume and job context."},
+            {"name": "Tailored Summaries", "description": "Generate tailored summaries from the current resume and job context."},
+            {"name": "Outreach Notes", "description": "Generate outreach notes from the current resume and job context."},
         ],
     )
     cors_origins = _cors_origins_from_env()
@@ -1726,11 +1888,7 @@ def _dashboard_checks_payload(
             notes=notes,
         ),
         "gaps": (
-            _run_dashboard_check(
-                label="gaps",
-                runner=lambda: _dashboard_gaps_section(),
-                notes=notes,
-            )
+            _dashboard_gaps_section_for_request(cache_warmer=cache_warmer, notes=notes)
             if include_gaps
             else None
         ),
@@ -1806,11 +1964,40 @@ def _dashboard_companies_section() -> dict[str, Any]:
 def _dashboard_gaps_section() -> dict[str, Any]:
     jobs = phase6_all_jobs()
     payload = phase6_aggregate_gaps(jobs)
+    return _gap_section_from_payload(payload)
+
+
+def _gap_section_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
     gap_count = len(payload.get("aggregated_gaps") or [])
     analyzed = int(payload.get("total_jobs_analyzed") or 0)
     status = "ok" if analyzed > 0 else "degraded"
     detail = f"{gap_count} aggregated gaps across {analyzed} evaluated jobs"
     return {"status": status, "count": gap_count, "detail": detail}
+
+
+def _dashboard_gaps_section_for_request(
+    *,
+    cache_warmer: DashboardCacheWarmer | None,
+    notes: list[str],
+) -> dict[str, Any]:
+    started = time.perf_counter()
+    if cache_warmer is not None:
+        warmed = cache_warmer.warmed_gap_section()
+        if warmed is not None:
+            warmed["latency_ms"] = int((time.perf_counter() - started) * 1000)
+            return warmed
+        notes.append("gaps check warming in background; serving degraded placeholder")
+        return {
+            "status": "degraded",
+            "count": 0,
+            "detail": "Gap summary is warming in the background",
+            "latency_ms": int((time.perf_counter() - started) * 1000),
+        }
+    return _run_dashboard_check(
+        label="gaps",
+        runner=lambda: _dashboard_gaps_section(),
+        notes=notes,
+    )
 
 
 def _db_path() -> Path:

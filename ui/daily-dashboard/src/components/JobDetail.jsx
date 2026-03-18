@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import CoverLetterDraft from './CoverLetterDraft'
+import OutreachNoteDraft from './OutreachNoteDraft'
 import TailoredSummaryDraft from './TailoredSummaryDraft'
 import { recommendationUrl } from '../utils/recommendationLinks'
 
@@ -227,13 +228,16 @@ export default function JobDetail({
   onSaveNotes,
   onGenerateDraft,
   onGenerateTailoredSummary,
+  onGenerateOutreachNote,
   onReevaluate,
   coverLetterState,
   tailoredSummaryState,
+  outreachNoteState,
 }) {
   const [notes, setNotes] = useState(job.notes || '')
   const persistedDraft = job?.workflow?.artifacts?.coverLetterDraft || null
   const persistedTailoredSummary = job?.workflow?.artifacts?.tailoredSummary || null
+  const persistedOutreachNote = job?.workflow?.artifacts?.outreachNote || null
 
   useEffect(() => {
     setNotes(job.notes || '')
@@ -309,6 +313,9 @@ export default function JobDetail({
             <button type="button" className="ghost-button detail-inline-action" onClick={() => onGenerateTailoredSummary(job.jobId)} disabled={busy}>
               Generate Tailored Summary
             </button>
+            <button type="button" className="ghost-button detail-inline-action" onClick={() => onGenerateOutreachNote(job.jobId)} disabled={busy}>
+              Generate Outreach Note
+            </button>
             <button type="button" className="accent-button detail-primary-action" onClick={() => onGenerateDraft(job.jobId)} disabled={busy}>
               Generate Cover Letter Draft
             </button>
@@ -319,6 +326,16 @@ export default function JobDetail({
                 <p className="meta-text">
                   Updated {new Date(persistedTailoredSummary.updatedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                   {persistedTailoredSummary.vaultPath ? ` · ${persistedTailoredSummary.vaultPath}` : ''}
+                </p>
+              </div>
+            ) : null}
+            {persistedOutreachNote?.updatedAt ? (
+              <div className="detail-artifact-note">
+                <p className="section-label">Latest outreach note artifact</p>
+                <p className="body-copy">{persistedOutreachNote.notes || 'Outreach note artifact linked.'}</p>
+                <p className="meta-text">
+                  Updated {new Date(persistedOutreachNote.updatedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                  {persistedOutreachNote.vaultPath ? ` · ${persistedOutreachNote.vaultPath}` : ''}
                 </p>
               </div>
             ) : null}
@@ -347,6 +364,7 @@ export default function JobDetail({
       </div>
 
       <TailoredSummaryDraft state={tailoredSummaryState} visible={tailoredSummaryState.jobId === job.jobId} />
+      <OutreachNoteDraft state={outreachNoteState} visible={outreachNoteState.jobId === job.jobId} />
       <CoverLetterDraft state={coverLetterState} visible={coverLetterState.jobId === job.jobId} />
     </div>
   )

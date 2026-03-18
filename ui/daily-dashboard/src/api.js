@@ -219,3 +219,7 @@ export function createCoverLetterDraft(payload) {
 export function createTailoredSummary(payload) {
   return sendJson('/v1/tailored-summaries', 'POST', payload)
 }
+
+export function createOutreachNote(payload) {
+  return sendJson('/v1/outreach-notes', 'POST', payload)
+}
