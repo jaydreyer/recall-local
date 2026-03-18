@@ -5,7 +5,7 @@ import JobDetail from './JobDetail'
 import StateNotice from './StateNotice'
 import { useWorkflowDemoState } from '../hooks/useWorkflowDemoState'
 import { displayCompanyName } from '../utils/displayText'
-import { buildWorkflowTimeline, deriveWorkflow } from '../utils/workflowDemo'
+import { buildWorkflowTimeline, deriveWorkflow, preferredDemoJob } from '../utils/workflowDemo'
 
 function compactRelativeTime(value) {
   if (!value) {
@@ -85,6 +85,39 @@ function WorkflowRail({ job, coverLetterState, workflowState, onApproveNextActio
 
   return (
     <div className="ops-rail-stack">
+      <section className="ops-rail-card">
+        <div className="panel-heading compact">
+          <div>
+            <p className="section-label">Demo storyline</p>
+            <h3 className="card-title">How to narrate this role</h3>
+          </div>
+        </div>
+        <div className="section-rule" />
+        <div className="demo-story-list">
+          <div className="timeline-row">
+            <span className="timeline-dot" aria-hidden="true" />
+            <div>
+              <strong>1. Explain the fit</strong>
+              <p className="meta-text">Start with the score and strongest match.</p>
+            </div>
+          </div>
+          <div className="timeline-row">
+            <span className="timeline-dot" aria-hidden="true" />
+            <div>
+              <strong>2. Show the next action</strong>
+              <p className="meta-text">Point to blockers, approvals, and packet readiness.</p>
+            </div>
+          </div>
+          <div className="timeline-row">
+            <span className="timeline-dot" aria-hidden="true" />
+            <div>
+              <strong>3. Generate or approve</strong>
+              <p className="meta-text">Use the checklist or draft CTA to show execution support.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="ops-rail-card">
         <div className="panel-heading compact">
           <div>
@@ -185,6 +218,7 @@ function WorkflowRail({ job, coverLetterState, workflowState, onApproveNextActio
 export default function OpsWorkspace({ jobsState, onBackToOverview }) {
   const [lane, setLane] = useState('focus')
   const jobs = Array.isArray(jobsState.jobs) ? jobsState.jobs : []
+  const demoJob = useMemo(() => preferredDemoJob(jobs), [jobs])
   const laneCounts = useMemo(
     () => ({
       focus: jobs.filter((job) => opsLane(job) === 'focus').length,
@@ -195,7 +229,7 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
     [jobs]
   )
   const filteredJobs = useMemo(() => jobs.filter((job) => opsLane(job) === lane).slice(0, 30), [jobs, lane])
-  const selectedJob = jobsState.selectedJob || filteredJobs[0] || jobs[0] || null
+  const selectedJob = jobsState.selectedJob || demoJob || filteredJobs[0] || jobs[0] || null
   const selectedLane = selectedJob ? opsLane(selectedJob) : firstAvailableLane(laneCounts)
   const { workflowState, setNextActionApproval, setPacketApproval, togglePacketItem } = useWorkflowDemoState(
     selectedJob?.jobId,

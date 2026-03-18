@@ -160,3 +160,39 @@ export function buildWorkflowTimeline(job, coverLetterState) {
         },
       ]
 }
+
+function demoNarrativeScore(job) {
+  if (!job) {
+    return -1
+  }
+
+  let score = Number(job.fit_score ?? -1)
+  if (job.score_rationale) {
+    score += 8
+  }
+  if (job.application_tips) {
+    score += 6
+  }
+  if (job.cover_letter_angle) {
+    score += 6
+  }
+  if (Array.isArray(job.gaps) && job.gaps.length > 0) {
+    score += 5
+  }
+  if (Array.isArray(job.matching_skills) && job.matching_skills.length > 0) {
+    score += 5
+  }
+  if (job.dismissed || job.status === 'dismissed') {
+    score -= 100
+  }
+  if (job.applied || job.status === 'applied') {
+    score -= 10
+  }
+  return score
+}
+
+export function preferredDemoJob(jobs = []) {
+  return [...jobs]
+    .filter(Boolean)
+    .sort((left, right) => demoNarrativeScore(right) - demoNarrativeScore(left))[0] || null
+}

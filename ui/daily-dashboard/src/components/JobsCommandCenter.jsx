@@ -5,7 +5,7 @@ import JobDetail from './JobDetail'
 import StateNotice from './StateNotice'
 import { displayCompanyName, displaySourceLabel } from '../utils/displayText'
 import { summarizeAngle, summarizeTopGap, summarizeTopMatch } from '../utils/jobSummary'
-import { deriveWorkflow } from '../utils/workflowDemo'
+import { deriveWorkflow, preferredDemoJob } from '../utils/workflowDemo'
 
 const LANE_COPY = {
   focus: 'Best-fit evaluated roles ready for outreach or drafting.',
@@ -308,7 +308,8 @@ export default function JobsCommandCenter({ jobsState, settings, onOpenSettings,
   const isInitialLoad = jobsState.loading && jobs.length === 0 && !jobsState.lastLoadedAt
   const isRefreshing = jobsState.loading && !isInitialLoad
   const selectedVisible = selectedJob && visibleJobs.some((job) => job.jobId === selectedJob.jobId)
-  const heroJob = selectedVisible ? selectedJob : visibleJobs[0] || jobs[0] || null
+  const demoJob = useMemo(() => preferredDemoJob(jobs), [jobs])
+  const heroJob = selectedVisible ? selectedJob : demoJob || visibleJobs[0] || jobs[0] || null
   const heroWorkflow = heroJob ? deriveWorkflow(heroJob, jobsState.coverLetterState) : null
 
   const companyPulse = useMemo(() => aggregateCompanies(jobs), [jobs])
@@ -539,6 +540,13 @@ export default function JobsCommandCenter({ jobsState, settings, onOpenSettings,
                 <p>{heroWorkflow?.nextActionLabel || queueHeadline(heroJob)}</p>
               </div>
             </div>
+
+            {demoJob?.jobId === heroJob.jobId && (
+              <div className="demo-note">
+                <span className="mini-label">Demo-ready role</span>
+                <p className="body-copy">This role has the clearest fit, rationale, and packet story for a live walkthrough.</p>
+              </div>
+            )}
 
             <div className="spotlight-actions">
               <button type="button" className="mission-primary-button inline" onClick={() => openDossier(heroJob.jobId)}>

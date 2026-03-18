@@ -2619,6 +2619,19 @@ body {
   margin-top: 18px;
 }
 
+.demo-story-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.demo-note {
+  margin-top: 20px;
+  padding: 14px 16px;
+  border-left: 3px solid var(--status-pending);
+  background: rgba(255, 252, 244, 0.82);
+}
+
 .packet-checklist {
   gap: 12px;
 }
