@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import CompanyLogo from './CompanyLogo'
 import JobDetail from './JobDetail'
@@ -53,6 +53,19 @@ const LANE_LABELS = {
   review: 'Needs review',
   follow_up: 'Follow-up',
   monitor: 'Monitor',
+}
+
+function firstAvailableLane(laneCounts) {
+  if (laneCounts.focus > 0) {
+    return 'focus'
+  }
+  if (laneCounts.review > 0) {
+    return 'review'
+  }
+  if (laneCounts.follow_up > 0) {
+    return 'follow_up'
+  }
+  return 'monitor'
 }
 
 function WorkflowRail({ job, coverLetterState }) {
@@ -142,7 +155,23 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
   )
   const filteredJobs = useMemo(() => jobs.filter((job) => opsLane(job) === lane).slice(0, 30), [jobs, lane])
   const selectedJob = jobsState.selectedJob || filteredJobs[0] || jobs[0] || null
+  const selectedLane = selectedJob ? opsLane(selectedJob) : firstAvailableLane(laneCounts)
   const workflow = deriveWorkflow(selectedJob, jobsState.coverLetterState)
+
+  useEffect(() => {
+    if (!jobs.length) {
+      return
+    }
+
+    if (selectedJob && selectedLane !== lane) {
+      setLane(selectedLane)
+      return
+    }
+
+    if (!selectedJob && laneCounts[lane] === 0) {
+      setLane(firstAvailableLane(laneCounts))
+    }
+  }, [jobs.length, lane, laneCounts, selectedJob, selectedLane])
 
   return (
     <section className="ops-workspace reveal reveal-delay-3">
@@ -154,7 +183,7 @@ export default function OpsWorkspace({ jobsState, onBackToOverview }) {
           </div>
           <h2 className="page-title ops-title">Move strong roles through the pipeline</h2>
           <p className="page-subtitle ops-subtitle">
-            A desktop-first control room for triage, tailoring, approvals, and follow-through.
+            A desktop-first control room for triage, tailoring, approvals, and follow-through across your best opportunities.
           </p>
         </div>
         <button type="button" className="ghost-button" onClick={onBackToOverview}>
