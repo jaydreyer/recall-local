@@ -268,6 +268,23 @@ class BridgeApiContractTests(unittest.TestCase):
                     "dueAt": "2026-03-24T16:00:00Z",
                     "lastCompletedAt": None,
                 },
+                "packetReadiness": {
+                    "totalItems": 6,
+                    "requiredItems": ["tailoredSummary", "resumeBullets", "coverLetterDraft"],
+                    "checkedItems": ["tailoredSummary"],
+                    "linkedItems": ["tailoredSummary", "resumeBullets"],
+                    "verifiedItems": ["tailoredSummary"],
+                    "checkedWithoutArtifact": [],
+                    "artifactWithoutChecklist": ["resumeBullets"],
+                    "missingItems": ["coverLetterDraft", "outreachNote", "interviewBrief", "talkingPoints"],
+                    "counts": {
+                        "checked": 1,
+                        "linked": 2,
+                        "verified": 1,
+                        "requiredVerified": 1,
+                    },
+                    "readyForApproval": False,
+                },
                 "updatedAt": "2026-03-17T21:05:00Z",
             },
             "workflowTimeline": [
@@ -276,6 +293,9 @@ class BridgeApiContractTests(unittest.TestCase):
                     "label": "Next action approved",
                     "detail": None,
                     "at": "2026-03-17T21:05:00Z",
+                    "category": "approval",
+                    "origin": "persisted",
+                    "tone": "complete",
                 }
             ],
         }
@@ -320,6 +340,9 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(response.json()["workflow"]["packet"]["tailoredSummary"], True)
         self.assertEqual(response.json()["workflow"]["artifacts"]["resumeBullets"]["status"], "ready")
         self.assertEqual(response.json()["workflow"]["followUp"]["status"], "scheduled")
+        self.assertFalse(response.json()["workflow"]["packetReadiness"]["readyForApproval"])
+        self.assertEqual(response.json()["workflowTimeline"][0]["category"], "approval")
+        self.assertEqual(response.json()["workflowTimeline"][0]["tone"], "complete")
         update_mock.assert_called_once_with(
             job_id="job-123",
             status=None,
@@ -947,7 +970,54 @@ class BridgeApiContractTests(unittest.TestCase):
             "total": 1,
             "limit": 50,
             "offset": 0,
-            "items": [{"jobId": "job-1", "title": "Solutions Engineer", "status": "evaluated", "fit_score": 80}],
+            "items": [
+                {
+                    "jobId": "job-1",
+                    "title": "Solutions Engineer",
+                    "status": "evaluated",
+                    "fit_score": 80,
+                    "workflow": {
+                        "stage": "focus",
+                        "packetApproval": "pending",
+                        "packet": {
+                            "tailoredSummary": True,
+                            "resumeBullets": True,
+                            "coverLetterDraft": False,
+                            "outreachNote": False,
+                            "interviewBrief": False,
+                            "talkingPoints": False,
+                        },
+                        "packetReadiness": {
+                            "totalItems": 6,
+                            "requiredItems": ["tailoredSummary", "resumeBullets", "coverLetterDraft"],
+                            "checkedItems": ["tailoredSummary", "resumeBullets"],
+                            "linkedItems": ["tailoredSummary", "resumeBullets"],
+                            "verifiedItems": ["tailoredSummary", "resumeBullets"],
+                            "checkedWithoutArtifact": [],
+                            "artifactWithoutChecklist": [],
+                            "missingItems": ["coverLetterDraft", "outreachNote", "interviewBrief", "talkingPoints"],
+                            "counts": {
+                                "checked": 2,
+                                "linked": 2,
+                                "verified": 2,
+                                "requiredVerified": 2,
+                            },
+                            "readyForApproval": False,
+                        },
+                    },
+                    "workflowTimeline": [
+                        {
+                            "type": "packet_approved",
+                            "label": "Packet approved",
+                            "detail": None,
+                            "at": "2026-03-18T20:00:00Z",
+                            "category": "approval",
+                            "origin": "persisted",
+                            "tone": "complete",
+                        }
+                    ],
+                }
+            ],
         }
         stats_payload = {
             "total_jobs": 1,
@@ -965,6 +1035,9 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(jobs_response.status_code, 200)
         self.assertEqual(jobs_response.json()["workflow"], "workflow_06a_jobs")
         self.assertEqual(jobs_response.json()["items"][0]["jobId"], "job-1")
+        self.assertFalse(jobs_response.json()["items"][0]["workflow"]["packetReadiness"]["readyForApproval"])
+        self.assertEqual(jobs_response.json()["items"][0]["workflowTimeline"][0]["category"], "approval")
+        self.assertEqual(jobs_response.json()["items"][0]["workflowTimeline"][0]["tone"], "complete")
         self.assertEqual(stats_response.status_code, 200)
         self.assertEqual(stats_response.json()["workflow"], "workflow_06a_job_stats")
         self.assertEqual(alias_response.status_code, 404)
