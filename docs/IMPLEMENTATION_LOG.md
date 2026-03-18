@@ -2,6 +2,62 @@
 
 Public-repo note: historical entries use placeholder hostnames and paths where the original logs referenced private machine details. Older file references remain as evidence-first text and may no longer be directly clickable.
 
+## 2026-03-18 - Application Ops timeline semantics and follow-up history refined
+
+### What was executed
+
+- Tightened Phase 6 workflow timeline metadata in:
+  - `<repo-root>/scripts/phase6/job_repository.py`
+  - workflow events now carry explicit category, origin, and tone metadata so Ops can distinguish approvals, packet work, follow-up changes, application history, and derived signals
+  - status/application mutations now emit more specific timeline labels such as `Application recorded` instead of relying on generic status-change language
+- Improved Ops timeline rendering in:
+  - `<repo-root>/ui/daily-dashboard/src/utils/workflowDemo.js`
+  - `<repo-root>/ui/daily-dashboard/src/components/OpsWorkspace.jsx`
+  - persisted workflow events now keep their richer semantics in the right rail, synthetic events are marked as derived, and duplicate synthetic application/draft history is suppressed when persisted events already exist
+- Added direct regression coverage in:
+  - `<repo-root>/tests/test_phase6_job_repository.py`
+  - covers legacy timeline normalization metadata inference, richer workflow mutation event generation, and follow-up completion behavior
+
+### Validation
+
+- Local validation:
+  - `python3 -m pytest -q tests/test_phase6_job_repository.py`
+
+### Results
+
+- The Ops timeline now reads more like a true application-history rail instead of a flat mixed event list.
+- Follow-up, approval, packet, and artifact transitions are easier to distinguish in both backend data and dashboard presentation.
+
+## 2026-03-18 - Application Ops packet readiness now reconciles checklist state with artifact truth
+
+### What was executed
+
+- Added computed packet-readiness reconciliation in:
+  - `<repo-root>/scripts/phase6/job_repository.py`
+  - job workflow payloads now expose `workflow.packetReadiness` with checked, linked, verified, and required-item counts plus mismatch lists for checklist-without-artifact and artifact-without-checklist states
+- Updated Ops packet heuristics in:
+  - `<repo-root>/ui/daily-dashboard/src/utils/workflowDemo.js`
+  - `<repo-root>/ui/daily-dashboard/src/components/OpsWorkspace.jsx`
+  - packet labels, blockers, queue summaries, readiness sorting, and `Ready to apply` gating now depend on both persisted checklist state and linked artifact truth
+  - packet approval remains backward-compatible, but the UI now distinguishes genuinely approval-ready packets from approvals granted with incomplete evidence
+- Refreshed bridge example payloads in:
+  - `<repo-root>/scripts/phase1/ingest_bridge_api.py`
+  - surfaces the new `packetReadiness` response shape in the jobs example
+- Expanded regression coverage in:
+  - `<repo-root>/tests/test_phase6_job_repository.py`
+  - covers the new readiness reconciliation logic for core packet artifacts
+
+### Validation
+
+- Local validation:
+  - `./.venv/bin/python -m pytest -q tests/test_phase6_job_repository.py`
+  - `npm run build` (from `ui/daily-dashboard/`)
+
+### Results
+
+- The Ops console now treats packet readiness as a combination of operator checklist confirmation and real linked deliverables instead of assuming either source alone is sufficient.
+- Queue counts and blockers better reflect which roles are actually ready to move toward application.
+
 ## 2026-03-13 - Public-readiness hardening, shared helpers, and bridge route extraction
 
 ### What was executed

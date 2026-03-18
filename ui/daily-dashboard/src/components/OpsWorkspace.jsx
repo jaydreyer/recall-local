@@ -226,7 +226,7 @@ function WorkflowRail({
             Sync recommendation
           </button>
           <button type="button" className="ghost-button" onClick={onApprovePacket}>
-            Approve packet
+            {workflow.packetReadyForApproval ? 'Approve packet' : 'Approve packet anyway'}
           </button>
         </div>
         <div className="workflow-stage-grid">
@@ -287,6 +287,11 @@ function WorkflowRail({
           <p className="section-label">Packet progress</p>
           <strong>{workflow.packetProgressLabel}</strong>
           <p className="body-copy">{workflow.packetArtifactSummaryLabel}</p>
+          {workflow.packetSummary?.artifactWithoutChecklist?.length > 0 ? (
+            <p className="meta-text">
+              Linked but not confirmed: {workflow.packetSummary.artifactWithoutChecklistLabels.slice(0, 2).join(', ')}
+            </p>
+          ) : null}
         </div>
         {coverLetterArtifact?.available ? (
           <div className="workflow-callout pending">
@@ -394,11 +399,14 @@ function WorkflowRail({
         <div className="section-rule" />
         <div className="workflow-timeline">
           {timeline.map((event) => (
-            <div key={`${event.type}-${event.dateLabel}`} className="timeline-row">
+            <div key={`${event.type}-${event.dateLabel}-${event.origin || 'persisted'}`} className="timeline-row">
               <span className={`timeline-dot ${event.tone || 'default'}`} aria-hidden="true" />
               <div>
                 <strong>{event.label}</strong>
-                <p className="meta-text">{event.dateLabel}</p>
+                <p className="meta-text">
+                  {event.sourceLabel ? `${event.sourceLabel} · ` : ''}
+                  {event.dateLabel}
+                </p>
                 {event.detail ? <p className="timeline-detail">{event.detail}</p> : null}
               </div>
             </div>
@@ -444,10 +452,10 @@ export default function OpsWorkspace({
       if (workflowState.nextActionApproval !== 'approved' || workflowState.packetApproval !== 'approved') {
         counts.needs_approval += 1
       }
-      if (Object.values(workflowState.packet || {}).some(Boolean) && workflowState.packetApproval !== 'approved') {
+      if ((workflow.packetSummary?.completed > 0 || workflow.packetSummary?.linked > 0) && workflowState.packetApproval !== 'approved') {
         counts.packet_in_progress += 1
       }
-      if (workflow.stage === 'focus' && workflowState.packetApproval === 'approved') {
+      if (workflow.stage === 'focus' && workflowState.packetApproval === 'approved' && workflow.packetReadyForApproval) {
         counts.ready_to_apply += 1
       }
       if (isFollowUpDue(job)) {
@@ -467,10 +475,10 @@ export default function OpsWorkspace({
             return workflowState.nextActionApproval !== 'approved' || workflowState.packetApproval !== 'approved'
           }
           if (queueFilter === 'packet_in_progress') {
-            return Object.values(workflowState.packet || {}).some(Boolean) && workflowState.packetApproval !== 'approved'
+            return (workflow.packetSummary?.completed > 0 || workflow.packetSummary?.linked > 0) && workflowState.packetApproval !== 'approved'
           }
           if (queueFilter === 'ready_to_apply') {
-            return workflow.stage === 'focus' && workflowState.packetApproval === 'approved'
+            return workflow.stage === 'focus' && workflowState.packetApproval === 'approved' && workflow.packetReadyForApproval
           }
           if (queueFilter === 'follow_up_due') {
             return isFollowUpDue(job)
@@ -502,9 +510,10 @@ export default function OpsWorkspace({
           const readinessScore = (job, workflow, workflowState) => {
             let score = 0
             if (workflow.stage === 'focus') score += 50
-            if (workflowState.packetApproval === 'approved') score += 40
+            if (workflowState.packetApproval === 'approved' && workflow.packetReadyForApproval) score += 40
             if (workflowState.nextActionApproval === 'approved') score += 18
-            score += Object.values(workflowState.packet || {}).filter(Boolean).length * 4
+            score += Number(workflow.packetSummary?.verified || 0) * 6
+            score += Number(workflow.packetSummary?.linked || 0) * 2
             score += Math.max(0, Number(job.fit_score ?? 0) / 10)
             return score
           }

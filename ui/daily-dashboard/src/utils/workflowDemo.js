@@ -11,6 +11,7 @@ export const PACKET_ARTIFACT_LABELS = {
   talkingPoints: 'Talking points',
 }
 const PACKET_SEQUENCE = ['tailoredSummary', 'resumeBullets', 'coverLetterDraft', 'outreachNote', 'interviewBrief', 'talkingPoints']
+const REQUIRED_PACKET_SEQUENCE = ['tailoredSummary', 'resumeBullets', 'coverLetterDraft']
 
 export const WORKFLOW_STAGE_LABELS = {
   focus: 'Focus queue',
@@ -88,11 +89,46 @@ function packetReadinessSummary(packet, packetArtifacts) {
   const completed = packetCompletion(packet)
   const linked = packetArtifactCompletion(packetArtifacts)
   const missing = missingPacketItems(packet)
+  const verified = PACKET_SEQUENCE.filter((key) => packet?.[key] && packetArtifacts?.[key]?.available)
+  const checkedWithoutArtifact = PACKET_SEQUENCE.filter((key) => packet?.[key] && !packetArtifacts?.[key]?.available)
+  const artifactWithoutChecklist = PACKET_SEQUENCE.filter((key) => !packet?.[key] && packetArtifacts?.[key]?.available)
+  const requiredVerified = REQUIRED_PACKET_SEQUENCE.filter((key) => verified.includes(key))
   return {
     completed,
     linked,
+    verified: verified.length,
+    requiredVerified: requiredVerified.length,
+    readyForApproval: requiredVerified.length === REQUIRED_PACKET_SEQUENCE.length,
+    checkedWithoutArtifact,
+    artifactWithoutChecklist,
     missing,
     missingLabels: missing.map((key) => PACKET_ARTIFACT_LABELS[key] || titleCaseAction(key)),
+    checkedWithoutArtifactLabels: checkedWithoutArtifact.map((key) => PACKET_ARTIFACT_LABELS[key] || titleCaseAction(key)),
+    artifactWithoutChecklistLabels: artifactWithoutChecklist.map((key) => PACKET_ARTIFACT_LABELS[key] || titleCaseAction(key)),
+  }
+}
+
+function normalizePacketSummary(summary = {}) {
+  const counts = summary.counts || {}
+  return {
+    ...summary,
+    completed: typeof summary.completed === 'number' ? summary.completed : Number(counts.checked || 0),
+    linked: typeof summary.linked === 'number' ? summary.linked : Number(counts.linked || 0),
+    verified: typeof summary.verified === 'number' ? summary.verified : Number(counts.verified || 0),
+    requiredVerified: typeof summary.requiredVerified === 'number' ? summary.requiredVerified : Number(counts.requiredVerified || 0),
+    checkedWithoutArtifact: Array.isArray(summary.checkedWithoutArtifact) ? summary.checkedWithoutArtifact : [],
+    artifactWithoutChecklist: Array.isArray(summary.artifactWithoutChecklist) ? summary.artifactWithoutChecklist : [],
+    missing: Array.isArray(summary.missing) ? summary.missing : Array.isArray(summary.missingItems) ? summary.missingItems : [],
+    missingLabels: Array.isArray(summary.missingLabels)
+      ? summary.missingLabels
+      : (Array.isArray(summary.missingItems) ? summary.missingItems : []).map((key) => PACKET_ARTIFACT_LABELS[key] || titleCaseAction(key)),
+    checkedWithoutArtifactLabels: Array.isArray(summary.checkedWithoutArtifactLabels)
+      ? summary.checkedWithoutArtifactLabels
+      : (Array.isArray(summary.checkedWithoutArtifact) ? summary.checkedWithoutArtifact : []).map((key) => PACKET_ARTIFACT_LABELS[key] || titleCaseAction(key)),
+    artifactWithoutChecklistLabels: Array.isArray(summary.artifactWithoutChecklistLabels)
+      ? summary.artifactWithoutChecklistLabels
+      : (Array.isArray(summary.artifactWithoutChecklist) ? summary.artifactWithoutChecklist : []).map((key) => PACKET_ARTIFACT_LABELS[key] || titleCaseAction(key)),
+    readyForApproval: Boolean(summary.readyForApproval),
   }
 }
 
@@ -324,15 +360,23 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
   for (const key of PACKET_ARTIFACT_KEYS) {
     packetArtifacts[key] = packetArtifactState(job, key)
   }
-  const packetSummary = packetReadinessSummary(effectiveWorkflow?.packet || {}, packetArtifacts)
+  const packetSummary = normalizePacketSummary(job?.workflow?.packetReadiness || packetReadinessSummary(effectiveWorkflow?.packet || {}, packetArtifacts))
   const packetProgressLabel =
-    packetSummary.completed > 0
-      ? `${packetSummary.completed}/${PACKET_SEQUENCE.length} packet items complete`
-      : 'No packet work linked yet'
+    packetSummary.verified > 0
+      ? `${packetSummary.verified}/${PACKET_SEQUENCE.length} packet items verified`
+      : packetSummary.completed > 0
+        ? `${packetSummary.completed}/${PACKET_SEQUENCE.length} packet items checked`
+        : 'No packet work linked yet'
   const packetArtifactSummaryLabel =
-    packetSummary.linked > 0
-      ? `${packetSummary.linked} linked ${packetSummary.linked === 1 ? 'artifact' : 'artifacts'}`
-      : 'No linked artifacts yet'
+    packetSummary.readyForApproval
+      ? 'Required packet artifacts are linked and verified'
+      : packetSummary.checkedWithoutArtifact?.length > 0
+        ? `${packetSummary.checkedWithoutArtifact.length} checked item${packetSummary.checkedWithoutArtifact.length === 1 ? '' : 's'} still need linked artifacts`
+        : packetSummary.artifactWithoutChecklist?.length > 0
+          ? `${packetSummary.artifactWithoutChecklist.length} linked artifact${packetSummary.artifactWithoutChecklist.length === 1 ? '' : 's'} still need checklist confirmation`
+          : packetSummary.linked > 0
+            ? `${packetSummary.linked} linked ${packetSummary.linked === 1 ? 'artifact' : 'artifacts'}`
+            : 'No linked artifacts yet'
 
   if (status === 'dismissed' || status === 'expired') {
     const nextActionStateValue = nextActionState(job, effectiveWorkflow, {
@@ -365,6 +409,7 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       coverLetterArtifact: draftArtifact,
       packetArtifacts,
       packetSummary,
+      packetReadyForApproval: packetSummary.readyForApproval,
       nextActionRationale: nextActionStateValue.rationale,
       nextActionConfidence: nextActionStateValue.confidence,
       nextActionDueLabel: nextActionStateValue.dueLabel,
@@ -437,6 +482,7 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       coverLetterArtifact: draftArtifact,
       packetArtifacts,
       packetSummary,
+      packetReadyForApproval: packetSummary.readyForApproval,
       nextActionRationale: nextActionStateValue.rationale,
       nextActionConfidence: nextActionStateValue.confidence,
       nextActionDueLabel: nextActionStateValue.dueLabel,
@@ -475,6 +521,7 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       coverLetterArtifact: draftArtifact,
       packetArtifacts,
       packetSummary,
+      packetReadyForApproval: packetSummary.readyForApproval,
       nextActionRationale: nextActionStateValue.rationale,
       nextActionConfidence: nextActionStateValue.confidence,
       nextActionDueLabel: nextActionStateValue.dueLabel,
@@ -499,30 +546,40 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       nextAction: nextActionStateValue.action,
       nextActionLabel: nextActionStateValue.label,
       blocker:
-        packetApproval === 'approved'
+        packetApproval === 'approved' && packetSummary.readyForApproval
           ? 'Ready to move forward'
-          : packetSummary.completed >= 4 && nextActionApproval === 'approved'
-            ? `Packet review pending (${packetProgressLabel})`
-            : draftGenerated || packetDone
-              ? `Packet still missing ${packetSummary.missingLabels.slice(0, 2).join(' and ')}`
-              : nextActionApproval === 'approved'
-                ? 'Packet work has not started yet'
-                : 'Next action not approved',
-      blockerTone: packetApproval === 'approved' ? 'pending' : draftGenerated || packetDone ? 'pending' : 'warning',
-      packetStatus: packetApproval === 'approved' ? 'approved' : draftGenerated || packetDone ? 'draft_generated' : 'not_started',
+          : packetSummary.checkedWithoutArtifact?.length > 0
+            ? `Packet still needs artifact links for ${packetSummary.checkedWithoutArtifactLabels.slice(0, 2).join(' and ')}`
+            : packetSummary.artifactWithoutChecklist?.length > 0
+              ? `${packetSummary.artifactWithoutChecklistLabels.slice(0, 2).join(' and ')} linked but not checklist-confirmed`
+              : packetSummary.readyForApproval
+                ? 'Packet review pending approval'
+                : draftGenerated || packetDone
+                  ? `Packet still missing ${packetSummary.missingLabels.slice(0, 2).join(' and ')}`
+                  : nextActionApproval === 'approved'
+                    ? 'Packet work has not started yet'
+                    : 'Next action not approved',
+      blockerTone: packetApproval === 'approved' && packetSummary.readyForApproval ? 'pending' : draftGenerated || packetDone ? 'pending' : 'warning',
+      packetStatus: packetApproval === 'approved' && packetSummary.readyForApproval ? 'approved' : packetSummary.readyForApproval ? 'awaiting_approval' : draftGenerated || packetDone ? 'draft_generated' : 'not_started',
       packetLabel:
-        packetApproval === 'approved'
+        packetApproval === 'approved' && packetSummary.readyForApproval
           ? 'Approved'
-          : packetSummary.completed > 0
-            ? packetProgressLabel
-            : draftGenerated || packetDone
-              ? 'Draft generated'
-              : 'Not started',
+          : packetSummary.readyForApproval
+            ? 'Ready for approval'
+            : packetSummary.verified > 0
+              ? packetProgressLabel
+              : packetSummary.completed > 0
+                ? `${packetSummary.completed}/${PACKET_SEQUENCE.length} packet items checked`
+                : draftGenerated || packetDone
+                  ? 'Draft generated'
+                  : 'Not started',
       packetProgressLabel,
       packetArtifactSummaryLabel,
       approvalLabel:
-        packetApproval === 'approved'
+        packetApproval === 'approved' && packetSummary.readyForApproval
           ? 'Packet approved'
+          : packetApproval === 'approved'
+            ? 'Approved with incomplete evidence'
           : nextActionApproval === 'approved'
             ? 'Next action approved'
             : 'Needs approval',
@@ -537,6 +594,7 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       coverLetterArtifact: draftArtifact,
       packetArtifacts,
       packetSummary,
+      packetReadyForApproval: packetSummary.readyForApproval,
       nextActionRationale: nextActionStateValue.rationale,
       nextActionConfidence: nextActionStateValue.confidence,
       nextActionDueLabel: nextActionStateValue.dueLabel,
@@ -577,6 +635,7 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
     coverLetterArtifact: draftArtifact,
     packetArtifacts,
     packetSummary,
+    packetReadyForApproval: packetSummary.readyForApproval,
     nextActionRationale: nextActionStateValue.rationale,
     nextActionConfidence: nextActionStateValue.confidence,
     nextActionDueLabel: nextActionStateValue.dueLabel,
@@ -584,23 +643,59 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
   }
 }
 
-function buildEvent(type, label, value, detail = '') {
+function inferEventTone(type, category, fallback = 'default') {
+  if (fallback && fallback !== 'default') {
+    return fallback
+  }
+  if (type.includes('approved') || type.includes('completed')) {
+    return 'complete'
+  }
+  if (type.includes('pending') || type.includes('scheduled')) {
+    return 'pending'
+  }
+  if (type.includes('reopened') || type.includes('cleared')) {
+    return 'warning'
+  }
+  if (category === 'artifact' || category === 'packet') {
+    return 'pending'
+  }
+  if (category === 'approval') {
+    return 'complete'
+  }
+  return 'default'
+}
+
+function eventCategoryLabel(category, origin) {
+  if (origin === 'derived') {
+    return 'Derived signal'
+  }
+  const labels = {
+    application: 'Application history',
+    workflow: 'Workflow event',
+    approval: 'Approval event',
+    packet: 'Packet milestone',
+    follow_up: 'Follow-up event',
+    artifact: 'Artifact event',
+    system: 'System event',
+  }
+  return labels[category] || 'Workflow event'
+}
+
+function buildEvent(type, label, value, detail = '', options = {}) {
   if (!value) {
     return null
   }
   const parsed = new Date(value)
+  const category = options.category || 'system'
+  const origin = options.origin || 'persisted'
   return {
     type,
     label,
     detail,
-    tone:
-      type.includes('approved') || type.includes('completed')
-        ? 'complete'
-        : type.includes('pending') || type.includes('scheduled')
-          ? 'pending'
-          : type.includes('reopened') || type.includes('cleared')
-            ? 'warning'
-            : 'default',
+    category,
+    origin,
+    sourceLabel: eventCategoryLabel(category, origin),
+    tone: inferEventTone(type, category, options.tone || 'default'),
     value,
     timestamp: Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime(),
     dateLabel: Number.isNaN(parsed.getTime())
@@ -616,20 +711,51 @@ function buildEvent(type, label, value, detail = '') {
 
 export function buildWorkflowTimeline(job, coverLetterState) {
   const persistedEvents = Array.isArray(job?.workflowTimeline)
-    ? job.workflowTimeline.map((event) => buildEvent(event.type, event.label, event.at, event.detail || '')).filter(Boolean)
+    ? job.workflowTimeline
+        .map((event) =>
+          buildEvent(event.type, event.label, event.at, event.detail || '', {
+            category: event.category || null,
+            origin: event.origin || 'persisted',
+            tone: event.tone || 'default',
+          })
+        )
+        .filter(Boolean)
     : []
+  const persistedTypes = new Set(persistedEvents.map((event) => event.type))
   const events = [
-    buildEvent('discovered', 'Role discovered', job?.discovered_at || job?.date_posted),
-    buildEvent('evaluated', 'Role evaluated', job?.evaluated_at),
-    job?.applied || job?.status === 'applied' ? buildEvent('applied', 'Moved to applied', job?.applied_at || job?.evaluated_at) : null,
-    hasDraft(job, coverLetterState)
-      ? buildEvent('draft', 'Cover letter draft available', coverLetterState?.draft?.generated_at || new Date().toISOString())
+    buildEvent('discovered', 'Role discovered', job?.discovered_at || job?.date_posted, '', {
+      category: 'application',
+      origin: 'derived',
+    }),
+    buildEvent('evaluated', 'Role evaluated', job?.evaluated_at, '', {
+      category: 'workflow',
+      origin: 'derived',
+    }),
+    (job?.applied || job?.status === 'applied') && !persistedTypes.has('application_recorded')
+      ? buildEvent('application_recorded', 'Application recorded', job?.applied_at || job?.evaluated_at, '', {
+          category: 'application',
+          origin: 'derived',
+        })
+      : null,
+    hasDraft(job, coverLetterState) && !persistedTypes.has('cover_letter_generated')
+      ? buildEvent('cover_letter_generated', 'Cover letter draft available', coverLetterState?.draft?.generated_at || new Date().toISOString(), '', {
+          category: 'artifact',
+          origin: 'derived',
+        })
       : null,
     ...persistedEvents,
   ]
     .filter(Boolean)
-      .sort((left, right) => right.timestamp - left.timestamp)
-      .slice(0, 12)
+    .sort((left, right) => {
+      if (right.timestamp !== left.timestamp) {
+        return right.timestamp - left.timestamp
+      }
+      if (left.origin !== right.origin) {
+        return left.origin === 'persisted' ? -1 : 1
+      }
+      return left.label.localeCompare(right.label)
+    })
+    .slice(0, 12)
 
   return events.length > 0
     ? events
@@ -641,6 +767,9 @@ export function buildWorkflowTimeline(job, coverLetterState) {
           timestamp: 0,
           dateLabel: 'No timeline data yet',
           detail: '',
+          category: 'system',
+          origin: 'derived',
+          sourceLabel: 'Derived signal',
         },
       ]
 }

@@ -88,6 +88,7 @@ DEFAULT_WORKFLOW_NEXT_ACTION = {
     "confidence": None,
     "dueAt": None,
 }
+PACKET_REQUIRED_KEYS = ("tailoredSummary", "resumeBullets", "coverLetterDraft")
 WORKFLOW_STAGES = {"focus", "review", "follow_up", "monitor", "closed"}
 WORKFLOW_FOLLOW_UP_STATUSES = {"not_scheduled", "scheduled", "completed"}
 WORKFLOW_NEXT_ACTIONS = {
@@ -105,6 +106,8 @@ WORKFLOW_NEXT_ACTION_CONFIDENCE = {"low", "medium", "high"}
 PACKET_ARTIFACT_KEYS = ("tailoredSummary", "resumeBullets", "outreachNote", "interviewBrief", "talkingPoints")
 WORKFLOW_PACKET_ARTIFACT_STATUSES = {"draft", "ready"}
 WORKFLOW_PACKET_ARTIFACT_SOURCES = {"manual", "generated", "imported"}
+WORKFLOW_EVENT_CATEGORIES = {"application", "workflow", "approval", "packet", "follow_up", "artifact", "system"}
+WORKFLOW_EVENT_ORIGINS = {"persisted", "derived"}
 
 
 def _parse_int(value: Any, default: int = 0) -> int:
@@ -222,6 +225,39 @@ def _normalize_workflow_patch(value: Any) -> dict[str, Any]:
     return normalized
 
 
+def _workflow_event_category(event_type: str) -> str:
+    normalized = str(event_type or "").strip().lower()
+    if normalized in {"applied", "application_recorded", "status_updated"}:
+        return "application"
+    if normalized in {"next_action_approved", "next_action_pending", "packet_approved", "packet_pending"}:
+        return "approval"
+    if normalized.startswith("packet_"):
+        return "packet"
+    if normalized.startswith("follow_up_"):
+        return "follow_up"
+    if normalized in {"cover_letter_generated", "packet_artifact_updated"}:
+        return "artifact"
+    if normalized in {"stage_changed"}:
+        return "workflow"
+    return "system"
+
+
+def _workflow_event_tone(*, event_type: str, category: str) -> str:
+    normalized_type = str(event_type or "").strip().lower()
+    normalized_category = str(category or "").strip().lower()
+    if normalized_type.endswith("_approved") or normalized_type.endswith("_completed"):
+        return "complete"
+    if normalized_type.endswith("_pending") or normalized_type.endswith("_scheduled"):
+        return "pending"
+    if normalized_type.endswith("_reopened") or normalized_type.endswith("_cleared"):
+        return "warning"
+    if normalized_category in {"artifact", "packet"}:
+        return "pending"
+    if normalized_category == "application":
+        return "default"
+    return "default"
+
+
 def _normalize_workflow_timeline(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         return []
@@ -241,6 +277,28 @@ def _normalize_workflow_timeline(value: Any) -> list[dict[str, Any]]:
                 "label": label,
                 "detail": detail or None,
                 "at": at,
+                "category": (
+                    str(item.get("category") or "").strip().lower()
+                    if str(item.get("category") or "").strip().lower() in WORKFLOW_EVENT_CATEGORIES
+                    else _workflow_event_category(event_type)
+                ),
+                "origin": (
+                    str(item.get("origin") or "").strip().lower()
+                    if str(item.get("origin") or "").strip().lower() in WORKFLOW_EVENT_ORIGINS
+                    else "persisted"
+                ),
+                "tone": (
+                    str(item.get("tone") or "").strip().lower()
+                    if str(item.get("tone") or "").strip().lower() in {"default", "pending", "warning", "complete", "muted"}
+                    else _workflow_event_tone(
+                        event_type=event_type,
+                        category=(
+                            str(item.get("category") or "").strip().lower()
+                            if str(item.get("category") or "").strip().lower() in WORKFLOW_EVENT_CATEGORIES
+                            else _workflow_event_category(event_type)
+                        ),
+                    )
+                ),
             }
         )
     return events
@@ -310,6 +368,7 @@ def _normalize_job(record: Any) -> dict[str, Any]:
         applied=payload.get("applied"),
         dismissed=payload.get("dismissed"),
     )
+    workflow["packetReadiness"] = _workflow_packet_readiness(workflow)
     workflow_timeline = _normalize_workflow_timeline(payload.get("workflow_timeline"))
     normalized = {
         "jobId": job_id,
@@ -507,12 +566,25 @@ def _point_for_update(*, models_module: Any, job: dict[str, Any]) -> Any:
     return models_module.PointStruct(id=point_id, vector=vector, payload=payload)
 
 
-def _workflow_event(*, event_type: str, label: str, at: str, detail: str | None = None) -> dict[str, Any]:
+def _workflow_event(
+    *,
+    event_type: str,
+    label: str,
+    at: str,
+    detail: str | None = None,
+    category: str | None = None,
+    origin: str = "persisted",
+    tone: str | None = None,
+) -> dict[str, Any]:
+    event_category = category if category in WORKFLOW_EVENT_CATEGORIES else _workflow_event_category(event_type)
     return {
         "type": event_type,
         "label": label,
         "detail": detail or None,
         "at": at,
+        "category": event_category,
+        "origin": origin if origin in WORKFLOW_EVENT_ORIGINS else "persisted",
+        "tone": tone or _workflow_event_tone(event_type=event_type, category=event_category),
     }
 
 
@@ -624,6 +696,43 @@ def _normalize_next_action(value: Any) -> dict[str, Any]:
     return normalized
 
 
+def _artifact_available(*, key: str, artifacts: dict[str, Any]) -> bool:
+    if key == "coverLetterDraft":
+        artifact = _normalize_cover_letter_artifact(artifacts.get("coverLetterDraft"))
+        return bool(artifact.get("generatedAt") or artifact.get("draftId") or artifact.get("vaultPath"))
+    artifact = _normalize_packet_artifact(artifacts.get(key), key=key)
+    return bool(artifact.get("updatedAt") or artifact.get("vaultPath") or artifact.get("notes") or artifact.get("status"))
+
+
+def _workflow_packet_readiness(value: Any) -> dict[str, Any]:
+    workflow = _normalize_workflow(value)
+    packet = workflow.get("packet", {})
+    artifacts = workflow.get("artifacts", {})
+    checked_items = [key for key in DEFAULT_WORKFLOW_PACKET if bool(packet.get(key))]
+    linked_items = [key for key in DEFAULT_WORKFLOW_PACKET if _artifact_available(key=key, artifacts=artifacts)]
+    verified_items = [key for key in DEFAULT_WORKFLOW_PACKET if bool(packet.get(key)) and _artifact_available(key=key, artifacts=artifacts)]
+    checked_without_artifact = [key for key in DEFAULT_WORKFLOW_PACKET if bool(packet.get(key)) and key not in verified_items]
+    artifact_without_checklist = [key for key in DEFAULT_WORKFLOW_PACKET if _artifact_available(key=key, artifacts=artifacts) and not bool(packet.get(key))]
+    ready_for_approval = all(key in verified_items for key in PACKET_REQUIRED_KEYS)
+    return {
+        "totalItems": len(DEFAULT_WORKFLOW_PACKET),
+        "requiredItems": list(PACKET_REQUIRED_KEYS),
+        "checkedItems": checked_items,
+        "linkedItems": linked_items,
+        "verifiedItems": verified_items,
+        "checkedWithoutArtifact": checked_without_artifact,
+        "artifactWithoutChecklist": artifact_without_checklist,
+        "missingItems": [key for key in DEFAULT_WORKFLOW_PACKET if key not in set(checked_items) | set(linked_items)],
+        "counts": {
+            "checked": len(checked_items),
+            "linked": len(linked_items),
+            "verified": len(verified_items),
+            "requiredVerified": len([key for key in PACKET_REQUIRED_KEYS if key in verified_items]),
+        },
+        "readyForApproval": ready_for_approval,
+    }
+
+
 def _append_workflow_event(
     timeline: list[dict[str, Any]],
     *,
@@ -631,10 +740,16 @@ def _append_workflow_event(
     label: str,
     at: str,
     detail: str | None = None,
+    category: str | None = None,
 ) -> list[dict[str, Any]]:
     next_timeline = list(timeline)
-    candidate = _workflow_event(event_type=event_type, label=label, at=at, detail=detail)
-    if next_timeline and next_timeline[-1].get("type") == candidate["type"] and next_timeline[-1].get("label") == candidate["label"]:
+    candidate = _workflow_event(event_type=event_type, label=label, at=at, detail=detail, category=category)
+    if (
+        next_timeline
+        and next_timeline[-1].get("type") == candidate["type"]
+        and next_timeline[-1].get("label") == candidate["label"]
+        and next_timeline[-1].get("detail") == candidate["detail"]
+    ):
         return next_timeline
     next_timeline.append(candidate)
     return next_timeline
@@ -679,15 +794,32 @@ def update_job(
                     label="Follow-up scheduled",
                     detail=f"Due {_timeline_datetime_label(follow_up['dueAt'])}",
                     at=now,
+                    category="follow_up",
                 )
+            current["workflowTimeline"] = _append_workflow_event(
+                current["workflowTimeline"],
+                event_type="application_recorded",
+                label="Application recorded",
+                at=now,
+                category="application",
+            )
         elif status in {"dismissed", "expired"}:
             current["workflow"]["stage"] = "closed"
-        current["workflowTimeline"] = _append_workflow_event(
-            current["workflowTimeline"],
-            event_type="status_updated",
-            label=f"Status changed to {status.replace('_', ' ')}",
-            at=now,
-        )
+            current["workflowTimeline"] = _append_workflow_event(
+                current["workflowTimeline"],
+                event_type="status_updated",
+                label=f"Role marked {status.replace('_', ' ')}",
+                at=now,
+                category="application",
+            )
+        elif status != "applied":
+            current["workflowTimeline"] = _append_workflow_event(
+                current["workflowTimeline"],
+                event_type="status_updated",
+                label=f"Status changed to {status.replace('_', ' ')}",
+                at=now,
+                category="application",
+            )
     if applied is not None:
         current["applied"] = bool(applied)
         current["workflow"]["updatedAt"] = now
@@ -706,12 +838,14 @@ def update_job(
                     label="Follow-up scheduled",
                     detail=f"Due {_timeline_datetime_label(follow_up['dueAt'])}",
                     at=now,
+                    category="follow_up",
                 )
             current["workflowTimeline"] = _append_workflow_event(
                 current["workflowTimeline"],
-                event_type="applied",
+                event_type="application_recorded",
                 label="Application recorded",
                 at=now,
+                category="application",
             )
     if dismissed is not None:
         current["dismissed"] = bool(dismissed)
@@ -724,6 +858,7 @@ def update_job(
                 event_type="dismissed",
                 label="Role dismissed",
                 at=now,
+                category="application",
             )
     if notes is not None:
         current["notes"] = notes
@@ -762,12 +897,13 @@ def update_job(
             next_workflow["followUp"]["dueAt"] = None
 
         if existing_workflow.get("nextActionApproval") != next_workflow.get("nextActionApproval"):
-            current["workflowTimeline"] = _append_workflow_event(
-                current["workflowTimeline"],
-                event_type="next_action_approved" if next_workflow.get("nextActionApproval") == "approved" else "next_action_pending",
-                label="Next action approved" if next_workflow.get("nextActionApproval") == "approved" else "Next action sent back for review",
-                at=now,
-            )
+                current["workflowTimeline"] = _append_workflow_event(
+                    current["workflowTimeline"],
+                    event_type="next_action_approved" if next_workflow.get("nextActionApproval") == "approved" else "next_action_pending",
+                    label="Next action approved" if next_workflow.get("nextActionApproval") == "approved" else "Next action sent back for review",
+                    at=now,
+                    category="approval",
+                )
         existing_next_action = _normalize_next_action(existing_workflow.get("nextAction"))
         next_next_action = _normalize_next_action(next_workflow.get("nextAction"))
         if existing_next_action != next_next_action and next_next_action.get("action"):
@@ -784,6 +920,7 @@ def update_job(
                 label=f"Next action set to {str(next_next_action['action']).replace('_', ' ')}",
                 detail=" | ".join(detail_parts) if detail_parts else None,
                 at=now,
+                category="workflow",
             )
         if existing_workflow.get("packetApproval") != next_workflow.get("packetApproval"):
             current["workflowTimeline"] = _append_workflow_event(
@@ -791,6 +928,7 @@ def update_job(
                 event_type="packet_approved" if next_workflow.get("packetApproval") == "approved" else "packet_pending",
                 label="Packet approved" if next_workflow.get("packetApproval") == "approved" else "Packet returned to draft state",
                 at=now,
+                category="approval",
             )
         if existing_workflow.get("stage") != next_workflow.get("stage") and next_workflow.get("stage"):
             current["workflowTimeline"] = _append_workflow_event(
@@ -803,6 +941,7 @@ def update_job(
                     else None
                 ),
                 at=now,
+                category="workflow",
             )
         for key, value in merged_packet.items():
             previous_value = bool(existing_workflow.get("packet", {}).get(key))
@@ -813,6 +952,7 @@ def update_job(
                 event_type="packet_item_completed" if value else "packet_item_reopened",
                 label=f"{_workflow_packet_label(key)} completed" if value else f"{_workflow_packet_label(key)} reopened",
                 at=now,
+                category="packet",
             )
         existing_artifacts = existing_workflow.get("artifacts", {})
         next_artifacts = next_workflow.get("artifacts", {})
@@ -835,6 +975,7 @@ def update_job(
                 label="Cover letter draft generated",
                 detail=" | ".join(detail_parts) if detail_parts else None,
                 at=next_cover_letter.get("generatedAt") or now,
+                category="artifact",
             )
         for key in PACKET_ARTIFACT_KEYS:
             existing_artifact = _normalize_packet_artifact(existing_artifacts.get(key), key=key)
@@ -858,6 +999,7 @@ def update_job(
                 label=f"{_workflow_packet_label(key)} artifact linked",
                 detail=" | ".join(detail_parts) if detail_parts else None,
                 at=next_artifact.get("updatedAt") or now,
+                category="artifact",
             )
         existing_follow_up = _normalize_follow_up_state(existing_workflow.get("followUp"))
         next_follow_up = _normalize_follow_up_state(next_workflow.get("followUp"))
@@ -868,6 +1010,7 @@ def update_job(
                 label="Follow-up scheduled",
                 detail=f"Due {_timeline_datetime_label(next_follow_up['dueAt'])}",
                 at=now,
+                category="follow_up",
             )
         elif existing_follow_up.get("dueAt") and not next_follow_up.get("dueAt") and next_follow_up.get("status") == "not_scheduled":
             current["workflowTimeline"] = _append_workflow_event(
@@ -875,6 +1018,7 @@ def update_job(
                 event_type="follow_up_cleared",
                 label="Follow-up cleared",
                 at=now,
+                category="follow_up",
             )
         if existing_follow_up.get("status") != next_follow_up.get("status"):
             if next_follow_up.get("status") == "completed":
@@ -886,6 +1030,7 @@ def update_job(
                         f"Completed {_timeline_datetime_label(next_follow_up.get('lastCompletedAt') or now)}"
                     ),
                     at=now,
+                    category="follow_up",
                 )
             elif existing_follow_up.get("status") == "completed":
                 current["workflowTimeline"] = _append_workflow_event(
@@ -893,6 +1038,7 @@ def update_job(
                     event_type="follow_up_reopened",
                     label="Follow-up reopened",
                     at=now,
+                    category="follow_up",
                 )
 
         current["workflow"] = next_workflow
