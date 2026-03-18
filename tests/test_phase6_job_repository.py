@@ -10,6 +10,29 @@ from scripts.phase6 import job_repository
 
 
 class JobRepositoryTests(unittest.TestCase):
+    def test_normalize_workflow_includes_cover_letter_artifact_defaults(self) -> None:
+        normalized = job_repository._normalize_workflow(
+            {
+                "packet": {"coverLetterDraft": True},
+                "artifacts": {
+                    "coverLetterDraft": {
+                        "draftId": "cover_letter_job-1",
+                        "generatedAt": "2026-03-18T04:10:00Z",
+                        "provider": "ollama",
+                        "model": "qwen2.5:7b-instruct",
+                        "wordCount": 132,
+                        "savedToVault": True,
+                        "vaultPath": "/tmp/example.md",
+                    }
+                },
+            }
+        )
+
+        self.assertTrue(normalized["packet"]["coverLetterDraft"])
+        self.assertEqual(normalized["artifacts"]["coverLetterDraft"]["draftId"], "cover_letter_job-1")
+        self.assertEqual(normalized["artifacts"]["coverLetterDraft"]["wordCount"], 132)
+        self.assertTrue(normalized["artifacts"]["coverLetterDraft"]["savedToVault"])
+
     def test_list_jobs_search_matches_company_gap_and_notes_fields(self) -> None:
         jobs = [
             {

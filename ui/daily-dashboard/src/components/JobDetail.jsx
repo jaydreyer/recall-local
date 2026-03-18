@@ -229,6 +229,7 @@ export default function JobDetail({
   coverLetterState,
 }) {
   const [notes, setNotes] = useState(job.notes || '')
+  const persistedDraft = job?.workflow?.artifacts?.coverLetterDraft || null
 
   useEffect(() => {
     setNotes(job.notes || '')
@@ -304,6 +305,21 @@ export default function JobDetail({
             <button type="button" className="accent-button detail-primary-action" onClick={() => onGenerateDraft(job.jobId)} disabled={busy}>
               Generate Cover Letter Draft
             </button>
+            {persistedDraft?.generatedAt ? (
+              <div className="detail-artifact-note">
+                <p className="section-label">Latest draft artifact</p>
+                <p className="body-copy">
+                  {persistedDraft.provider && persistedDraft.model
+                    ? `${persistedDraft.provider} · ${persistedDraft.model}`
+                    : 'Draft metadata persisted'}
+                  {persistedDraft.wordCount ? ` · ${persistedDraft.wordCount} words` : ''}
+                </p>
+                <p className="meta-text">
+                  Generated {new Date(persistedDraft.generatedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                  {persistedDraft.vaultPath ? ` · ${persistedDraft.vaultPath}` : ''}
+                </p>
+              </div>
+            ) : null}
             {job.url && (
               <a className="text-button detail-inline-action" href={job.url} target="_blank" rel="noreferrer">
                 Open posting

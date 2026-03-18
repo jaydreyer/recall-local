@@ -260,7 +260,7 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                     details=[{"field": "workflow", "issue": "value must be an object"}],
                 )
 
-            allowed_workflow_fields = {"stage", "nextActionApproval", "packetApproval", "packet", "followUp"}
+            allowed_workflow_fields = {"stage", "nextActionApproval", "packetApproval", "packet", "artifacts", "followUp"}
             unknown_workflow_fields = [key for key in workflow_value.keys() if key not in allowed_workflow_fields]
             if unknown_workflow_fields:
                 return _error_response(
@@ -382,6 +382,67 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                         message=str(exc),
                         request_id=request_id,
                     )
+
+            if "artifacts" in workflow_value:
+                artifacts_value = workflow_value.get("artifacts")
+                if not isinstance(artifacts_value, dict):
+                    return _error_response(
+                        status_code=400,
+                        code="validation_failed",
+                        message="workflow.artifacts must be an object.",
+                        request_id=request_id,
+                        details=[{"field": "workflow.artifacts", "issue": "value must be an object"}],
+                    )
+                allowed_artifact_fields = {"coverLetterDraft"}
+                unknown_artifact_fields = [key for key in artifacts_value.keys() if key not in allowed_artifact_fields]
+                if unknown_artifact_fields:
+                    return _error_response(
+                        status_code=400,
+                        code="validation_failed",
+                        message="Invalid workflow artifacts payload.",
+                        request_id=request_id,
+                        details=[{"field": f"workflow.artifacts.{key}", "issue": "field is not supported"} for key in unknown_artifact_fields],
+                    )
+                if "coverLetterDraft" in artifacts_value:
+                    cover_letter_value = artifacts_value.get("coverLetterDraft")
+                    if not isinstance(cover_letter_value, dict):
+                        return _error_response(
+                            status_code=400,
+                            code="validation_failed",
+                            message="workflow.artifacts.coverLetterDraft must be an object.",
+                            request_id=request_id,
+                            details=[{"field": "workflow.artifacts.coverLetterDraft", "issue": "value must be an object"}],
+                        )
+                    allowed_cover_letter_fields = {"draftId", "generatedAt", "provider", "model", "wordCount", "savedToVault", "vaultPath"}
+                    unknown_cover_letter_fields = [key for key in cover_letter_value.keys() if key not in allowed_cover_letter_fields]
+                    if unknown_cover_letter_fields:
+                        return _error_response(
+                            status_code=400,
+                            code="validation_failed",
+                            message="Invalid cover letter artifact payload.",
+                            request_id=request_id,
+                            details=[{"field": f"workflow.artifacts.coverLetterDraft.{key}", "issue": "field is not supported"} for key in unknown_cover_letter_fields],
+                        )
+                    try:
+                        if "generatedAt" in cover_letter_value:
+                            cover_letter_value["generatedAt"] = _normalize_optional_iso8601(
+                                cover_letter_value.get("generatedAt"),
+                                field_name="workflow.artifacts.coverLetterDraft.generatedAt",
+                            )
+                        if "savedToVault" in cover_letter_value:
+                            cover_letter_value["savedToVault"] = _normalize_bool(
+                                cover_letter_value.get("savedToVault"),
+                                field_name="workflow.artifacts.coverLetterDraft.savedToVault",
+                            )
+                        if "wordCount" in cover_letter_value and cover_letter_value.get("wordCount") is not None:
+                            cover_letter_value["wordCount"] = int(cover_letter_value.get("wordCount"))
+                    except (ValueError, TypeError) as exc:
+                        return _error_response(
+                            status_code=400,
+                            code="validation_failed",
+                            message=str(exc),
+                            request_id=request_id,
+                        )
 
         updated = phase6_update_job(
             job_id=jobId,
@@ -1007,6 +1068,27 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                 message=f"Cover letter draft generation failed: {exc}",
                 request_id=request_id,
             )
+        phase6_update_job(
+            job_id=job_id,
+            status=None,
+            applied=None,
+            dismissed=None,
+            notes=None,
+            workflow={
+                "packet": {"coverLetterDraft": True},
+                "artifacts": {
+                    "coverLetterDraft": {
+                        "draftId": result.get("draft_id"),
+                        "generatedAt": result.get("generated_at"),
+                        "provider": result.get("provider"),
+                        "model": result.get("model"),
+                        "wordCount": result.get("word_count"),
+                        "savedToVault": result.get("saved_to_vault"),
+                        "vaultPath": result.get("vault_path"),
+                    }
+                },
+            },
+        )
         return _json_response(200, {"workflow": "workflow_06a_cover_letter_draft", **result})
 
     @app.get(

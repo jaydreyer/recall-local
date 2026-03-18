@@ -19,11 +19,46 @@ function effectiveStatus(job) {
   return String(job?.status || 'new').toLowerCase()
 }
 
-function hasDraft(job, coverLetterState) {
-  if (coverLetterState?.jobId === job?.jobId && coverLetterState?.draft?.draft) {
-    return true
+export function coverLetterArtifact(job = null, coverLetterState = null) {
+  if (coverLetterState?.jobId === job?.jobId && coverLetterState?.draft) {
+    return {
+      draftId: coverLetterState.draft.draft_id || null,
+      generatedAt: coverLetterState.draft.generated_at || null,
+      provider: coverLetterState.draft.provider || null,
+      model: coverLetterState.draft.model || null,
+      wordCount: coverLetterState.draft.word_count || null,
+      savedToVault: Boolean(coverLetterState.draft.saved_to_vault),
+      vaultPath: coverLetterState.draft.vault_path || null,
+      available: true,
+    }
   }
-  return Boolean(job?.cover_letter_angle)
+  const artifact = job?.workflow?.artifacts?.coverLetterDraft
+  if (!artifact) {
+    return {
+      draftId: null,
+      generatedAt: null,
+      provider: null,
+      model: null,
+      wordCount: null,
+      savedToVault: false,
+      vaultPath: null,
+      available: false,
+    }
+  }
+  return {
+    draftId: artifact.draftId || null,
+    generatedAt: artifact.generatedAt || null,
+    provider: artifact.provider || null,
+    model: artifact.model || null,
+    wordCount: artifact.wordCount || null,
+    savedToVault: Boolean(artifact.savedToVault),
+    vaultPath: artifact.vaultPath || null,
+    available: Boolean(artifact.generatedAt || artifact.draftId || artifact.vaultPath),
+  }
+}
+
+function hasDraft(job, coverLetterState) {
+  return coverLetterArtifact(job, coverLetterState).available
 }
 
 function packetCompletion(packet = {}) {
@@ -113,6 +148,9 @@ export function defaultWorkflowState(job = null) {
       interviewBrief: Boolean(job?.workflow?.packet?.interviewBrief),
       talkingPoints: Boolean(job?.workflow?.packet?.talkingPoints),
     },
+    artifacts: {
+      coverLetterDraft: coverLetterArtifact(job, null),
+    },
     followUp: {
       status: FOLLOW_UP_STATUSES.includes(job?.workflow?.followUp?.status) ? job.workflow.followUp.status : 'not_scheduled',
       dueAt: job?.workflow?.followUp?.dueAt || null,
@@ -134,6 +172,14 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
   const nextActionApproval = effectiveWorkflow?.nextActionApproval || 'pending'
   const packetApproval = effectiveWorkflow?.packetApproval || 'pending'
   const followUp = followUpState(job, effectiveWorkflow)
+  const draftArtifact = coverLetterArtifact(job, coverLetterState)
+  const draftArtifactLabel = draftArtifact.available
+    ? draftArtifact.savedToVault && draftArtifact.vaultPath
+      ? 'Draft saved to vault'
+      : draftArtifact.generatedAt
+        ? `Draft generated ${formatDateTime(draftArtifact.generatedAt, 'recently')}`
+        : 'Draft generated'
+    : 'No draft artifact yet'
 
   if (status === 'dismissed' || status === 'expired') {
     return {
@@ -152,6 +198,8 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       followUpLabel: followUp.label,
       followUpStatus: followUp.status,
       followUpDueLabel: followUp.dueLabel,
+      coverLetterArtifactLabel: draftArtifactLabel,
+      coverLetterArtifact: draftArtifact,
     }
   }
 
@@ -192,6 +240,8 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       followUpStatus: followUp.status,
       followUpDueLabel: followUp.dueLabel,
       followUpCompletedLabel: followUp.completedLabel,
+      coverLetterArtifactLabel: draftArtifactLabel,
+      coverLetterArtifact: draftArtifact,
     }
   }
 
@@ -212,6 +262,8 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       followUpLabel: followUp.label,
       followUpStatus: followUp.status,
       followUpDueLabel: followUp.dueLabel,
+      coverLetterArtifactLabel: draftArtifactLabel,
+      coverLetterArtifact: draftArtifact,
     }
   }
 
@@ -244,6 +296,8 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       followUpLabel: followUp.label,
       followUpStatus: followUp.status,
       followUpDueLabel: followUp.dueLabel,
+      coverLetterArtifactLabel: draftArtifactLabel,
+      coverLetterArtifact: draftArtifact,
     }
   }
 
@@ -263,6 +317,8 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
     followUpLabel: followUp.label,
     followUpStatus: followUp.status,
     followUpDueLabel: followUp.dueLabel,
+    coverLetterArtifactLabel: draftArtifactLabel,
+    coverLetterArtifact: draftArtifact,
   }
 }
 

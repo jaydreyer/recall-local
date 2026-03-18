@@ -106,6 +106,7 @@ function WorkflowRail({
   const workflow = deriveWorkflow(job, coverLetterState, workflowState)
   const timeline = buildWorkflowTimeline(job, coverLetterState)
   const showFollowUpActions = job?.status === 'applied' || workflowState?.stage === 'follow_up'
+  const coverLetterArtifact = workflow.coverLetterArtifact
 
   return (
     <div className="ops-rail-stack">
@@ -226,9 +227,27 @@ function WorkflowRail({
                 onChange={() => onTogglePacketItem(item.key)}
               />
               <span>{item.label}</span>
+              {item.key === 'coverLetterDraft' ? (
+                <span className="packet-artifact-meta">{workflow.coverLetterArtifactLabel}</span>
+              ) : null}
             </label>
           ))}
         </div>
+        {coverLetterArtifact?.available ? (
+          <div className="workflow-callout pending">
+            <p className="section-label">Linked artifact</p>
+            <strong>Cover letter draft</strong>
+            <p className="body-copy">
+              {coverLetterArtifact.provider && coverLetterArtifact.model
+                ? `${coverLetterArtifact.provider} · ${coverLetterArtifact.model}`
+                : 'Generated draft metadata persisted'}
+              {coverLetterArtifact.wordCount ? ` · ${coverLetterArtifact.wordCount} words` : ''}
+            </p>
+            {coverLetterArtifact.vaultPath ? (
+              <p className="meta-text">{coverLetterArtifact.vaultPath}</p>
+            ) : null}
+          </div>
+        ) : null}
       </section>
 
       <section className="ops-rail-card">

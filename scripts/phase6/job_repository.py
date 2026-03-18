@@ -31,6 +31,17 @@ DEFAULT_WORKFLOW_PACKET = {
     "interviewBrief": False,
     "talkingPoints": False,
 }
+DEFAULT_WORKFLOW_ARTIFACTS = {
+    "coverLetterDraft": {
+        "draftId": None,
+        "generatedAt": None,
+        "provider": None,
+        "model": None,
+        "wordCount": None,
+        "savedToVault": False,
+        "vaultPath": None,
+    }
+}
 DEFAULT_WORKFLOW_FOLLOW_UP = {
     "status": "not_scheduled",
     "dueAt": None,
@@ -88,6 +99,7 @@ def _default_workflow_stage(*, status: str | None, fit_score: Any, applied: Any,
 def _normalize_workflow(value: Any) -> dict[str, Any]:
     source = dict(value) if isinstance(value, dict) else {}
     packet = source.get("packet") if isinstance(source.get("packet"), dict) else {}
+    artifacts = source.get("artifacts") if isinstance(source.get("artifacts"), dict) else {}
     follow_up = source.get("followUp") if isinstance(source.get("followUp"), dict) else {}
     stage = str(source.get("stage") or "").strip().lower()
     follow_up_status = str(follow_up.get("status") or "").strip().lower()
@@ -98,6 +110,9 @@ def _normalize_workflow(value: Any) -> dict[str, Any]:
         "packet": {
             key: bool(packet.get(key, default))
             for key, default in DEFAULT_WORKFLOW_PACKET.items()
+        },
+        "artifacts": {
+            "coverLetterDraft": _normalize_cover_letter_artifact(artifacts.get("coverLetterDraft")),
         },
         "followUp": {
             "status": follow_up_status if follow_up_status in WORKFLOW_FOLLOW_UP_STATUSES else DEFAULT_WORKFLOW_FOLLOW_UP["status"],
@@ -125,6 +140,12 @@ def _normalize_workflow_patch(value: Any) -> dict[str, Any]:
             for key, value in source["packet"].items()
             if key in DEFAULT_WORKFLOW_PACKET
         }
+    if isinstance(source.get("artifacts"), dict):
+        artifacts = source["artifacts"]
+        next_artifacts: dict[str, Any] = {}
+        if "coverLetterDraft" in artifacts:
+            next_artifacts["coverLetterDraft"] = _normalize_cover_letter_artifact(artifacts.get("coverLetterDraft"))
+        normalized["artifacts"] = next_artifacts
     if isinstance(source.get("followUp"), dict):
         follow_up = source["followUp"]
         next_follow_up: dict[str, Any] = {}
@@ -482,6 +503,23 @@ def _normalize_follow_up_state(value: Any) -> dict[str, Any]:
     return normalized
 
 
+def _normalize_cover_letter_artifact(value: Any) -> dict[str, Any]:
+    source = dict(value) if isinstance(value, dict) else {}
+    normalized = dict(DEFAULT_WORKFLOW_ARTIFACTS["coverLetterDraft"])
+    normalized.update(
+        {
+            "draftId": str(source.get("draftId") or "").strip() or None,
+            "generatedAt": str(source.get("generatedAt") or "").strip() or None,
+            "provider": str(source.get("provider") or "").strip() or None,
+            "model": str(source.get("model") or "").strip() or None,
+            "wordCount": _parse_int(source.get("wordCount"), default=0) or None,
+            "savedToVault": bool(source.get("savedToVault", False)),
+            "vaultPath": str(source.get("vaultPath") or "").strip() or None,
+        }
+    )
+    return normalized
+
+
 def _append_workflow_event(
     timeline: list[dict[str, Any]],
     *,
@@ -592,6 +630,12 @@ def update_job(
             **existing_workflow.get("packet", {}),
             **incoming_workflow.get("packet", {}),
         }
+        merged_artifacts = {
+            **existing_workflow.get("artifacts", {}),
+            **incoming_workflow.get("artifacts", {}),
+        }
+        if "coverLetterDraft" in merged_artifacts:
+            merged_artifacts["coverLetterDraft"] = _normalize_cover_letter_artifact(merged_artifacts.get("coverLetterDraft"))
         merged_follow_up = {
             **_normalize_follow_up_state(existing_workflow.get("followUp")),
             **incoming_workflow.get("followUp", {}),
@@ -600,6 +644,7 @@ def update_job(
             **existing_workflow,
             **incoming_workflow,
             "packet": merged_packet,
+            "artifacts": merged_artifacts,
             "followUp": merged_follow_up,
             "updatedAt": now,
         }
@@ -643,6 +688,28 @@ def update_job(
                 event_type="packet_item_completed" if value else "packet_item_reopened",
                 label=f"{_workflow_packet_label(key)} completed" if value else f"{_workflow_packet_label(key)} reopened",
                 at=now,
+            )
+        existing_artifacts = existing_workflow.get("artifacts", {})
+        next_artifacts = next_workflow.get("artifacts", {})
+        existing_cover_letter = _normalize_cover_letter_artifact(existing_artifacts.get("coverLetterDraft"))
+        next_cover_letter = _normalize_cover_letter_artifact(next_artifacts.get("coverLetterDraft"))
+        if next_cover_letter.get("generatedAt") and (
+            existing_cover_letter.get("generatedAt") != next_cover_letter.get("generatedAt")
+            or existing_cover_letter.get("draftId") != next_cover_letter.get("draftId")
+        ):
+            detail_parts = []
+            if next_cover_letter.get("provider") and next_cover_letter.get("model"):
+                detail_parts.append(f"{next_cover_letter['provider']} · {next_cover_letter['model']}")
+            if next_cover_letter.get("wordCount"):
+                detail_parts.append(f"{next_cover_letter['wordCount']} words")
+            if next_cover_letter.get("savedToVault") and next_cover_letter.get("vaultPath"):
+                detail_parts.append(f"Saved to {next_cover_letter['vaultPath']}")
+            current["workflowTimeline"] = _append_workflow_event(
+                current["workflowTimeline"],
+                event_type="cover_letter_generated",
+                label="Cover letter draft generated",
+                detail=" | ".join(detail_parts) if detail_parts else None,
+                at=next_cover_letter.get("generatedAt") or now,
             )
         existing_follow_up = _normalize_follow_up_state(existing_workflow.get("followUp"))
         next_follow_up = _normalize_follow_up_state(next_workflow.get("followUp"))

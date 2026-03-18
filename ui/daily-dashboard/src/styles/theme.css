@@ -529,6 +529,14 @@ body {
   padding: 18px 20px;
 }
 
+.draft-toolbar-meta,
+.draft-toolbar-actions,
+.detail-artifact-note {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .chart-wrap {
   height: 220px;
 }
@@ -729,6 +737,12 @@ body {
   flex-direction: column;
   gap: 12px;
   align-items: flex-start;
+}
+
+.detail-artifact-note {
+  padding: 12px 0 4px;
+  border-top: 1px solid var(--border);
+  width: 100%;
 }
 
 .detail-inline-action {
@@ -2744,8 +2758,16 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
   color: var(--text);
   font-size: 14px;
+}
+
+.packet-artifact-meta {
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin-left: 28px;
+  width: 100%;
 }
 
 .packet-check-row input {

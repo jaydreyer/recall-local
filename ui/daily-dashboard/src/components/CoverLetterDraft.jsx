@@ -8,12 +8,18 @@ function DraftToolbar({ draft }) {
 
   return (
     <div className="draft-toolbar">
-      <span className="meta-text">
-        {draft.provider} · {draft.model} · {draft.word_count} words
-      </span>
-      <button type="button" className="text-button" onClick={copyDraft}>
-        Copy draft
-      </button>
+      <div className="draft-toolbar-meta">
+        <span className="meta-text">
+          {draft.provider} · {draft.model} · {draft.word_count} words
+        </span>
+        {draft.generated_at ? <span className="meta-text">Generated {new Date(draft.generated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span> : null}
+        {draft.vault_path ? <span className="meta-text">{draft.vault_path}</span> : null}
+      </div>
+      <div className="draft-toolbar-actions">
+        <button type="button" className="text-button" onClick={copyDraft}>
+          Copy draft
+        </button>
+      </div>
     </div>
   )
 }

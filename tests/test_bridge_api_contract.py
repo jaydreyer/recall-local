@@ -1112,7 +1112,10 @@ class BridgeApiContractTests(unittest.TestCase):
             "saved_to_vault": False,
             "vault_path": None,
         }
-        with patch("scripts.phase1.ingest_bridge_api.phase6_generate_cover_letter_draft", return_value=fake_result) as mocked:
+        with patch("scripts.phase1.ingest_bridge_api.phase6_generate_cover_letter_draft", return_value=fake_result) as mocked, patch(
+            "scripts.phase1.ingest_bridge_api.phase6_update_job",
+            return_value={"jobId": "job-1"},
+        ) as update_mock:
             with build_client(env) as client:
                 response = client.post(
                     "/v1/cover-letter-drafts",
@@ -1126,6 +1129,27 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(invalid.status_code, 400)
         self.assertEqual(mocked.call_args.kwargs["job_id"], "job-1")
         self.assertFalse(mocked.call_args.kwargs["save_to_vault"])
+        update_mock.assert_called_once_with(
+            job_id="job-1",
+            status=None,
+            applied=None,
+            dismissed=None,
+            notes=None,
+            workflow={
+                "packet": {"coverLetterDraft": True},
+                "artifacts": {
+                    "coverLetterDraft": {
+                        "draftId": "cover_letter_job-1",
+                        "generatedAt": "2026-03-06T16:00:00+00:00",
+                        "provider": "ollama",
+                        "model": "llama3.2:3b",
+                        "wordCount": 120,
+                        "savedToVault": False,
+                        "vaultPath": None,
+                    }
+                },
+            },
+        )
 
     def test_phase6_resume_endpoint_accepts_markdown_payload(self) -> None:
         env = {
