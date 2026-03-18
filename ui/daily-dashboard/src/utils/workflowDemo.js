@@ -1,5 +1,6 @@
 export const WORKFLOW_STAGES = ['focus', 'review', 'follow_up', 'monitor', 'closed']
 export const FOLLOW_UP_STATUSES = ['not_scheduled', 'scheduled', 'completed']
+export const FOLLOW_UP_REMINDER_STATUSES = ['not_created', 'queued', 'sent', 'failed']
 export const NEXT_ACTIONS = ['none', 'review_role', 'tailor_resume', 'hold', 'skip', 'follow_up', 'monitor_response', 'schedule_follow_up', 'send_follow_up']
 export const PACKET_ARTIFACT_KEYS = ['tailoredSummary', 'resumeBullets', 'outreachNote', 'interviewBrief', 'talkingPoints']
 export const PACKET_ARTIFACT_LABELS = {
@@ -12,6 +13,7 @@ export const PACKET_ARTIFACT_LABELS = {
 }
 const PACKET_SEQUENCE = ['tailoredSummary', 'resumeBullets', 'coverLetterDraft', 'outreachNote', 'interviewBrief', 'talkingPoints']
 const REQUIRED_PACKET_SEQUENCE = ['tailoredSummary', 'resumeBullets', 'coverLetterDraft']
+const FOLLOW_UP_REMINDER_CHANNELS = ['manual', 'n8n', 'email', 'calendar']
 
 export const WORKFLOW_STAGE_LABELS = {
   focus: 'Focus queue',
@@ -276,6 +278,63 @@ function followUpState(job, workflowState) {
   }
 }
 
+function followUpReminderState(workflowState, followUp) {
+  const raw = workflowState?.followUp?.reminder || {}
+  const status = FOLLOW_UP_REMINDER_STATUSES.includes(raw.status) ? raw.status : 'not_created'
+  const channel = FOLLOW_UP_REMINDER_CHANNELS.includes(raw.channel) ? raw.channel : null
+  const lastRunAt = raw.lastRunAt || null
+  const deliveredAt = raw.deliveredAt || null
+  const automationId = raw.automationId || null
+  const notes = raw.notes || null
+  const created = Boolean(raw.created || status !== 'not_created' || channel || lastRunAt || deliveredAt || automationId || notes)
+
+  let label = 'No reminder configured'
+  if (status === 'sent') {
+    label = deliveredAt ? `Sent ${formatDateTime(deliveredAt, 'recently')}` : 'Sent'
+  } else if (status === 'failed') {
+    label = lastRunAt ? `Failed ${formatDateTime(lastRunAt, 'recently')}` : 'Failed'
+  } else if (status === 'queued') {
+    label = lastRunAt ? `Queued ${formatDateTime(lastRunAt, 'recently')}` : 'Queued'
+  } else if (created) {
+    label = 'Created'
+  }
+
+  let deliveryLabel = 'No delivery metadata yet'
+  if (channel && automationId) {
+    deliveryLabel = `${channel} · ${automationId}`
+  } else if (channel) {
+    deliveryLabel = channel
+  } else if (automationId) {
+    deliveryLabel = automationId
+  }
+
+  let actionLabel = 'Reminder not prepared yet'
+  if (status === 'sent') {
+    actionLabel = 'Reminder delivered'
+  } else if (status === 'failed') {
+    actionLabel = 'Needs retry'
+  } else if (status === 'queued') {
+    actionLabel = 'Ready for automation'
+  } else if (followUp.status === 'scheduled') {
+    actionLabel = 'Create reminder before the due date'
+  }
+
+  return {
+    created,
+    status,
+    channel,
+    lastRunAt,
+    deliveredAt,
+    automationId,
+    notes,
+    label,
+    deliveryLabel,
+    actionLabel,
+    lastRunLabel: lastRunAt ? formatDateTime(lastRunAt, 'Not run yet') : 'Not run yet',
+    deliveredLabel: deliveredAt ? formatDateTime(deliveredAt, 'Not delivered') : 'Not delivered',
+  }
+}
+
 function inferWorkflowStage(job) {
   const status = effectiveStatus(job)
   const fitScore = Number(job?.fit_score ?? -1)
@@ -326,6 +385,15 @@ export function defaultWorkflowState(job = null) {
       status: FOLLOW_UP_STATUSES.includes(job?.workflow?.followUp?.status) ? job.workflow.followUp.status : 'not_scheduled',
       dueAt: job?.workflow?.followUp?.dueAt || null,
       lastCompletedAt: job?.workflow?.followUp?.lastCompletedAt || null,
+      reminder: {
+        created: Boolean(job?.workflow?.followUp?.reminder?.created),
+        status: FOLLOW_UP_REMINDER_STATUSES.includes(job?.workflow?.followUp?.reminder?.status) ? job.workflow.followUp.reminder.status : 'not_created',
+        channel: FOLLOW_UP_REMINDER_CHANNELS.includes(job?.workflow?.followUp?.reminder?.channel) ? job.workflow.followUp.reminder.channel : null,
+        lastRunAt: job?.workflow?.followUp?.reminder?.lastRunAt || null,
+        deliveredAt: job?.workflow?.followUp?.reminder?.deliveredAt || null,
+        automationId: job?.workflow?.followUp?.reminder?.automationId || null,
+        notes: job?.workflow?.followUp?.reminder?.notes || null,
+      },
     },
     updatedAt: job?.workflow?.updatedAt || null,
   }
@@ -343,6 +411,7 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
   const nextActionApproval = effectiveWorkflow?.nextActionApproval || 'pending'
   const packetApproval = effectiveWorkflow?.packetApproval || 'pending'
   const followUp = followUpState(job, effectiveWorkflow)
+  const followUpReminder = followUpReminderState(effectiveWorkflow, followUp)
   const draftArtifact = coverLetterArtifact(job, coverLetterState)
   const draftArtifactLabel = draftArtifact.available
     ? draftArtifact.savedToVault && draftArtifact.vaultPath
@@ -405,6 +474,13 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       followUpStatus: followUp.status,
       followUpDueLabel: followUp.dueLabel,
       followUpUrgencyLabel: followUp.urgencyLabel,
+      followUpReminderLabel: followUpReminder.label,
+      followUpReminderStatus: followUpReminder.status,
+      followUpReminderDeliveryLabel: followUpReminder.deliveryLabel,
+      followUpReminderActionLabel: followUpReminder.actionLabel,
+      followUpReminderLastRunLabel: followUpReminder.lastRunLabel,
+      followUpReminderDeliveredLabel: followUpReminder.deliveredLabel,
+      followUpReminderNotes: followUpReminder.notes,
       coverLetterArtifactLabel: draftArtifactLabel,
       coverLetterArtifact: draftArtifact,
       packetArtifacts,
@@ -478,6 +554,13 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       followUpDueLabel: followUp.dueLabel,
       followUpCompletedLabel: followUp.completedLabel,
       followUpUrgencyLabel: followUp.urgencyLabel,
+      followUpReminderLabel: followUpReminder.label,
+      followUpReminderStatus: followUpReminder.status,
+      followUpReminderDeliveryLabel: followUpReminder.deliveryLabel,
+      followUpReminderActionLabel: followUpReminder.actionLabel,
+      followUpReminderLastRunLabel: followUpReminder.lastRunLabel,
+      followUpReminderDeliveredLabel: followUpReminder.deliveredLabel,
+      followUpReminderNotes: followUpReminder.notes,
       coverLetterArtifactLabel: draftArtifactLabel,
       coverLetterArtifact: draftArtifact,
       packetArtifacts,
@@ -517,6 +600,13 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       followUpStatus: followUp.status,
       followUpDueLabel: followUp.dueLabel,
       followUpUrgencyLabel: followUp.urgencyLabel,
+      followUpReminderLabel: followUpReminder.label,
+      followUpReminderStatus: followUpReminder.status,
+      followUpReminderDeliveryLabel: followUpReminder.deliveryLabel,
+      followUpReminderActionLabel: followUpReminder.actionLabel,
+      followUpReminderLastRunLabel: followUpReminder.lastRunLabel,
+      followUpReminderDeliveredLabel: followUpReminder.deliveredLabel,
+      followUpReminderNotes: followUpReminder.notes,
       coverLetterArtifactLabel: draftArtifactLabel,
       coverLetterArtifact: draftArtifact,
       packetArtifacts,
@@ -590,6 +680,13 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
       followUpStatus: followUp.status,
       followUpDueLabel: followUp.dueLabel,
       followUpUrgencyLabel: followUp.urgencyLabel,
+      followUpReminderLabel: followUpReminder.label,
+      followUpReminderStatus: followUpReminder.status,
+      followUpReminderDeliveryLabel: followUpReminder.deliveryLabel,
+      followUpReminderActionLabel: followUpReminder.actionLabel,
+      followUpReminderLastRunLabel: followUpReminder.lastRunLabel,
+      followUpReminderDeliveredLabel: followUpReminder.deliveredLabel,
+      followUpReminderNotes: followUpReminder.notes,
       coverLetterArtifactLabel: draftArtifactLabel,
       coverLetterArtifact: draftArtifact,
       packetArtifacts,
@@ -631,6 +728,13 @@ export function deriveWorkflow(job, coverLetterState, workflowState = null) {
     followUpStatus: followUp.status,
     followUpDueLabel: followUp.dueLabel,
     followUpUrgencyLabel: followUp.urgencyLabel,
+    followUpReminderLabel: followUpReminder.label,
+    followUpReminderStatus: followUpReminder.status,
+    followUpReminderDeliveryLabel: followUpReminder.deliveryLabel,
+    followUpReminderActionLabel: followUpReminder.actionLabel,
+    followUpReminderLastRunLabel: followUpReminder.lastRunLabel,
+    followUpReminderDeliveredLabel: followUpReminder.deliveredLabel,
+    followUpReminderNotes: followUpReminder.notes,
     coverLetterArtifactLabel: draftArtifactLabel,
     coverLetterArtifact: draftArtifact,
     packetArtifacts,

@@ -81,6 +81,15 @@ DEFAULT_WORKFLOW_FOLLOW_UP = {
     "status": "not_scheduled",
     "dueAt": None,
     "lastCompletedAt": None,
+    "reminder": {
+        "created": False,
+        "status": "not_created",
+        "channel": None,
+        "lastRunAt": None,
+        "deliveredAt": None,
+        "automationId": None,
+        "notes": None,
+    },
 }
 DEFAULT_WORKFLOW_NEXT_ACTION = {
     "action": None,
@@ -91,6 +100,8 @@ DEFAULT_WORKFLOW_NEXT_ACTION = {
 PACKET_REQUIRED_KEYS = ("tailoredSummary", "resumeBullets", "coverLetterDraft")
 WORKFLOW_STAGES = {"focus", "review", "follow_up", "monitor", "closed"}
 WORKFLOW_FOLLOW_UP_STATUSES = {"not_scheduled", "scheduled", "completed"}
+WORKFLOW_FOLLOW_UP_REMINDER_STATUSES = {"not_created", "queued", "sent", "failed"}
+WORKFLOW_FOLLOW_UP_REMINDER_CHANNELS = {"manual", "n8n", "email", "calendar"}
 WORKFLOW_NEXT_ACTIONS = {
     "none",
     "review_role",
@@ -177,6 +188,7 @@ def _normalize_workflow(value: Any) -> dict[str, Any]:
             "status": follow_up_status if follow_up_status in WORKFLOW_FOLLOW_UP_STATUSES else DEFAULT_WORKFLOW_FOLLOW_UP["status"],
             "dueAt": str(follow_up.get("dueAt") or "").strip() or None,
             "lastCompletedAt": str(follow_up.get("lastCompletedAt") or "").strip() or None,
+            "reminder": _normalize_follow_up_reminder(follow_up.get("reminder")),
         },
         "updatedAt": str(source.get("updatedAt") or "").strip() or None,
     }
@@ -221,6 +233,8 @@ def _normalize_workflow_patch(value: Any) -> dict[str, Any]:
             next_follow_up["dueAt"] = str(follow_up.get("dueAt") or "").strip() or None
         if "lastCompletedAt" in follow_up:
             next_follow_up["lastCompletedAt"] = str(follow_up.get("lastCompletedAt") or "").strip() or None
+        if isinstance(follow_up.get("reminder"), dict):
+            next_follow_up["reminder"] = _normalize_follow_up_reminder_patch(follow_up.get("reminder"))
         normalized["followUp"] = next_follow_up
     return normalized
 
@@ -247,9 +261,15 @@ def _workflow_event_tone(*, event_type: str, category: str) -> str:
     normalized_category = str(category or "").strip().lower()
     if normalized_type.endswith("_approved") or normalized_type.endswith("_completed"):
         return "complete"
+    if normalized_type.endswith("_sent"):
+        return "complete"
     if normalized_type.endswith("_pending") or normalized_type.endswith("_scheduled"):
         return "pending"
+    if normalized_type.endswith("_queued"):
+        return "pending"
     if normalized_type.endswith("_reopened") or normalized_type.endswith("_cleared"):
+        return "warning"
+    if normalized_type.endswith("_failed"):
         return "warning"
     if normalized_category in {"artifact", "packet"}:
         return "pending"
@@ -624,16 +644,85 @@ def _default_follow_up_due_at(now: datetime) -> str:
     return (now + timedelta(days=5)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def _normalize_follow_up_reminder(value: Any) -> dict[str, Any]:
+    source = dict(value) if isinstance(value, dict) else {}
+    status = str(source.get("status") or "").strip().lower()
+    channel = str(source.get("channel") or "").strip().lower()
+    normalized = dict(DEFAULT_WORKFLOW_FOLLOW_UP["reminder"])
+    normalized.update(
+        {
+            "created": bool(source.get("created", False)),
+            "status": status if status in WORKFLOW_FOLLOW_UP_REMINDER_STATUSES else DEFAULT_WORKFLOW_FOLLOW_UP["reminder"]["status"],
+            "channel": channel if channel in WORKFLOW_FOLLOW_UP_REMINDER_CHANNELS else None,
+            "lastRunAt": str(source.get("lastRunAt") or "").strip() or None,
+            "deliveredAt": str(source.get("deliveredAt") or "").strip() or None,
+            "automationId": str(source.get("automationId") or "").strip() or None,
+            "notes": str(source.get("notes") or "").strip() or None,
+        }
+    )
+    if (
+        normalized["status"] != "not_created"
+        or normalized["channel"]
+        or normalized["lastRunAt"]
+        or normalized["deliveredAt"]
+        or normalized["automationId"]
+        or normalized["notes"]
+    ):
+        normalized["created"] = True
+    if not normalized["created"]:
+        normalized["status"] = "not_created"
+    return normalized
+
+
+def _normalize_follow_up_reminder_patch(value: Any) -> dict[str, Any]:
+    source = dict(value) if isinstance(value, dict) else {}
+    normalized: dict[str, Any] = {}
+    if "created" in source:
+        normalized["created"] = bool(source.get("created"))
+    if "status" in source:
+        status = str(source.get("status") or "").strip().lower()
+        if status in WORKFLOW_FOLLOW_UP_REMINDER_STATUSES:
+            normalized["status"] = status
+    if "channel" in source:
+        channel = str(source.get("channel") or "").strip().lower()
+        normalized["channel"] = channel if channel in WORKFLOW_FOLLOW_UP_REMINDER_CHANNELS else None
+    if "lastRunAt" in source:
+        normalized["lastRunAt"] = str(source.get("lastRunAt") or "").strip() or None
+    if "deliveredAt" in source:
+        normalized["deliveredAt"] = str(source.get("deliveredAt") or "").strip() or None
+    if "automationId" in source:
+        normalized["automationId"] = str(source.get("automationId") or "").strip() or None
+    if "notes" in source:
+        normalized["notes"] = str(source.get("notes") or "").strip() or None
+    return normalized
+
+
 def _normalize_follow_up_state(value: Any) -> dict[str, Any]:
     source = dict(value) if isinstance(value, dict) else {}
     normalized = {
         "status": str(source.get("status") or DEFAULT_WORKFLOW_FOLLOW_UP["status"]).strip().lower(),
         "dueAt": str(source.get("dueAt") or "").strip() or None,
         "lastCompletedAt": str(source.get("lastCompletedAt") or "").strip() or None,
+        "reminder": _normalize_follow_up_reminder(source.get("reminder")),
     }
     if normalized["status"] not in WORKFLOW_FOLLOW_UP_STATUSES:
         normalized["status"] = DEFAULT_WORKFLOW_FOLLOW_UP["status"]
     return normalized
+
+
+def _follow_up_reminder_detail(reminder: dict[str, Any]) -> str | None:
+    detail_parts = []
+    if reminder.get("channel"):
+        detail_parts.append(f"Channel: {reminder['channel']}")
+    if reminder.get("automationId"):
+        detail_parts.append(f"Automation: {reminder['automationId']}")
+    if reminder.get("deliveredAt"):
+        detail_parts.append(f"Delivered {_timeline_datetime_label(reminder['deliveredAt'])}")
+    elif reminder.get("lastRunAt"):
+        detail_parts.append(f"Last run {_timeline_datetime_label(reminder['lastRunAt'])}")
+    if reminder.get("notes"):
+        detail_parts.append(str(reminder["notes"]))
+    return " | ".join(detail_parts) if detail_parts else None
 
 
 def _normalize_cover_letter_artifact(value: Any) -> dict[str, Any]:
@@ -882,6 +971,12 @@ def update_job(
             **_normalize_follow_up_state(existing_workflow.get("followUp")),
             **incoming_workflow.get("followUp", {}),
         }
+        if "reminder" in incoming_workflow.get("followUp", {}):
+            merged_follow_up["reminder"] = {
+                **_normalize_follow_up_reminder(_normalize_follow_up_state(existing_workflow.get("followUp")).get("reminder")),
+                **incoming_workflow.get("followUp", {}).get("reminder", {}),
+            }
+            merged_follow_up["reminder"] = _normalize_follow_up_reminder(merged_follow_up.get("reminder"))
         next_workflow = {
             **existing_workflow,
             **incoming_workflow,
@@ -1038,6 +1133,35 @@ def update_job(
                     event_type="follow_up_reopened",
                     label="Follow-up reopened",
                     at=now,
+                    category="follow_up",
+                )
+        existing_reminder = _normalize_follow_up_reminder(existing_follow_up.get("reminder"))
+        next_reminder = _normalize_follow_up_reminder(next_follow_up.get("reminder"))
+        if existing_reminder != next_reminder:
+            reminder_event_type = None
+            reminder_label = None
+            if existing_reminder.get("status") != next_reminder.get("status"):
+                reminder_status_events = {
+                    "queued": ("follow_up_reminder_queued", "Follow-up reminder queued"),
+                    "sent": ("follow_up_reminder_sent", "Follow-up reminder sent"),
+                    "failed": ("follow_up_reminder_failed", "Follow-up reminder failed"),
+                    "not_created": ("follow_up_reminder_cleared", "Follow-up reminder cleared"),
+                }
+                reminder_event_type, reminder_label = reminder_status_events.get(
+                    str(next_reminder.get("status") or ""),
+                    ("follow_up_reminder_created", "Follow-up reminder created"),
+                )
+            elif not existing_reminder.get("created") and next_reminder.get("created"):
+                reminder_event_type, reminder_label = ("follow_up_reminder_created", "Follow-up reminder created")
+            elif existing_reminder.get("lastRunAt") != next_reminder.get("lastRunAt") and next_reminder.get("lastRunAt"):
+                reminder_event_type, reminder_label = ("follow_up_reminder_run_recorded", "Follow-up reminder run recorded")
+            if reminder_event_type and reminder_label:
+                current["workflowTimeline"] = _append_workflow_event(
+                    current["workflowTimeline"],
+                    event_type=reminder_event_type,
+                    label=reminder_label,
+                    detail=_follow_up_reminder_detail(next_reminder),
+                    at=next_reminder.get("lastRunAt") or next_reminder.get("deliveredAt") or now,
                     category="follow_up",
                 )
 

@@ -39,6 +39,19 @@ class JobRepositoryTests(unittest.TestCase):
                         "notes": "Stored in the packet folder.",
                     },
                 },
+                "followUp": {
+                    "status": "scheduled",
+                    "dueAt": "2026-03-24T16:00:00Z",
+                    "lastCompletedAt": None,
+                    "reminder": {
+                        "created": True,
+                        "status": "queued",
+                        "channel": "n8n",
+                        "lastRunAt": "2026-03-23T15:00:00Z",
+                        "automationId": "phase6-follow-up-reminder",
+                        "notes": "Ready for automation handoff.",
+                    },
+                },
             }
         )
 
@@ -50,6 +63,9 @@ class JobRepositoryTests(unittest.TestCase):
         self.assertTrue(normalized["artifacts"]["coverLetterDraft"]["savedToVault"])
         self.assertEqual(normalized["artifacts"]["resumeBullets"]["status"], "ready")
         self.assertEqual(normalized["artifacts"]["resumeBullets"]["source"], "manual")
+        self.assertEqual(normalized["followUp"]["reminder"]["status"], "queued")
+        self.assertEqual(normalized["followUp"]["reminder"]["channel"], "n8n")
+        self.assertTrue(normalized["followUp"]["reminder"]["created"])
 
     def test_workflow_packet_readiness_requires_checked_and_linked_core_artifacts(self) -> None:
         readiness = job_repository._workflow_packet_readiness(
@@ -273,6 +289,14 @@ class JobRepositoryTests(unittest.TestCase):
                     "followUp": {
                         "status": "scheduled",
                         "dueAt": "2026-03-24T16:00:00Z",
+                        "reminder": {
+                            "created": True,
+                            "status": "queued",
+                            "channel": "n8n",
+                            "lastRunAt": "2026-03-23T15:00:00Z",
+                            "automationId": "phase6-follow-up-reminder",
+                            "notes": "Ready for automation handoff.",
+                        },
                     },
                 },
             )
@@ -285,14 +309,17 @@ class JobRepositoryTests(unittest.TestCase):
         self.assertIn("Tailored summary completed", event_labels)
         self.assertIn("Resume bullets artifact linked", event_labels)
         self.assertIn("Follow-up scheduled", event_labels)
+        self.assertIn("Follow-up reminder queued", event_labels)
         categories_by_label = {event["label"]: event["category"] for event in current["workflowTimeline"]}
         self.assertEqual(categories_by_label["Next action approved"], "approval")
         self.assertEqual(categories_by_label["Moved to Follow-up lane"], "workflow")
         self.assertEqual(categories_by_label["Tailored summary completed"], "packet")
         self.assertEqual(categories_by_label["Follow-up scheduled"], "follow_up")
+        self.assertEqual(categories_by_label["Follow-up reminder queued"], "follow_up")
         tones_by_label = {event["label"]: event["tone"] for event in current["workflowTimeline"]}
         self.assertEqual(tones_by_label["Packet approved"], "complete")
         self.assertEqual(tones_by_label["Resume bullets artifact linked"], "pending")
+        self.assertEqual(tones_by_label["Follow-up reminder queued"], "pending")
 
     def test_update_job_marks_follow_up_complete_and_clears_due_date(self) -> None:
         current = {

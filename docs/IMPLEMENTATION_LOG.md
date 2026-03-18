@@ -2,6 +2,37 @@
 
 Public-repo note: historical entries use placeholder hostnames and paths where the original logs referenced private machine details. Older file references remain as evidence-first text and may no longer be directly clickable.
 
+## 2026-03-18 - Follow-up reminder metadata and Ops reminder readiness added
+
+### What was executed
+
+- Extended persisted Phase 6 follow-up workflow state in:
+  - `<repo-root>/scripts/phase6/job_repository.py`
+  - follow-up state now carries nested reminder metadata for `created`, `status`, `channel`, `lastRunAt`, `deliveredAt`, `automationId`, and operator notes
+  - workflow timeline mutations now emit follow-up reminder events so reminder queueing, delivery, failures, and clears show up in the Ops history rail
+- Extended job patch validation and API examples in:
+  - `<repo-root>/scripts/phase1/bridge_routes_phase6.py`
+  - `<repo-root>/scripts/phase1/ingest_bridge_api.py`
+  - `PATCH /v1/jobs/{jobId}` now accepts reminder-readiness payloads inside `workflow.followUp.reminder` while keeping the existing jobs surface backward-compatible
+- Added dashboard reminder-readiness support in:
+  - `<repo-root>/ui/daily-dashboard/src/utils/workflowDemo.js`
+  - `<repo-root>/ui/daily-dashboard/src/components/OpsWorkspace.jsx`
+  - Ops now shows reminder state, delivery metadata, and last-run context beside follow-up urgency, and the rail includes lightweight controls for queueing, marking sent, marking failed, and clearing reminder state
+- Added regression coverage in:
+  - `<repo-root>/tests/test_phase6_job_repository.py`
+  - `<repo-root>/tests/test_bridge_api_contract.py`
+
+### Validation
+
+- Local validation:
+  - `./.venv/bin/python -m pytest -q tests/test_phase6_job_repository.py tests/test_bridge_api_contract.py -k "follow_up or phase6_jobs"`
+  - `npm run build` (from `ui/daily-dashboard/`)
+
+### Results
+
+- The follow-up lane is now backed by reminder-ready persisted state instead of only a due date and completion flag.
+- Ops can now tell the difference between "follow-up scheduled" and "reminder workflow prepared," which sets up a cleaner handoff to future n8n automation.
+
 ## 2026-03-18 - Interview brief artifact flow added to the Application Ops packet
 
 ### What was executed

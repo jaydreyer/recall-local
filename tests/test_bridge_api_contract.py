@@ -267,6 +267,15 @@ class BridgeApiContractTests(unittest.TestCase):
                     "status": "scheduled",
                     "dueAt": "2026-03-24T16:00:00Z",
                     "lastCompletedAt": None,
+                    "reminder": {
+                        "created": True,
+                        "status": "queued",
+                        "channel": "n8n",
+                        "lastRunAt": "2026-03-23T14:30:00Z",
+                        "deliveredAt": None,
+                        "automationId": "phase6-follow-up-reminder",
+                        "notes": "Prepared for the next automation run.",
+                    },
                 },
                 "packetReadiness": {
                     "totalItems": 6,
@@ -329,6 +338,14 @@ class BridgeApiContractTests(unittest.TestCase):
                             "followUp": {
                                 "status": "scheduled",
                                 "dueAt": "2026-03-24T16:00:00Z",
+                                "reminder": {
+                                    "created": True,
+                                    "status": "queued",
+                                    "channel": "n8n",
+                                    "lastRunAt": "2026-03-23T14:30:00Z",
+                                    "automationId": "phase6-follow-up-reminder",
+                                    "notes": "Prepared for the next automation run.",
+                                },
                             },
                         }
                     },
@@ -340,6 +357,7 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(response.json()["workflow"]["packet"]["tailoredSummary"], True)
         self.assertEqual(response.json()["workflow"]["artifacts"]["resumeBullets"]["status"], "ready")
         self.assertEqual(response.json()["workflow"]["followUp"]["status"], "scheduled")
+        self.assertEqual(response.json()["workflow"]["followUp"]["reminder"]["status"], "queued")
         self.assertFalse(response.json()["workflow"]["packetReadiness"]["readyForApproval"])
         self.assertEqual(response.json()["workflowTimeline"][0]["category"], "approval")
         self.assertEqual(response.json()["workflowTimeline"][0]["tone"], "complete")
@@ -373,6 +391,14 @@ class BridgeApiContractTests(unittest.TestCase):
                 "followUp": {
                     "status": "scheduled",
                     "dueAt": "2026-03-24T16:00:00Z",
+                    "reminder": {
+                        "created": True,
+                        "status": "queued",
+                        "channel": "n8n",
+                        "lastRunAt": "2026-03-23T14:30:00Z",
+                        "automationId": "phase6-follow-up-reminder",
+                        "notes": "Prepared for the next automation run.",
+                    },
                 },
             },
         )
@@ -398,6 +424,30 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"]["code"], "validation_failed")
         self.assertEqual(response.json()["error"]["details"][0]["field"], "workflow.followUp.status")
+
+    def test_patch_job_rejects_invalid_follow_up_reminder_payload(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        with build_client(env) as client:
+            response = client.patch(
+                "/v1/jobs/job-123",
+                json={
+                    "workflow": {
+                        "followUp": {
+                            "reminder": {
+                                "status": "tomorrow",
+                            }
+                        }
+                    },
+                },
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"]["code"], "validation_failed")
+        self.assertEqual(response.json()["error"]["details"][0]["field"], "workflow.followUp.reminder.status")
 
     def test_patch_job_rejects_invalid_next_action_confidence(self) -> None:
         env = {
@@ -1009,6 +1059,20 @@ class BridgeApiContractTests(unittest.TestCase):
                             },
                             "readyForApproval": False,
                         },
+                        "followUp": {
+                            "status": "scheduled",
+                            "dueAt": "2026-03-24T16:00:00Z",
+                            "lastCompletedAt": None,
+                            "reminder": {
+                                "created": True,
+                                "status": "queued",
+                                "channel": "n8n",
+                                "lastRunAt": "2026-03-23T14:30:00Z",
+                                "deliveredAt": None,
+                                "automationId": "phase6-follow-up-reminder",
+                                "notes": "Prepared for the next automation run.",
+                            },
+                        },
                     },
                     "workflowTimeline": [
                         {
@@ -1040,6 +1104,7 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(jobs_response.status_code, 200)
         self.assertEqual(jobs_response.json()["workflow"], "workflow_06a_jobs")
         self.assertEqual(jobs_response.json()["items"][0]["jobId"], "job-1")
+        self.assertEqual(jobs_response.json()["items"][0]["workflow"]["followUp"]["reminder"]["status"], "queued")
         self.assertFalse(jobs_response.json()["items"][0]["workflow"]["packetReadiness"]["readyForApproval"])
         self.assertEqual(jobs_response.json()["items"][0]["workflowTimeline"][0]["category"], "approval")
         self.assertEqual(jobs_response.json()["items"][0]["workflowTimeline"][0]["tone"], "complete")

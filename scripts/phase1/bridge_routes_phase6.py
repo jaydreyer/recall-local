@@ -414,7 +414,7 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                         request_id=request_id,
                         details=[{"field": "workflow.followUp", "issue": "value must be an object"}],
                     )
-                allowed_follow_up_fields = {"status", "dueAt", "lastCompletedAt"}
+                allowed_follow_up_fields = {"status", "dueAt", "lastCompletedAt", "reminder"}
                 unknown_follow_up_fields = [key for key in follow_up_value.keys() if key not in allowed_follow_up_fields]
                 if unknown_follow_up_fields:
                     return _error_response(
@@ -450,6 +450,85 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                         message=str(exc),
                         request_id=request_id,
                     )
+                if "reminder" in follow_up_value:
+                    reminder_value = follow_up_value.get("reminder")
+                    if not isinstance(reminder_value, dict):
+                        return _error_response(
+                            status_code=400,
+                            code="validation_failed",
+                            message="workflow.followUp.reminder must be an object.",
+                            request_id=request_id,
+                            details=[{"field": "workflow.followUp.reminder", "issue": "value must be an object"}],
+                        )
+                    allowed_reminder_fields = {"created", "status", "channel", "lastRunAt", "deliveredAt", "automationId", "notes"}
+                    unknown_reminder_fields = [key for key in reminder_value.keys() if key not in allowed_reminder_fields]
+                    if unknown_reminder_fields:
+                        return _error_response(
+                            status_code=400,
+                            code="validation_failed",
+                            message="Invalid workflow follow-up reminder payload.",
+                            request_id=request_id,
+                            details=[
+                                {"field": f"workflow.followUp.reminder.{key}", "issue": "field is not supported"}
+                                for key in unknown_reminder_fields
+                            ],
+                        )
+                    if "created" in reminder_value:
+                        reminder_value["created"] = bool(reminder_value.get("created"))
+                    if "status" in reminder_value:
+                        normalized_reminder_status = str(reminder_value.get("status") or "").strip().lower()
+                        if normalized_reminder_status not in {"not_created", "queued", "sent", "failed"}:
+                            return _error_response(
+                                status_code=400,
+                                code="validation_failed",
+                                message="Invalid workflow follow-up reminder status value.",
+                                request_id=request_id,
+                                details=[
+                                    {
+                                        "field": "workflow.followUp.reminder.status",
+                                        "issue": "allowed values: not_created, queued, sent, failed",
+                                    }
+                                ],
+                            )
+                        reminder_value["status"] = normalized_reminder_status
+                    if "channel" in reminder_value:
+                        normalized_channel = str(reminder_value.get("channel") or "").strip().lower() or None
+                        if normalized_channel is not None and normalized_channel not in {"manual", "n8n", "email", "calendar"}:
+                            return _error_response(
+                                status_code=400,
+                                code="validation_failed",
+                                message="Invalid workflow follow-up reminder channel value.",
+                                request_id=request_id,
+                                details=[
+                                    {
+                                        "field": "workflow.followUp.reminder.channel",
+                                        "issue": "allowed values: manual, n8n, email, calendar",
+                                    }
+                                ],
+                            )
+                        reminder_value["channel"] = normalized_channel
+                    if "automationId" in reminder_value:
+                        reminder_value["automationId"] = str(reminder_value.get("automationId") or "").strip() or None
+                    if "notes" in reminder_value:
+                        reminder_value["notes"] = str(reminder_value.get("notes") or "").strip() or None
+                    try:
+                        if "lastRunAt" in reminder_value:
+                            reminder_value["lastRunAt"] = _normalize_optional_iso8601(
+                                reminder_value.get("lastRunAt"),
+                                field_name="workflow.followUp.reminder.lastRunAt",
+                            )
+                        if "deliveredAt" in reminder_value:
+                            reminder_value["deliveredAt"] = _normalize_optional_iso8601(
+                                reminder_value.get("deliveredAt"),
+                                field_name="workflow.followUp.reminder.deliveredAt",
+                            )
+                    except ValueError as exc:
+                        return _error_response(
+                            status_code=400,
+                            code="validation_failed",
+                            message=str(exc),
+                            request_id=request_id,
+                        )
 
             if "artifacts" in workflow_value:
                 artifacts_value = workflow_value.get("artifacts")

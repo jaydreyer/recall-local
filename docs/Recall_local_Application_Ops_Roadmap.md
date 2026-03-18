@@ -51,6 +51,7 @@ The live app now includes:
 - packet readiness now reconciles checklist state with artifact truth
 - persisted next-action recommendations now include action, rationale, confidence, and due date
 - persisted follow-up metadata now supports due dates and completion tracking
+- persisted follow-up reminder metadata now supports created state, delivery channel, last run, delivery timestamp, automation id, and notes
 - workflow timeline support with richer persisted event semantics
 - summary strip for high-attention work
 - queue filters
@@ -170,11 +171,12 @@ What is done:
 - follow-up exists as a workflow concept and lane direction
 - applied roles can be framed as moving into follow-up work
 - persisted follow-up due dates and completion state now exist
+- persisted follow-up reminder metadata now exists
 - Ops now has a real `Follow-up due` filter/summary and follow-up controls
+- Ops now surfaces reminder readiness, delivery metadata, and last-run context for follow-up work
 
 What is still missing:
 
-- reminder UI
 - n8n-backed reminder/automation flow
 - follow-up dashboarding that matches the checklist/PRD vision
 
@@ -394,22 +396,19 @@ If continuing from here, use this order:
 
 The best next implementation slice is:
 
-### Follow-up workflow depth
+### Follow-up automation handoff
 
 Scope:
 
-- support richer reminder metadata such as:
-  - reminder created flag
-  - reminder delivery metadata
-  - reminder status / last reminder run
-- expose reminder state clearly in Ops
-- prepare the workflow model for optional n8n-backed reminder automation
+- wire persisted reminder metadata into an actual n8n-backed follow-up reminder flow
+- decide the reminder source of truth between Ops and automation runs
+- add minimal reminder dashboarding or reporting for queued, failed, and delivered reminder states
 
 Why this slice next:
 
-- it is now the clearest remaining gap between the current workflow model and a genuinely operational follow-up lane
-- it extends persisted workflow data instead of inventing a disconnected feature branch
-- it improves daily operator usefulness while setting up the next automation step cleanly
+- the workflow model is now ready for automation handoff, so the biggest remaining gap is executing reminders rather than just modeling them
+- it converts reminder readiness from a durable UI/data feature into a real operator time-saver
+- it keeps momentum on the roadmap's most obvious remaining workflow-depth gap
 
 ## How To Use This In A New Session
 
@@ -427,4 +426,4 @@ Helpful companion references:
 
 Suggested kickoff prompt for a future session:
 
-"Read [Recall_local_Application_Ops_Roadmap.md](/Users/jaydreyer/projects/recall-local/docs/Recall_local_Application_Ops_Roadmap.md), confirm the current live state against the PRD and implementation checklist, and implement the next slice: deepen follow-up workflow metadata and reminder readiness."
+"Read [Recall_local_Application_Ops_Roadmap.md](/Users/jaydreyer/projects/recall-local/docs/Recall_local_Application_Ops_Roadmap.md), confirm the current live state against the PRD and implementation checklist, and implement the next slice: wire follow-up reminder metadata into n8n-backed automation and dashboard it."

@@ -127,6 +127,10 @@ function WorkflowRail({
   onMarkFollowUpDueNow,
   onMarkFollowUpComplete,
   onResetFollowUp,
+  onQueueFollowUpReminder,
+  onMarkFollowUpReminderSent,
+  onMarkFollowUpReminderFailed,
+  onClearFollowUpReminder,
   onSetRecommendedNextAction,
 }) {
   const workflow = deriveWorkflow(job, coverLetterState, workflowState)
@@ -351,6 +355,18 @@ function WorkflowRail({
               <strong>{workflow.followUpCompletedLabel}</strong>
             </div>
           ) : null}
+          <div className="ops-kv">
+            <span className="mini-label">Reminder</span>
+            <strong>{workflow.followUpReminderLabel}</strong>
+          </div>
+          <div className="ops-kv">
+            <span className="mini-label">Delivery</span>
+            <strong>{workflow.followUpReminderDeliveryLabel}</strong>
+          </div>
+          <div className="ops-kv">
+            <span className="mini-label">Last run</span>
+            <strong>{workflow.followUpReminderLastRunLabel}</strong>
+          </div>
         </div>
         {showFollowUpActions ? (
           <div className="workflow-follow-up-actions">
@@ -371,6 +387,22 @@ function WorkflowRail({
           <p className="body-copy">Follow-up controls become active once a role moves into the applied lane.</p>
         )}
         {showFollowUpActions ? (
+          <div className="workflow-follow-up-actions">
+            <button type="button" className="ghost-button" onClick={onQueueFollowUpReminder}>
+              Queue reminder
+            </button>
+            <button type="button" className="ghost-button" onClick={onMarkFollowUpReminderSent}>
+              Mark reminder sent
+            </button>
+            <button type="button" className="ghost-button" onClick={onMarkFollowUpReminderFailed}>
+              Mark reminder failed
+            </button>
+            <button type="button" className="ghost-button" onClick={onClearFollowUpReminder}>
+              Clear reminder
+            </button>
+          </div>
+        ) : null}
+        {showFollowUpActions ? (
           <div className={`workflow-callout ${workflow.followUpUrgencyLabel === 'Due now' ? 'warning' : 'subtle'}`}>
             <p className="section-label">Follow-up agenda</p>
             <strong>{workflow.followUpUrgencyLabel}</strong>
@@ -385,6 +417,22 @@ function WorkflowRail({
                       ? 'A follow-up date is scheduled, so the next job is to keep the packet and outreach note ready.'
                       : 'No follow-up date is on the calendar yet.'}
             </p>
+          </div>
+        ) : null}
+        {showFollowUpActions ? (
+          <div className={`workflow-callout ${workflow.followUpReminderStatus === 'failed' ? 'warning' : workflow.followUpReminderStatus === 'sent' ? 'pending' : 'subtle'}`}>
+            <p className="section-label">Reminder readiness</p>
+            <strong>{workflow.followUpReminderActionLabel}</strong>
+            <p className="body-copy">
+              {workflow.followUpReminderStatus === 'sent'
+                ? 'The reminder metadata shows a completed handoff, so the follow-up lane is ready for response monitoring.'
+                : workflow.followUpReminderStatus === 'failed'
+                  ? 'The last reminder attempt needs operator attention before this role can rely on automation.'
+                  : workflow.followUpReminderStatus === 'queued'
+                    ? 'This role has enough reminder metadata for an n8n-backed follow-up handoff.'
+                    : 'No reminder has been prepared yet, so this role still depends on manual follow-through.'}
+            </p>
+            {workflow.followUpReminderNotes ? <p className="meta-text">{workflow.followUpReminderNotes}</p> : null}
           </div>
         ) : null}
       </section>
@@ -837,6 +885,67 @@ export default function OpsWorkspace({
                     status: 'not_scheduled',
                     dueAt: null,
                     lastCompletedAt: null,
+                  },
+                })
+              }
+              onQueueFollowUpReminder={() =>
+                jobsState.updateWorkflow(selectedJob.jobId, {
+                  stage: 'follow_up',
+                  followUp: {
+                    reminder: {
+                      created: true,
+                      status: 'queued',
+                      channel: 'n8n',
+                      lastRunAt: new Date().toISOString(),
+                      deliveredAt: null,
+                      automationId: 'phase6-follow-up-reminder',
+                      notes: 'Prepared in Ops for automation handoff.',
+                    },
+                  },
+                })
+              }
+              onMarkFollowUpReminderSent={() =>
+                jobsState.updateWorkflow(selectedJob.jobId, {
+                  followUp: {
+                    reminder: {
+                      created: true,
+                      status: 'sent',
+                      channel: workflowState?.followUp?.reminder?.channel || 'manual',
+                      lastRunAt: new Date().toISOString(),
+                      deliveredAt: new Date().toISOString(),
+                      automationId: workflowState?.followUp?.reminder?.automationId || null,
+                      notes: 'Reminder delivery recorded in Ops.',
+                    },
+                  },
+                })
+              }
+              onMarkFollowUpReminderFailed={() =>
+                jobsState.updateWorkflow(selectedJob.jobId, {
+                  followUp: {
+                    reminder: {
+                      created: true,
+                      status: 'failed',
+                      channel: workflowState?.followUp?.reminder?.channel || 'n8n',
+                      lastRunAt: new Date().toISOString(),
+                      deliveredAt: null,
+                      automationId: workflowState?.followUp?.reminder?.automationId || 'phase6-follow-up-reminder',
+                      notes: 'Reminder attempt failed and needs operator retry.',
+                    },
+                  },
+                })
+              }
+              onClearFollowUpReminder={() =>
+                jobsState.updateWorkflow(selectedJob.jobId, {
+                  followUp: {
+                    reminder: {
+                      created: false,
+                      status: 'not_created',
+                      channel: null,
+                      lastRunAt: null,
+                      deliveredAt: null,
+                      automationId: null,
+                      notes: null,
+                    },
                   },
                 })
               }
