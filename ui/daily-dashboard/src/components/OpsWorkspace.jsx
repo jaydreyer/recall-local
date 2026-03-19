@@ -889,20 +889,7 @@ export default function OpsWorkspace({
                 })
               }
               onQueueFollowUpReminder={() =>
-                jobsState.updateWorkflow(selectedJob.jobId, {
-                  stage: 'follow_up',
-                  followUp: {
-                    reminder: {
-                      created: true,
-                      status: 'queued',
-                      channel: 'n8n',
-                      lastRunAt: new Date().toISOString(),
-                      deliveredAt: null,
-                      automationId: 'phase6-follow-up-reminder',
-                      notes: 'Prepared in Ops for automation handoff.',
-                    },
-                  },
-                })
+                jobsState.queueFollowUpReminder(selectedJob.jobId)
               }
               onMarkFollowUpReminderSent={() =>
                 jobsState.updateWorkflow(selectedJob.jobId, {

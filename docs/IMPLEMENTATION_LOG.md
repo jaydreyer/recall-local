@@ -2,6 +2,46 @@
 
 Public-repo note: historical entries use placeholder hostnames and paths where the original logs referenced private machine details. Older file references remain as evidence-first text and may no longer be directly clickable.
 
+## 2026-03-18 - Follow-up reminder runs wired through the bridge and dashboard
+
+### What was executed
+
+- Added a dedicated reminder-run helper in:
+  - `<repo-root>/scripts/phase6/follow_up_reminders.py`
+  - selects due follow-up jobs from the persisted workflow model
+  - builds reminder-ready delivery text
+  - queues reminder metadata back into job workflow state so the bridge, Ops UI, and n8n all use the same source of truth
+- Added a new collection-style API endpoint in:
+  - `<repo-root>/scripts/phase1/bridge_routes_phase6.py`
+  - `POST /v1/follow-up-reminder-runs`
+  - returns reminder-ready items for automation while marking selected reminders as queued through the existing workflow payload model
+- Added API models/examples and helper exports in:
+  - `<repo-root>/scripts/phase1/ingest_bridge_api.py`
+  - `<repo-root>/scripts/phase1/bridge_routes_models.py`
+  - `<repo-root>/scripts/phase1/bridge_routes_phase6_helpers.py`
+- Updated the dashboard to use the real reminder-run endpoint in:
+  - `<repo-root>/ui/daily-dashboard/src/api.js`
+  - `<repo-root>/ui/daily-dashboard/src/hooks/useJobs.js`
+  - `<repo-root>/ui/daily-dashboard/src/components/OpsWorkspace.jsx`
+  - the Ops `Queue reminder` control now calls the same automation contract that n8n will use instead of directly patching queued reminder state
+- Added n8n workflow guidance in:
+  - `<repo-root>/n8n/workflows/phase6/README.md`
+  - `<repo-root>/n8n/workflows/phase6/workflow4_follow_up_reminders.md`
+- Added regression coverage in:
+  - `<repo-root>/tests/test_phase6_follow_up_reminders.py`
+  - `<repo-root>/tests/test_bridge_api_contract.py`
+
+### Validation
+
+- Local validation:
+  - `./.venv/bin/python -m pytest -q tests/test_phase6_follow_up_reminders.py tests/test_phase6_job_repository.py tests/test_bridge_api_contract.py -k "follow_up or reminder or openapi_schema_lists_canonical_paths_only or phase6_jobs"`
+  - `npm run build` (from `ui/daily-dashboard/`)
+
+### Results
+
+- Follow-up reminder queueing now has a real bridge-first automation entrypoint instead of only manual Ops metadata toggles.
+- The dashboard and future n8n workflow can now share one reminder-run contract and one persisted reminder status model.
+
 ## 2026-03-18 - Follow-up reminder metadata and Ops reminder readiness added
 
 ### What was executed

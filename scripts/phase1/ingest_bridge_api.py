@@ -53,6 +53,7 @@ from scripts.phase6.company_profiler import list_company_profiles as phase6_list
 from scripts.phase6.company_profiler import refresh_company_profile as phase6_refresh_company_profile  # noqa: F401,E402
 from scripts.phase6.company_profiler import upsert_tracked_company_config as phase6_upsert_tracked_company_config  # noqa: F401,E402
 from scripts.phase6.cover_letter_drafter import generate_cover_letter_draft as phase6_generate_cover_letter_draft  # noqa: F401,E402
+from scripts.phase6.follow_up_reminders import queue_follow_up_reminder_runs as phase6_queue_follow_up_reminder_runs  # noqa: E402
 from scripts.phase6.gap_aggregator import aggregate_gaps as phase6_aggregate_gaps  # noqa: E402
 from scripts.phase6.ingest_resume import ingest_resume as phase6_ingest_resume  # noqa: F401,E402
 from scripts.phase6.interview_brief_drafter import generate_interview_brief as phase6_generate_interview_brief  # noqa: F401,E402
@@ -359,6 +360,19 @@ class JobEvaluationRunResponse(BaseModel):
     evaluated: Optional[int] = None
     failed: Optional[int] = None
     results: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class FollowUpReminderRunResponse(BaseModel):
+    workflow: Literal["workflow_06a_follow_up_reminders"]
+    run_id: str
+    status: str
+    queued: int
+    skipped: int
+    dry_run: bool = False
+    channel: str
+    automation_id: str
+    items: list[dict[str, Any]] = Field(default_factory=list)
+    message: str
 
 
 class TailoredSummaryResponse(BaseModel):
@@ -918,6 +932,33 @@ JOB_EVALUATION_RUN_COMPLETED_EXAMPLE = {
     ],
 }
 
+FOLLOW_UP_REMINDER_RUN_COMPLETED_EXAMPLE = {
+    "workflow": "workflow_06a_follow_up_reminders",
+    "run_id": "follow_up_reminder_run_ab12cd34ef",
+    "status": "completed",
+    "queued": 1,
+    "skipped": 3,
+    "dry_run": False,
+    "channel": "n8n",
+    "automation_id": "phase6-follow-up-reminder",
+    "items": [
+        {
+            "job_id": "job-123",
+            "title": "Solutions Engineer",
+            "company": "OpenAI",
+            "location": "Remote",
+            "url": "https://example.com/jobs/123",
+            "due_at": "2026-03-24T16:00:00Z",
+            "channel": "n8n",
+            "automation_id": "phase6-follow-up-reminder",
+            "reminder_status": "queued",
+            "delivery_target": "telegram",
+            "message": "Recall follow-up reminder\nSolutions Engineer @ OpenAI\nDue: Mar 24 at 4:00 PM UTC\nLocation: Remote\nPrompt: Lead with operator empathy and concrete customer-facing wins.\nhttps://example.com/jobs/123",
+        }
+    ],
+    "message": "Prepared 1 follow-up reminder item and skipped 3 jobs.",
+}
+
 JOB_GAPS_SUCCESS_EXAMPLE = {
     "workflow": "workflow_06a_job_gaps",
     "total_jobs": 12,
@@ -1452,6 +1493,41 @@ JOB_DISCOVERY_RUN_REQUEST_BODY = {
                 },
                 "additionalProperties": False,
             }
+        }
+    },
+}
+
+FOLLOW_UP_REMINDER_RUN_REQUEST_BODY = {
+    "required": False,
+    "content": {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "job_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional explicit job ids to queue instead of auto-selecting due follow-ups.",
+                    },
+                    "due_only": {"type": "boolean", "default": True},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20},
+                    "dry_run": {"type": "boolean", "default": False},
+                    "channel": {
+                        "type": "string",
+                        "enum": ["manual", "n8n", "email", "calendar"],
+                        "default": "n8n",
+                    },
+                    "automation_id": {"type": "string"},
+                },
+                "additionalProperties": False,
+            },
+            "example": {
+                "due_only": True,
+                "limit": 10,
+                "dry_run": False,
+                "channel": "n8n",
+                "automation_id": "phase6-follow-up-reminder",
+            },
         }
     },
 }

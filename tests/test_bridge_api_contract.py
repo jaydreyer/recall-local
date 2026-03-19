@@ -449,6 +449,60 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(response.json()["error"]["code"], "validation_failed")
         self.assertEqual(response.json()["error"]["details"][0]["field"], "workflow.followUp.reminder.status")
 
+    def test_create_follow_up_reminder_run_accepts_payload(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        run_payload = {
+            "run_id": "follow_up_reminder_run_ab12cd34ef",
+            "status": "completed",
+            "queued": 1,
+            "skipped": 2,
+            "dry_run": False,
+            "channel": "n8n",
+            "automation_id": "phase6-follow-up-reminder",
+            "items": [
+                {
+                    "job_id": "job-123",
+                    "title": "Solutions Engineer",
+                    "company": "OpenAI",
+                    "due_at": "2026-03-24T16:00:00Z",
+                    "reminder_status": "queued",
+                    "message": "Recall follow-up reminder",
+                }
+            ],
+            "message": "Prepared 1 follow-up reminder item and skipped 2 jobs.",
+        }
+
+        with patch("scripts.phase1.bridge_routes_phase6.phase6_queue_follow_up_reminder_runs", return_value=run_payload) as run_mock:
+            with build_client(env) as client:
+                response = client.post(
+                    "/v1/follow-up-reminder-runs",
+                    json={
+                        "job_ids": ["job-123"],
+                        "due_only": False,
+                        "limit": 5,
+                        "dry_run": False,
+                        "channel": "n8n",
+                        "automation_id": "phase6-follow-up-reminder",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["workflow"], "workflow_06a_follow_up_reminders")
+        self.assertEqual(response.json()["queued"], 1)
+        self.assertEqual(response.json()["items"][0]["job_id"], "job-123")
+        run_mock.assert_called_once_with(
+            job_ids=["job-123"],
+            due_only=False,
+            limit=5,
+            dry_run=False,
+            channel="n8n",
+            automation_id="phase6-follow-up-reminder",
+        )
+
     def test_patch_job_rejects_invalid_next_action_confidence(self) -> None:
         env = {
             "RECALL_API_KEY": "",
@@ -970,6 +1024,7 @@ class BridgeApiContractTests(unittest.TestCase):
             "/v1/jobs",
             "/v1/jobs/{jobId}",
             "/v1/job-evaluation-runs",
+            "/v1/follow-up-reminder-runs",
             "/v1/job-stats",
             "/v1/job-gaps",
             "/v1/job-deduplications",

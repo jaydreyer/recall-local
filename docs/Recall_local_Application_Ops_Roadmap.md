@@ -52,6 +52,7 @@ The live app now includes:
 - persisted next-action recommendations now include action, rationale, confidence, and due date
 - persisted follow-up metadata now supports due dates and completion tracking
 - persisted follow-up reminder metadata now supports created state, delivery channel, last run, delivery timestamp, automation id, and notes
+- follow-up reminder queueing now has a dedicated bridge endpoint via `POST /v1/follow-up-reminder-runs`
 - workflow timeline support with richer persisted event semantics
 - summary strip for high-attention work
 - queue filters
@@ -172,6 +173,7 @@ What is done:
 - applied roles can be framed as moving into follow-up work
 - persisted follow-up due dates and completion state now exist
 - persisted follow-up reminder metadata now exists
+- reminder queueing now runs through a real bridge automation surface instead of only direct Ops state edits
 - Ops now has a real `Follow-up due` filter/summary and follow-up controls
 - Ops now surfaces reminder readiness, delivery metadata, and last-run context for follow-up work
 
@@ -179,6 +181,7 @@ What is still missing:
 
 - n8n-backed reminder/automation flow
 - follow-up dashboarding that matches the checklist/PRD vision
+- live ai-lab deployment, workflow import, and end-to-end validation of reminder delivery/write-back
 
 #### 8. UI / dashboard enhancements
 
@@ -396,19 +399,19 @@ If continuing from here, use this order:
 
 The best next implementation slice is:
 
-### Follow-up automation handoff
+### Follow-up automation deployment
 
 Scope:
 
-- wire persisted reminder metadata into an actual n8n-backed follow-up reminder flow
-- decide the reminder source of truth between Ops and automation runs
-- add minimal reminder dashboarding or reporting for queued, failed, and delivered reminder states
+- sync the new reminder-run endpoint to `ai-lab`
+- import/build the n8n follow-up reminder workflow against `POST /v1/follow-up-reminder-runs`
+- validate reminder delivery plus sent/failed write-back on the live stack
 
 Why this slice next:
 
-- the workflow model is now ready for automation handoff, so the biggest remaining gap is executing reminders rather than just modeling them
-- it converts reminder readiness from a durable UI/data feature into a real operator time-saver
-- it keeps momentum on the roadmap's most obvious remaining workflow-depth gap
+- the local contract is now in place, so the next high-value step is making the live stack actually execute it
+- it closes the gap between “automation-ready” metadata and real reminder delivery
+- it sets up meaningful live validation instead of further local-only modeling
 
 ## How To Use This In A New Session
 
@@ -426,4 +429,4 @@ Helpful companion references:
 
 Suggested kickoff prompt for a future session:
 
-"Read [Recall_local_Application_Ops_Roadmap.md](/Users/jaydreyer/projects/recall-local/docs/Recall_local_Application_Ops_Roadmap.md), confirm the current live state against the PRD and implementation checklist, and implement the next slice: wire follow-up reminder metadata into n8n-backed automation and dashboard it."
+"Read [Recall_local_Application_Ops_Roadmap.md](/Users/jaydreyer/projects/recall-local/docs/Recall_local_Application_Ops_Roadmap.md), confirm the current live state against the PRD and implementation checklist, sync the reminder-run endpoint to ai-lab, and validate the n8n follow-up reminder workflow end to end."

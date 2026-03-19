@@ -30,6 +30,10 @@ def phase6_queue_job_evaluations(*args: Any, **kwargs: Any) -> Any:
     return _bridge_api.phase6_queue_job_evaluations(*args, **kwargs)
 
 
+def phase6_queue_follow_up_reminder_runs(*args: Any, **kwargs: Any) -> Any:
+    return _bridge_api.phase6_queue_follow_up_reminder_runs(*args, **kwargs)
+
+
 def phase6_job_stats(*args: Any, **kwargs: Any) -> Any:
     return _bridge_api.phase6_job_stats(*args, **kwargs)
 
@@ -106,7 +110,9 @@ def phase6_generate_talking_points(*args: Any, **kwargs: Any) -> Any:
 
 JOB_PATCH_REQUEST_BODY = _bridge_api.JOB_PATCH_REQUEST_BODY
 JOB_EVALUATION_RUN_REQUEST_BODY = _bridge_api.JOB_EVALUATION_RUN_REQUEST_BODY
+FOLLOW_UP_REMINDER_RUN_REQUEST_BODY = _bridge_api.FOLLOW_UP_REMINDER_RUN_REQUEST_BODY
 JOB_STATS_SUCCESS_EXAMPLE = _bridge_api.JOB_STATS_SUCCESS_EXAMPLE
+FOLLOW_UP_REMINDER_RUN_COMPLETED_EXAMPLE = _bridge_api.FOLLOW_UP_REMINDER_RUN_COMPLETED_EXAMPLE
 JOB_GAPS_SUCCESS_EXAMPLE = _bridge_api.JOB_GAPS_SUCCESS_EXAMPLE
 JOB_DEDUP_REQUEST_BODY = _bridge_api.JOB_DEDUP_REQUEST_BODY
 JOB_DISCOVERY_RUN_REQUEST_BODY = _bridge_api.JOB_DISCOVERY_RUN_REQUEST_BODY
@@ -130,6 +136,9 @@ __all__ = [
     "JOB_PATCH_REQUEST_BODY",
     "phase6_queue_job_evaluations",
     "JOB_EVALUATION_RUN_REQUEST_BODY",
+    "phase6_queue_follow_up_reminder_runs",
+    "FOLLOW_UP_REMINDER_RUN_REQUEST_BODY",
+    "FOLLOW_UP_REMINDER_RUN_COMPLETED_EXAMPLE",
     "JOB_STATS_SUCCESS_EXAMPLE",
     "phase6_job_stats",
     "JOB_GAPS_SUCCESS_EXAMPLE",

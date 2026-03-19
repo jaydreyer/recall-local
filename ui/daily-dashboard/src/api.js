@@ -180,6 +180,10 @@ export function createJobEvaluationRun(jobIds) {
   return sendJson('/v1/job-evaluation-runs', 'POST', { job_ids: jobIds, wait: true })
 }
 
+export function createFollowUpReminderRun(payload) {
+  return sendJson('/v1/follow-up-reminder-runs', 'POST', payload)
+}
+
 export function fetchJobGaps() {
   return getJson('/v1/job-gaps')
 }

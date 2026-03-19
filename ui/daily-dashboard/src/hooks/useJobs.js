@@ -2,6 +2,7 @@ import { startTransition, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   createCoverLetterDraft,
+  createFollowUpReminderRun,
   createInterviewBrief,
   createJobEvaluationRun,
   createOutreachNote,
@@ -423,6 +424,25 @@ export function useJobs({ loadGaps = false } = {}) {
     }
   }
 
+  async function queueFollowUpReminder(jobId) {
+    setActionJobId(jobId)
+    setError('')
+    try {
+      await createFollowUpReminderRun({
+        job_ids: [jobId],
+        due_only: false,
+        dry_run: false,
+        channel: 'n8n',
+        automation_id: 'phase6-follow-up-reminder',
+      })
+      await refresh()
+    } catch (mutationError) {
+      setError(mutationError.message || 'Reminder queueing failed.')
+    } finally {
+      setActionJobId('')
+    }
+  }
+
   async function generateDraft(jobId) {
     setCoverLetterState({ jobId, loading: true, error: '', draft: null })
     try {
@@ -557,6 +577,7 @@ export function useJobs({ loadGaps = false } = {}) {
     saveNotes: (jobId, notes) => mutateJob(jobId, { notes }),
     updateWorkflow: (jobId, workflow) => mutateJob(jobId, { workflow }),
     reevaluateJob,
+    queueFollowUpReminder,
     generateDraft,
     generateTailoredSummary,
     generateResumeBullets,

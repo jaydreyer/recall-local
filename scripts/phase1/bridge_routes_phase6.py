@@ -743,6 +743,92 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
         status_code = 200 if wait else 202
         return _json_response(status_code, result)
 
+    @app.post(
+        f"{API_PREFIX}/follow-up-reminder-runs",
+        tags=["Jobs"],
+        summary="Create follow-up reminder run",
+        description="Selects due follow-up jobs, queues reminder metadata, and returns reminder-ready payloads for n8n delivery.",
+        response_model=FollowUpReminderRunResponse,
+        responses={
+            200: {"description": "Follow-up reminder run completed.", "content": {"application/json": {"example": FOLLOW_UP_REMINDER_RUN_COMPLETED_EXAMPLE}}},
+            400: {"model": ErrorResponse, "description": "Invalid reminder run payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
+            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            500: {"model": ErrorResponse, "description": "Reminder run failed.", "content": {"application/json": {"example": ERROR_EXAMPLE_WORKFLOW}}},
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+        openapi_extra={"requestBody": FOLLOW_UP_REMINDER_RUN_REQUEST_BODY},
+    )
+    async def create_follow_up_reminder_run(request: Request) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        try:
+            payload = await _read_json_body(request)
+        except ValueError as exc:
+            return _error_response(status_code=400, code="invalid_json", message=str(exc), request_id=request_id)
+
+        raw_job_ids = payload.get("job_ids")
+        if raw_job_ids is not None and not isinstance(raw_job_ids, list):
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message="job_ids must be an array when provided.",
+                request_id=request_id,
+                details=[{"field": "job_ids", "issue": "value must be an array of job ids"}],
+            )
+        try:
+            due_only = _normalize_bool(payload.get("due_only", True), field_name="due_only")
+            dry_run = _normalize_bool(payload.get("dry_run", False), field_name="dry_run")
+        except ValueError as exc:
+            return _error_response(status_code=400, code="validation_failed", message=str(exc), request_id=request_id)
+
+        try:
+            limit = int(payload.get("limit", 20))
+        except (TypeError, ValueError):
+            limit = 0
+        if limit < 1 or limit > 100:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message="limit must be between 1 and 100.",
+                request_id=request_id,
+                details=[{"field": "limit", "issue": "allowed values: 1..100"}],
+            )
+
+        channel = str(payload.get("channel") or "n8n").strip().lower()
+        if channel not in {"manual", "n8n", "email", "calendar"}:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message="Invalid follow-up reminder channel.",
+                request_id=request_id,
+                details=[{"field": "channel", "issue": "allowed values: manual, n8n, email, calendar"}],
+            )
+
+        automation_id = str(payload.get("automation_id") or "phase6-follow-up-reminder").strip() or "phase6-follow-up-reminder"
+
+        try:
+            result = phase6_queue_follow_up_reminder_runs(
+                job_ids=[str(item) for item in raw_job_ids] if isinstance(raw_job_ids, list) else None,
+                due_only=due_only,
+                limit=limit,
+                dry_run=dry_run,
+                channel=channel,
+                automation_id=automation_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return _error_response(
+                status_code=500,
+                code="workflow_failed",
+                message=f"Follow-up reminder run failed: {exc}",
+                request_id=request_id,
+            )
+
+        result["workflow"] = "workflow_06a_follow_up_reminders"
+        return _json_response(200, result)
+
     @app.get(
         f"{API_PREFIX}/job-stats",
         tags=["Jobs"],

@@ -24,6 +24,7 @@ EvaluationLatestResponse = _bridge_api.EvaluationLatestResponse
 EvaluationRunAcceptedResponse = _bridge_api.EvaluationRunAcceptedResponse
 JobsCollectionResponse = _bridge_api.JobsCollectionResponse
 JobEvaluationRunResponse = _bridge_api.JobEvaluationRunResponse
+FollowUpReminderRunResponse = _bridge_api.FollowUpReminderRunResponse
 TailoredSummaryResponse = _bridge_api.TailoredSummaryResponse
 OutreachNoteResponse = _bridge_api.OutreachNoteResponse
 ResumeBulletsResponse = _bridge_api.ResumeBulletsResponse
@@ -54,6 +55,8 @@ JOBS_LIST_SUCCESS_EXAMPLE = _bridge_api.JOBS_LIST_SUCCESS_EXAMPLE
 JOB_EVALUATION_RUN_COMPLETED_EXAMPLE = _bridge_api.JOB_EVALUATION_RUN_COMPLETED_EXAMPLE
 JOB_EVALUATION_RUN_ACCEPTED_EXAMPLE = _bridge_api.JOB_EVALUATION_RUN_ACCEPTED_EXAMPLE
 JOB_EVALUATION_RUN_REQUEST_BODY = _bridge_api.JOB_EVALUATION_RUN_REQUEST_BODY
+FOLLOW_UP_REMINDER_RUN_COMPLETED_EXAMPLE = _bridge_api.FOLLOW_UP_REMINDER_RUN_COMPLETED_EXAMPLE
+FOLLOW_UP_REMINDER_RUN_REQUEST_BODY = _bridge_api.FOLLOW_UP_REMINDER_RUN_REQUEST_BODY
 JOB_STATS_SUCCESS_EXAMPLE = _bridge_api.JOB_STATS_SUCCESS_EXAMPLE
 JOB_GAPS_SUCCESS_EXAMPLE = _bridge_api.JOB_GAPS_SUCCESS_EXAMPLE
 JOB_DEDUP_REQUEST_BODY = _bridge_api.JOB_DEDUP_REQUEST_BODY
@@ -94,6 +97,7 @@ __all__ = [
     "EvaluationRunAcceptedResponse",
     "JobsCollectionResponse",
     "JobEvaluationRunResponse",
+    "FollowUpReminderRunResponse",
     "TailoredSummaryResponse",
     "OutreachNoteResponse",
     "ResumeBulletsResponse",
@@ -123,6 +127,8 @@ __all__ = [
     "JOB_EVALUATION_RUN_COMPLETED_EXAMPLE",
     "JOB_EVALUATION_RUN_ACCEPTED_EXAMPLE",
     "JOB_EVALUATION_RUN_REQUEST_BODY",
+    "FOLLOW_UP_REMINDER_RUN_COMPLETED_EXAMPLE",
+    "FOLLOW_UP_REMINDER_RUN_REQUEST_BODY",
     "JOB_STATS_SUCCESS_EXAMPLE",
     "JOB_GAPS_SUCCESS_EXAMPLE",
     "JOB_DEDUP_REQUEST_BODY",

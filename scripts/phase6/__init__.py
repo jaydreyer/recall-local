@@ -3,6 +3,7 @@
 __all__ = [
     "company_profiler",
     "cover_letter_drafter",
+    "follow_up_reminders",
     "gap_aggregator",
     "ingest_resume",
     "job_dedup",
