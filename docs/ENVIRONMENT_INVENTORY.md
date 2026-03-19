@@ -158,6 +158,20 @@ Public-repo note: host-specific paths, IPs, and hostnames are intentionally gene
   - Active: `qKMhxYULZoPwXnDI` (`Recall Ingest Webhook v2`)
   - Inactive legacy: `aOyMgFwit2mS82pP` (`Recall Ingest Webhook`)
 
+## n8n Phase 6 Follow-up Reminder Workflow
+
+- Live workflow id: `Q0vTqV5gY0YdGzX4`
+- Live workflow name: `Phase 6 - Workflow 4 - Follow-up Reminders`
+- Live schedule:
+  - Monday-Friday at `9:00 AM`
+  - Monday-Friday at `2:00 PM`
+- Live bridge target from inside `n8n`:
+  - `http://recall-ingest-bridge:8090/v1/follow-up-reminder-runs`
+- Validation status on `ai-lab` (2026-03-19):
+  - real `sent` write-back confirmed on disposable job `job_a8125225bd03e4e9`
+  - real `failed` write-back confirmed on the same disposable job using webhook payload `force_failure=true`
+  - job workflow timeline now contains both `follow_up_reminder_sent` and `follow_up_reminder_failed` evidence events
+
 ## n8n Query Webhook (Workflow 02)
 
 - Query webhook endpoint (local on server): `http://localhost:5678/webhook/recall-query`

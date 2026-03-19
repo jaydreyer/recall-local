@@ -14,7 +14,9 @@ Goal: run a scheduled n8n workflow that selects due follow-up reminders through 
 
 - Node type: `HTTP Request`
 - Method: `POST`
-- URL: `http://localhost:8090/v1/follow-up-reminder-runs`
+- URL:
+  - local host-shell validation: `http://localhost:8090/v1/follow-up-reminder-runs`
+  - live ai-lab n8n container import: `http://recall-ingest-bridge:8090/v1/follow-up-reminder-runs`
 - Send body as JSON
 
 Body:
@@ -149,3 +151,12 @@ curl -sS -X POST http://localhost:8090/v1/follow-up-reminder-runs \
 2. Confirm at least one due job returns `items[].message`.
 3. Run the live workflow once.
 4. Verify the affected jobs now show reminder status `sent` or `failed` in Ops.
+
+## Import Artifact
+
+- Import-ready workflow JSON:
+  - `n8n/workflows/phase6_follow_up_reminders_import.workflow.json`
+- The import artifact includes:
+  - `Schedule Trigger` for weekday `9:00 AM` and `2:00 PM`
+  - `Manual Trigger` for operator test runs
+  - `Webhook Test Trigger` at `/webhook/recall-follow-up-reminders` for targeted validation payloads such as `job_ids` and `force_failure`

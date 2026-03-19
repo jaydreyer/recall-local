@@ -2,6 +2,59 @@
 
 Public-repo note: historical entries use placeholder hostnames and paths where the original logs referenced private machine details. Older file references remain as evidence-first text and may no longer be directly clickable.
 
+## 2026-03-19 - Follow-up reminder workflow imported into live n8n and write-back validated
+
+### What was executed
+
+- Added an import-ready n8n artifact in:
+  - `<repo-root>/n8n/workflows/phase6_follow_up_reminders_import.workflow.json`
+  - includes the documented Workflow 4 reminder flow with:
+    - `Schedule Trigger`
+    - `Manual Trigger`
+    - `Webhook Test Trigger`
+    - bridge-backed queue selection via `POST /v1/follow-up-reminder-runs`
+    - Telegram delivery
+    - persisted reminder-status write-back via `PATCH /v1/jobs/{jobId}`
+- Updated workflow guidance in:
+  - `<repo-root>/n8n/workflows/phase6/README.md`
+  - `<repo-root>/n8n/workflows/phase6/workflow4_follow_up_reminders.md`
+  - live ai-lab guidance now uses Docker DNS (`http://recall-ingest-bridge:8090`) instead of `localhost` from inside the `n8n` container
+- Imported Workflow 4 into live `ai-lab` n8n as:
+  - `Q0vTqV5gY0YdGzX4`
+  - `Phase 6 - Workflow 4 - Follow-up Reminders`
+- Repaired the live n8n workflow row after CLI import so the workflow is actually runnable in this n8n build:
+  - `workflow_entity.active=1`
+  - `workflow_entity.activeVersionId=workflow_entity.versionId`
+- Seeded one disposable validation job in the live Phase 6 store:
+  - `job_a8125225bd03e4e9`
+  - title: `Recall Follow-Up Reminder Test Role`
+  - company: `Recall QA Sandbox`
+- Simplified Workflow 4 write-back so one dynamic reminder patch node now persists either `sent` or `failed` instead of branching through separate PATCH nodes.
+
+### Validation
+
+- Followed Docker safety checks on `ai-lab` before and after each n8n restart:
+  - `<server-repo-root>/docker/validate-stack.sh`
+- Confirmed the live workflow is active after import/restart:
+  - n8n startup logs include `Activated workflow "Phase 6 - Workflow 4 - Follow-up Reminders" (ID: Q0vTqV5gY0YdGzX4)`
+- Real sent write-back validation on the disposable job:
+  - `POST http://localhost:5678/webhook/recall-follow-up-reminders`
+  - body: `{"job_ids":["job_a8125225bd03e4e9"]}`
+  - response returned `reminder_status="sent"` with a non-null `delivered_at`
+- Real failed write-back validation on the same disposable job:
+  - `POST http://localhost:5678/webhook/recall-follow-up-reminders`
+  - body: `{"job_ids":["job_a8125225bd03e4e9"],"force_failure":true}`
+  - response returned `reminder_status="failed"` with `notes="Reminder delivery failed in n8n: telegram_send_failed"`
+- Persisted evidence now exists on the job workflow timeline for both:
+  - `follow_up_reminder_sent`
+  - `follow_up_reminder_failed`
+
+### Results
+
+- Workflow 4 is now a real importable/live n8n automation instead of only markdown guidance.
+- The bridge queue contract, Telegram delivery step, and job workflow write-back are now validated end-to-end on the live stack.
+- The optional webhook test trigger works for targeted reminder items; a dry-run request with no resulting items currently returns `500 No item to return was found`, which is a small follow-up polish item rather than a blocker for real reminder runs.
+
 ## 2026-03-18 - Follow-up reminder runs wired through the bridge and dashboard
 
 ### What was executed

@@ -8,6 +8,7 @@ Purpose: build Phase 6B job-discovery workflows in n8n without JSON imports, usi
 - `workflow2_career_pages.md`: Career page monitor (Greenhouse/Lever in n8n, then hand off normalized jobs to bridge)
 - `workflow3_evaluate_notify.md`: Full Phase 6C evaluation/notify webhook with Telegram preferred-location gating
 - `workflow4_follow_up_reminders.md`: Application Ops follow-up reminder workflow using the bridge reminder-run endpoint plus delivery status write-back
+- `../phase6_follow_up_reminders_import.workflow.json`: Import-ready Workflow 4 automation for scheduled follow-up reminder delivery plus sent/failed write-back
 - `../phase6b_career_page_monitor_traditional_import.workflow.json`: Import-ready traditional Workflow 2 (multi-node) for easier node-level debugging.
 
 ## Bridge endpoints used

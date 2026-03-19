@@ -1,0 +1,336 @@
+{
+  "id": "Q0vTqV5gY0YdGzX4",
+  "name": "Phase 6 - Workflow 4 - Follow-up Reminders",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -880,
+        360
+      ],
+      "id": "node-manual-trigger-follow-up",
+      "name": "When clicking \u2018Execute workflow\u2019"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 9,14 * * 1-5"
+              }
+            ]
+          }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -880,
+        520
+      ],
+      "id": "node-schedule-trigger-follow-up",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "recall-follow-up-reminders",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -880,
+        680
+      ],
+      "id": "node-webhook-follow-up",
+      "name": "Webhook Test Trigger",
+      "webhookId": "2aaf08f7-0b5d-47e8-8893-79318f2d18fd"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json || {};\nconst normalizedJobIds = Array.isArray(body.job_ids)\n  ? body.job_ids.map((value) => String(value || '').trim()).filter(Boolean)\n  : [];\nconst limit = Math.max(1, Math.min(20, Number(body.limit || 10) || 10));\nconst automationId = String(body.automation_id || 'phase6-follow-up-reminder').trim() || 'phase6-follow-up-reminder';\nconst channel = String(body.channel || 'n8n').trim().toLowerCase() || 'n8n';\nconst deliveryMode = String(body.delivery_mode || 'telegram').trim().toLowerCase() || 'telegram';\nconst defaultChatId = String(body.test_chat_id || '8724583836').trim() || '8724583836';\nreturn [{\n  json: {\n    job_ids: normalizedJobIds,\n    due_only: body.due_only === undefined ? true : !!body.due_only,\n    limit,\n    dry_run: body.dry_run === undefined ? false : !!body.dry_run,\n    channel,\n    automation_id: automationId,\n    delivery_mode: deliveryMode,\n    force_failure: !!body.force_failure,\n    test_chat_id: defaultChatId,\n    requested_by: $execution.mode || 'unknown'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -620,
+        520
+      ],
+      "id": "node-prepare-reminder-run-input",
+      "name": "Prepare Reminder Run Input"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://recall-ingest-bridge:8090/v1/follow-up-reminder-runs",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ due_only: $json.due_only, limit: $json.limit, dry_run: $json.dry_run, channel: $json.channel, automation_id: $json.automation_id, ...(Array.isArray($json.job_ids) && $json.job_ids.length ? { job_ids: $json.job_ids } : {}) }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -360,
+        520
+      ],
+      "id": "node-queue-due-reminders",
+      "name": "Queue Due Reminders"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ Number($json.queued || 0) }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        520
+      ],
+      "id": "node-if-has-reminders",
+      "name": "If Has Reminders"
+    },
+    {
+      "parameters": {
+        "jsCode": "const run = $json || {};\nreturn [{\n  json: {\n    run_id: run.run_id || null,\n    workflow: 'workflow_06d_follow_up_reminders',\n    queued: Number(run.queued || 0),\n    skipped: Number(run.skipped || 0),\n    dry_run: !!run.dry_run,\n    items: Array.isArray(run.items) ? run.items : [],\n    message: run.message || 'No reminder items were queued.'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        120,
+        680
+      ],
+      "id": "node-no-reminders-summary",
+      "name": "No Reminders Summary"
+    },
+    {
+      "parameters": {
+        "jsCode": "const run = $json || {};\nconst inputItems = $items('Prepare Reminder Run Input', 0, 0);\nconst input = Array.isArray(inputItems) && inputItems.length ? inputItems[0].json : {};\nconst items = Array.isArray(run.items) ? run.items : [];\nreturn items.map((item) => ({\n  json: {\n    run_id: run.run_id || null,\n    job_id: item.job_id,\n    message: item.message,\n    channel: item.channel || input.channel || 'n8n',\n    automation_id: item.automation_id || input.automation_id || 'phase6-follow-up-reminder',\n    force_failure: !!input.force_failure,\n    test_chat_id: input.test_chat_id || '8724583836',\n    delivery_mode: input.delivery_mode || 'telegram'\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        120,
+        440
+      ],
+      "id": "node-split-reminder-items",
+      "name": "Split Reminder Items"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.force_failure ? 'not-a-real-chat-id' : $json.test_chat_id }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        360,
+        440
+      ],
+      "id": "node-send-telegram-reminder",
+      "name": "Send Telegram Reminder",
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "telegramApi": {
+          "id": "6aWx4DnLbVi8JlGU",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const baseItems = $items('Split Reminder Items', 0, $itemIndex);\nconst base = Array.isArray(baseItems) && baseItems.length ? { ...baseItems[0].json } : {};\nconst sendResult = $json || {};\nconst failed = !!(sendResult.error || sendResult.ok === false);\nconst errorMessage = failed\n  ? String(sendResult.description || sendResult.message || sendResult.error?.message || 'telegram_send_failed')\n  : null;\nconst now = new Date().toISOString();\nreturn [{\n  json: {\n    ...base,\n    writeback_status: failed ? 'failed' : 'sent',\n    delivery_failed: failed,\n    delivery_error: errorMessage,\n    last_run_at: now,\n    delivered_at: failed ? null : now,\n    notes: failed\n      ? `Reminder delivery failed in n8n: ${errorMessage}`\n      : 'Reminder delivered by n8n workflow.'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        440
+      ],
+      "id": "node-normalize-delivery-result",
+      "name": "Normalize Delivery Result"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ 'http://recall-ingest-bridge:8090/v1/jobs/' + $json.job_id }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ workflow: { followUp: { reminder: { created: true, status: $json.writeback_status, channel: $json.channel, lastRunAt: $json.last_run_at, deliveredAt: $json.writeback_status === 'sent' ? $json.delivered_at : null, automationId: $json.automation_id, notes: $json.notes } } } }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        440
+      ],
+      "id": "node-write-reminder-status",
+      "name": "Write Reminder Status"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $json || {};\nreturn [{\n  json: {\n    workflow: 'workflow_06d_follow_up_reminders',\n    run_id: item.run_id || null,\n    job_id: item.jobId || item.job_id || null,\n    reminder_status: (((item.workflow || {}).followUp || {}).reminder || {}).status || null,\n    last_run_at: ((((item.workflow || {}).followUp || {}).reminder || {}).lastRunAt) || null,\n    delivered_at: ((((item.workflow || {}).followUp || {}).reminder || {}).deliveredAt) || null,\n    notes: ((((item.workflow || {}).followUp || {}).reminder || {}).notes) || null,\n    title: item.title || null,\n    company: item.company || null\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        440
+      ],
+      "id": "node-writeback-summary",
+      "name": "Write-back Summary"
+    }
+  ],
+  "connections": {
+    "When clicking \u2018Execute workflow\u2019": {
+      "main": [
+        [
+          {
+            "node": "Prepare Reminder Run Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Reminder Run Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Test Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Reminder Run Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Reminder Run Input": {
+      "main": [
+        [
+          {
+            "node": "Queue Due Reminders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Queue Due Reminders": {
+      "main": [
+        [
+          {
+            "node": "If Has Reminders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Has Reminders": {
+      "main": [
+        [
+          {
+            "node": "Split Reminder Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Reminders Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Reminder Items": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Telegram Reminder": {
+      "main": [
+        [
+          {
+            "node": "Normalize Delivery Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Delivery Result": {
+      "main": [
+        [
+          {
+            "node": "Write Reminder Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Reminder Status": {
+      "main": [
+        [
+          {
+            "node": "Write-back Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "pinData": {},
+  "staticData": {
+    "node:Schedule Trigger": {
+      "recurrenceRules": []
+    }
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
