@@ -38,7 +38,7 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "recall-follow-up-reminders",
-        "responseMode": "lastNode",
+        "responseMode": "responseNode",
         "options": {}
       },
       "type": "n8n-nodes-base.webhook",
@@ -198,6 +198,40 @@
       ],
       "id": "node-writeback-summary",
       "name": "Write-back Summary"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1380,
+        680
+      ],
+      "id": "node-respond-no-reminders",
+      "name": "Respond No Reminders"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1380,
+        440
+      ],
+      "id": "node-respond-writeback-summary",
+      "name": "Respond Write-back Summary"
     }
   ],
   "connections": {
@@ -260,14 +294,14 @@
       "main": [
         [
           {
-            "node": "Split Reminder Items",
+            "node": "No Reminders Summary",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "No Reminders Summary",
+            "node": "Split Reminder Items",
             "type": "main",
             "index": 0
           }
@@ -312,6 +346,28 @@
         [
           {
             "node": "Write-back Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Reminders Summary": {
+      "main": [
+        [
+          {
+            "node": "Respond No Reminders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write-back Summary": {
+      "main": [
+        [
+          {
+            "node": "Respond Write-back Summary",
             "type": "main",
             "index": 0
           }

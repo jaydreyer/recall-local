@@ -156,7 +156,17 @@ curl -sS -X POST http://localhost:8090/v1/follow-up-reminder-runs \
 
 - Import-ready workflow JSON:
   - `n8n/workflows/phase6_follow_up_reminders_import.workflow.json`
+- ai-lab import helper for this n8n build:
+  - `scripts/phase6/import_n8n_workflow_with_activation_fix.sh`
 - The import artifact includes:
   - `Schedule Trigger` for weekday `9:00 AM` and `2:00 PM`
   - `Manual Trigger` for operator test runs
   - `Webhook Test Trigger` at `/webhook/recall-follow-up-reminders` for targeted validation payloads such as `job_ids` and `force_failure`
+  - explicit webhook response handling so zero-item dry runs return a clean JSON summary instead of `No item to return was found`
+
+Recommended ai-lab activation command:
+
+```bash
+scripts/phase6/import_n8n_workflow_with_activation_fix.sh \
+  n8n/workflows/phase6_follow_up_reminders_import.workflow.json
+```

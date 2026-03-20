@@ -91,6 +91,34 @@ class FollowUpReminderTests(unittest.TestCase):
         self.assertEqual(update_mock.call_count, 1)
         self.assertEqual(update_mock.call_args.kwargs["workflow"]["followUp"]["reminder"]["status"], "queued")
 
+    def test_queue_follow_up_reminder_runs_returns_clean_empty_summary_when_nothing_is_due(self) -> None:
+        jobs = [
+            {
+                "jobId": "job-1",
+                "title": "Solutions Engineer",
+                "company": "OpenAI",
+                "workflow": {
+                    "followUp": {
+                        "status": "scheduled",
+                        "dueAt": "2099-03-01T16:00:00Z",
+                        "reminder": {
+                            "status": "not_created",
+                        },
+                    }
+                },
+            }
+        ]
+
+        with patch("scripts.phase6.follow_up_reminders.all_jobs", return_value=jobs), patch(
+            "scripts.phase6.follow_up_reminders.update_job"
+        ) as update_mock:
+            payload = queue_follow_up_reminder_runs(limit=10, due_only=True, dry_run=True, channel="n8n")
+
+        self.assertEqual(payload["queued"], 0)
+        self.assertEqual(payload["items"], [])
+        self.assertEqual(payload["message"], "Prepared 0 follow-up reminder items and skipped 1 job.")
+        update_mock.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -503,6 +503,51 @@ class BridgeApiContractTests(unittest.TestCase):
             automation_id="phase6-follow-up-reminder",
         )
 
+    def test_create_follow_up_reminder_run_returns_clean_empty_summary_when_no_items_are_queued(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        run_payload = {
+            "run_id": "follow_up_reminder_run_empty123",
+            "status": "completed",
+            "queued": 0,
+            "skipped": 4,
+            "dry_run": True,
+            "channel": "n8n",
+            "automation_id": "phase6-follow-up-reminder",
+            "items": [],
+            "message": "Prepared 0 follow-up reminder items and skipped 4 jobs.",
+        }
+
+        with patch("scripts.phase1.bridge_routes_phase6.phase6_queue_follow_up_reminder_runs", return_value=run_payload) as run_mock:
+            with build_client(env) as client:
+                response = client.post(
+                    "/v1/follow-up-reminder-runs",
+                    json={
+                        "due_only": True,
+                        "limit": 10,
+                        "dry_run": True,
+                        "channel": "n8n",
+                        "automation_id": "phase6-follow-up-reminder",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["workflow"], "workflow_06a_follow_up_reminders")
+        self.assertEqual(response.json()["queued"], 0)
+        self.assertEqual(response.json()["items"], [])
+        self.assertEqual(response.json()["message"], "Prepared 0 follow-up reminder items and skipped 4 jobs.")
+        run_mock.assert_called_once_with(
+            job_ids=None,
+            due_only=True,
+            limit=10,
+            dry_run=True,
+            channel="n8n",
+            automation_id="phase6-follow-up-reminder",
+        )
+
     def test_patch_job_rejects_invalid_next_action_confidence(self) -> None:
         env = {
             "RECALL_API_KEY": "",

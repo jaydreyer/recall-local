@@ -2,6 +2,39 @@
 
 Public-repo note: historical entries use placeholder hostnames and paths where the original logs referenced private machine details. Older file references remain as evidence-first text and may no longer be directly clickable.
 
+## 2026-03-19 - Workflow 4 zero-item webhook response hardened and n8n import activation fix scripted
+
+### What was executed
+
+- Hardened the Workflow 4 import artifact in:
+  - `<repo-root>/n8n/workflows/phase6_follow_up_reminders_import.workflow.json`
+  - switched the webhook test trigger to explicit `responseNode` handling
+  - routed the zero-item summary branch and the normal write-back summary branch into dedicated webhook response nodes to avoid empty-body behavior in this n8n build
+- Added empty-queue regression coverage in:
+  - `<repo-root>/tests/test_phase6_follow_up_reminders.py`
+  - `<repo-root>/tests/test_bridge_api_contract.py`
+  - covers the bridge/workflow-facing contract when no reminder items are queued
+- Added an ai-lab import helper in:
+  - `<repo-root>/scripts/phase6/import_n8n_workflow_with_activation_fix.sh`
+  - imports a repo-backed n8n workflow artifact
+  - publishes the workflow id
+  - repairs `workflow_entity.active=1` and `workflow_entity.activeVersionId=workflow_entity.versionId`
+  - optionally restarts `n8n` and runs `docker/validate-stack.sh`
+- Updated workflow documentation in:
+  - `<repo-root>/n8n/workflows/phase6/README.md`
+  - `<repo-root>/n8n/workflows/phase6/workflow4_follow_up_reminders.md`
+
+### Validation
+
+- Local validation:
+  - `python3 -m json.tool n8n/workflows/phase6_follow_up_reminders_import.workflow.json`
+  - `./.venv/bin/python -m pytest -q tests/test_phase6_follow_up_reminders.py tests/test_bridge_api_contract.py -k "follow_up_reminder"`
+
+### Results
+
+- Workflow 4 dry runs with no queued reminder items now have an explicit clean-summary response path in the import artifact.
+- The recurring n8n import activation repair is now captured as a reusable scripted ops step instead of a purely manual DB edit.
+
 ## 2026-03-19 - Follow-up reminder workflow imported into live n8n and write-back validated
 
 ### What was executed
