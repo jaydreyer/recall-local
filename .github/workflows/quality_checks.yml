@@ -74,6 +74,8 @@ jobs:
           python -m pip_audit -r requirements.txt --ignore-vuln GHSA-7mpr-5m44-h73r
 
       - name: Wrapper smoke checks
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           set -euo pipefail
           scripts/phase3/run_all_evals_now.sh --help >/dev/null
