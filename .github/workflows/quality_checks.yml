@@ -68,7 +68,10 @@ jobs:
       - name: Dependency vulnerability scan
         run: |
           python -m pip install -r requirements-dev.txt --break-system-packages
-          python -m pip_audit -r requirements.txt
+          # python-jobspy==1.1.82 requires markdownify<0.14.0 and is currently
+          # the latest release, so this transitive advisory cannot be upgraded
+          # away until upstream relaxes that dependency cap.
+          python -m pip_audit -r requirements.txt --ignore-vuln GHSA-7mpr-5m44-h73r
 
       - name: Wrapper smoke checks
         run: |

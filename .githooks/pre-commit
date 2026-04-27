@@ -37,6 +37,10 @@ while IFS= read -r path; do
 done <<< "${staged_files}"
 
 if command -v pre-commit >/dev/null 2>&1; then
-  mapfile -t staged_file_array <<< "${staged_files}"
+  staged_file_array=()
+  while IFS= read -r path; do
+    [[ -z "${path}" ]] && continue
+    staged_file_array+=("${path}")
+  done <<< "${staged_files}"
   exec pre-commit run --hook-stage pre-commit --files "${staged_file_array[@]}"
 fi
