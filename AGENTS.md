@@ -34,6 +34,8 @@ Quick connectivity check:
 ssh ai-lab 'hostname && pwd'
 ```
 
+Codex sandbox note: if `ssh ai-lab ...`, `nc`, `ping`, or route checks fail with local sandbox/network errors such as `Operation not permitted` or `No route to host`, do not assume the SSH alias or key is broken. Re-run the same SSH or TCP reachability command with escalated permissions. The `ai-lab` alias and `~/.ssh/codex_ai_lab` key are the expected path.
+
 If the alias is unavailable for any reason, use:
 
 ```bash

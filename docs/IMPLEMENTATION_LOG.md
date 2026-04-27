@@ -2,6 +2,51 @@
 
 Public-repo note: historical entries use placeholder hostnames and paths where the original logs referenced private machine details. Older file references remain as evidence-first text and may no longer be directly clickable.
 
+## 2026-04-27 - JobSpy dependency made durable for bridge rebuilds
+
+### What was executed
+
+- Investigated live Phase 6 job-discovery freshness on `ai-lab`.
+- Confirmed the scheduled n8n workflows are active and running:
+  - `Job Board Aggregator`
+  - `Recall Phase6B - Career Page Monitor (Traditional Import)`
+  - `Phase 6C - Workflow 3 - Evaluate & Notify`
+  - `Phase 6 - Workflow 4 - Follow-up Reminders`
+- Decoded recent Workflow 1 execution output and found the primary source lane reporting:
+  - `jobspy unavailable (install python-jobspy in bridge runtime).`
+- Confirmed `python-jobspy` had previously been installed manually in the running bridge container rather than persisted in the image dependency set.
+- Added `python-jobspy==1.1.82` to:
+  - `<repo-root>/requirements.txt`
+
+### Validation
+
+- Live stack validation before changes:
+  - `<server-repo-root>/docker/validate-stack.sh` passed.
+- Live observed state before dependency fix:
+  - `GET /v1/job-stats` returned `total_jobs=1714`, `new_today=4`, and `by_source.jobspy=686`.
+  - Latest `jobspy` sourced jobs were from 2026-03-19, while career-page and SerpAPI lanes still had newer jobs.
+- Local validation:
+  - `./.venv/bin/python -m pytest -q tests/test_phase6b_job_discovery_runner.py tests/test_phase6_job_dedup_pytest.py`
+- Deployment validation:
+  - synced `<repo-root>/requirements.txt` to `ai-lab` and spot-checked `python-jobspy==1.1.82`.
+  - rebuilt only `recall-ingest-bridge` under Compose project `recall`.
+  - `<server-repo-root>/docker/validate-stack.sh` passed after bridge recreate.
+  - `docker exec recall-ingest-bridge python3 -c "from jobspy import scrape_jobs"` succeeded.
+  - JobSpy dry-run discovery returned `discovered_raw=30`, `new_jobs=30`, `errors=[]`.
+  - Dashboard smoke wrapper returned `status=ok`.
+  - Consolidated ops observability check returned `status=ok` with artifact:
+    - `<server-repo-root>/data/artifacts/observability/20260427T184416Z_ops_observability_check.json`
+- Live recovery run:
+  - real JobSpy discovery run `job_discovery_7c89d1c602e4` added `30` new jobs.
+  - Workflow 3 evaluation run `job_eval_9ff992504c7a` evaluated `30` jobs, found `3` preferred-location high-fit candidates, and sent `1` Telegram notification.
+  - Follow-up `GET /v1/job-stats` returned `total_jobs=1744`, `new_today=34`, and `by_source.jobspy=716`.
+
+### Results
+
+- JobSpy support is now durable across bridge image rebuilds.
+- The live primary aggregator lane is restored and has fresh April 27, 2026 JobSpy-backed jobs in the board.
+- The stack remains on the expected Compose project, network, and persistent volume attachments after the bridge recreate.
+
 ## 2026-03-19 - Workflow 4 zero-item webhook response hardened and n8n import activation fix scripted
 
 ### What was executed
