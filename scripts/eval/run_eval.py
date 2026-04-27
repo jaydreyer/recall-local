@@ -17,6 +17,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from scripts.shared_time import now_iso
+
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -275,16 +277,12 @@ def load_cases(path: Path) -> list[EvalCase]:
         min_citation_count_raw = item.get("min_citation_count")
         min_citation_count = int(min_citation_count_raw) if min_citation_count_raw is not None else None
         min_distinct_doc_count_raw = item.get("min_distinct_doc_count")
-        min_distinct_doc_count = (
-            int(min_distinct_doc_count_raw) if min_distinct_doc_count_raw is not None else None
-        )
+        min_distinct_doc_count = int(min_distinct_doc_count_raw) if min_distinct_doc_count_raw is not None else None
         min_answer_chars_raw = item.get("min_answer_chars")
         min_answer_chars = int(min_answer_chars_raw) if min_answer_chars_raw is not None else None
         semantic_similarity_min_raw = item.get("semantic_similarity_min")
         semantic_similarity_min = (
-            float(semantic_similarity_min_raw)
-            if semantic_similarity_min_raw is not None
-            else None
+            float(semantic_similarity_min_raw) if semantic_similarity_min_raw is not None else None
         )
         retrieval_mode_raw = item.get("retrieval_mode")
         retrieval_mode = (
@@ -580,11 +578,77 @@ def _evaluate_payload(
     citations = payload.get("citations")
     sources = payload.get("sources")
     if not isinstance(citations, list):
-        return False, False, None, None, None, None, None, None, None, None, None, None, None, None, None, None, 0, 0, 0, len(answer), "Response missing citations array"
+        return (
+            False,
+            False,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            0,
+            0,
+            0,
+            len(answer),
+            "Response missing citations array",
+        )
     if not isinstance(sources, list):
-        return False, False, None, None, None, None, None, None, None, None, None, None, None, None, None, None, 0, 0, 0, len(answer), "Response missing sources array"
+        return (
+            False,
+            False,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            0,
+            0,
+            0,
+            len(answer),
+            "Response missing sources array",
+        )
     if not answer:
-        return False, False, None, None, None, None, None, None, None, None, None, None, None, None, None, None, 0, 0, 0, 0, "Response missing answer text"
+        return (
+            False,
+            False,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            0,
+            0,
+            0,
+            0,
+            "Response missing answer text",
+        )
 
     valid_pairs = {
         (str(source.get("doc_id", "")).strip(), str(source.get("chunk_id", "")).strip())
@@ -595,11 +659,55 @@ def _evaluate_payload(
     citation_pairs: list[tuple[str, str]] = []
     for citation in citations:
         if not isinstance(citation, dict):
-            return False, False, None, None, None, None, None, None, None, None, None, None, None, None, None, None, 0, 0, 0, len(answer), "Citation entry is not an object"
+            return (
+                False,
+                False,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                0,
+                0,
+                0,
+                len(answer),
+                "Citation entry is not an object",
+            )
         doc_id = str(citation.get("doc_id", "")).strip()
         chunk_id = str(citation.get("chunk_id", "")).strip()
         if not doc_id or not chunk_id:
-            return False, False, None, None, None, None, None, None, None, None, None, None, None, None, None, None, 0, 0, 0, len(answer), "Citation missing doc_id or chunk_id"
+            return (
+                False,
+                False,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                0,
+                0,
+                0,
+                len(answer),
+                "Citation missing doc_id or chunk_id",
+            )
         citation_pairs.append((doc_id, chunk_id))
 
     invalid_pairs = [pair for pair in citation_pairs if pair not in valid_pairs]
@@ -610,8 +718,12 @@ def _evaluate_payload(
     actual_title = _first_source_value(cited_sources, key="title")
     actual_source = _first_source_value(cited_sources, key="source")
     expected_ok = case.expected_doc_id is None or case.expected_doc_id == actual_doc_id
-    title_match_ok = _strings_present_in_sources(sources=cited_sources, key="title", expected=case.expected_title_contains)
-    source_match_ok = _strings_present_in_sources(sources=cited_sources, key="source", expected=case.expected_source_contains)
+    title_match_ok = _strings_present_in_sources(
+        sources=cited_sources, key="title", expected=case.expected_title_contains
+    )
+    source_match_ok = _strings_present_in_sources(
+        sources=cited_sources, key="source", expected=case.expected_source_contains
+    )
     citation_count = len(citation_pairs)
     distinct_doc_count = len({doc_id for doc_id, _ in citation_pairs})
     bullet_count = _count_bullets(answer)
@@ -677,9 +789,7 @@ def _evaluate_payload(
         )
         source_tags_ok = required_any_of_ok if source_tags_ok is None else (source_tags_ok and required_any_of_ok)
         if not required_any_of_ok:
-            notes.append(
-                f"Sources did not satisfy any required tag group: {case.required_source_tags_any_of}"
-            )
+            notes.append(f"Sources did not satisfy any required tag group: {case.required_source_tags_any_of}")
 
     if case.min_bullet_count is not None:
         bullet_count_ok = bullet_count >= case.min_bullet_count
@@ -689,9 +799,7 @@ def _evaluate_payload(
     if case.min_citation_count is not None:
         citation_count_ok = citation_count >= case.min_citation_count
         if not citation_count_ok:
-            notes.append(
-                f"Answer cited {citation_count} chunks, expected at least {case.min_citation_count}"
-            )
+            notes.append(f"Answer cited {citation_count} chunks, expected at least {case.min_citation_count}")
 
     if case.min_distinct_doc_count is not None:
         distinct_doc_count_ok = distinct_doc_count >= case.min_distinct_doc_count
@@ -703,9 +811,7 @@ def _evaluate_payload(
     if case.min_answer_chars is not None:
         answer_length_ok = answer_chars >= case.min_answer_chars
         if not answer_length_ok:
-            notes.append(
-                f"Answer length {answer_chars} chars below minimum {case.min_answer_chars}"
-            )
+            notes.append(f"Answer length {answer_chars} chars below minimum {case.min_answer_chars}")
 
     if semantic_score_enabled and case.expected_answer:
         threshold = (
@@ -717,9 +823,7 @@ def _evaluate_payload(
             semantic_similarity = _semantic_similarity(answer, case.expected_answer)
             semantic_similarity_ok = semantic_similarity >= threshold
             if not semantic_similarity_ok:
-                notes.append(
-                    f"Semantic similarity {semantic_similarity:.3f} below threshold {threshold:.3f}"
-                )
+                notes.append(f"Semantic similarity {semantic_similarity:.3f} below threshold {threshold:.3f}")
         except Exception as exc:  # noqa: BLE001
             semantic_similarity_ok = None
             notes.append(f"Semantic score skipped due error: {exc}")
@@ -791,9 +895,7 @@ def _sources_match_required_tags(*, sources: list[Any], required_tags: list[str]
         source_tags_raw = source.get("tags")
         source_tags = {
             str(tag).strip().lower()
-            for tag in (
-                source_tags_raw if isinstance(source_tags_raw, list) else [source_tags_raw]
-            )
+            for tag in (source_tags_raw if isinstance(source_tags_raw, list) else [source_tags_raw])
             if str(tag).strip()
         }
         if not required.issubset(source_tags):
@@ -802,11 +904,7 @@ def _sources_match_required_tags(*, sources: list[Any], required_tags: list[str]
 
 
 def _sources_match_required_tags_any_of(*, sources: list[Any], required_tag_groups: list[list[str]]) -> bool:
-    groups = [
-        {tag.strip().lower() for tag in group if tag.strip()}
-        for group in required_tag_groups
-        if group
-    ]
+    groups = [{tag.strip().lower() for tag in group if tag.strip()} for group in required_tag_groups if group]
     groups = [group for group in groups if group]
     if not groups:
         return True
@@ -819,9 +917,7 @@ def _sources_match_required_tags_any_of(*, sources: list[Any], required_tag_grou
         source_tags_raw = source.get("tags")
         source_tags = {
             str(tag).strip().lower()
-            for tag in (
-                source_tags_raw if isinstance(source_tags_raw, list) else [source_tags_raw]
-            )
+            for tag in (source_tags_raw if isinstance(source_tags_raw, list) else [source_tags_raw])
             if str(tag).strip()
         }
         if not any(group.issubset(source_tags) for group in groups):
@@ -859,11 +955,7 @@ def _first_source_value(sources: list[Any], *, key: str) -> str | None:
 def _strings_present_in_sources(*, sources: list[Any], key: str, expected: list[str]) -> bool | None:
     if not expected:
         return None
-    haystack = " ".join(
-        str(source.get(key, "")).strip().lower()
-        for source in sources
-        if isinstance(source, dict)
-    )
+    haystack = " ".join(str(source.get(key, "")).strip().lower() for source in sources if isinstance(source, dict))
     return all(token.lower() in haystack for token in expected)
 
 
@@ -965,9 +1057,7 @@ def _normalize_source_tag_groups(value: Any) -> list[list[str]]:
         elif isinstance(group, list):
             normalized_group = _normalize_string_list(group)
         else:
-            raise ValueError(
-                f"required_source_tags_any_of[{index}] must be a string or array of strings."
-            )
+            raise ValueError(f"required_source_tags_any_of[{index}] must be a string or array of strings.")
         if normalized_group:
             groups.append(normalized_group)
     return groups
@@ -1028,7 +1118,7 @@ def write_markdown_artifact(*, artifact_path: Path, results: list[CaseResult], r
         f"- Status: **{status}**",
         f"- Passed: `{passed}/{total}`",
         f"- Unanswerable Cases: `{unanswerable_passed}/{unanswerable_total}`",
-        f"- Generated: `{_now_iso()}`",
+        f"- Generated: `{now_iso()}`",
         "",
         "## Category Summary",
         "",
@@ -1062,40 +1152,16 @@ def write_markdown_artifact(*, artifact_path: Path, results: list[CaseResult], r
                 distinct_doc_count=row.distinct_doc_count,
                 bullet_count=row.bullet_count,
                 citation_valid="yes" if row.citation_valid else "no",
-                title_match_ok=(
-                    "n/a"
-                    if row.title_match_ok is None
-                    else ("yes" if row.title_match_ok else "no")
-                ),
-                source_match_ok=(
-                    "n/a"
-                    if row.source_match_ok is None
-                    else ("yes" if row.source_match_ok else "no")
-                ),
-                unanswerable_ok=(
-                    "n/a"
-                    if row.unanswerable_ok is None
-                    else ("yes" if row.unanswerable_ok else "no")
-                ),
+                title_match_ok=("n/a" if row.title_match_ok is None else ("yes" if row.title_match_ok else "no")),
+                source_match_ok=("n/a" if row.source_match_ok is None else ("yes" if row.source_match_ok else "no")),
+                unanswerable_ok=("n/a" if row.unanswerable_ok is None else ("yes" if row.unanswerable_ok else "no")),
                 required_terms_ok=(
-                    "n/a"
-                    if row.required_terms_ok is None
-                    else ("yes" if row.required_terms_ok else "no")
+                    "n/a" if row.required_terms_ok is None else ("yes" if row.required_terms_ok else "no")
                 ),
-                source_tags_ok=(
-                    "n/a"
-                    if row.source_tags_ok is None
-                    else ("yes" if row.source_tags_ok else "no")
-                ),
-                semantic_similarity=(
-                    "n/a"
-                    if row.semantic_similarity is None
-                    else f"{row.semantic_similarity:.3f}"
-                ),
+                source_tags_ok=("n/a" if row.source_tags_ok is None else ("yes" if row.source_tags_ok else "no")),
+                semantic_similarity=("n/a" if row.semantic_similarity is None else f"{row.semantic_similarity:.3f}"),
                 semantic_ok=(
-                    "n/a"
-                    if row.semantic_similarity_ok is None
-                    else ("yes" if row.semantic_similarity_ok else "no")
+                    "n/a" if row.semantic_similarity_ok is None else ("yes" if row.semantic_similarity_ok else "no")
                 ),
                 expected=(row.expected_doc_id or "-"),
                 actual=(row.actual_doc_id or "-"),
@@ -1115,7 +1181,7 @@ def insert_run_started(conn: sqlite3.Connection, run_id: str, input_hash: str) -
         INSERT INTO runs (run_id, workflow, status, started_at, input_hash)
         VALUES (?, ?, 'started', ?, ?)
         """,
-        (run_id, "workflow_04_eval_gate", _now_iso(), input_hash),
+        (run_id, "workflow_04_eval_gate", now_iso(), input_hash),
     )
     conn.commit()
 
@@ -1127,7 +1193,7 @@ def mark_run_completed(conn: sqlite3.Connection, run_id: str, latency_ms: int, o
         SET status='completed', ended_at=?, latency_ms=?, output_path=?
         WHERE run_id=?
         """,
-        (_now_iso(), latency_ms, output_path, run_id),
+        (now_iso(), latency_ms, output_path, run_id),
     )
     conn.commit()
 
@@ -1139,17 +1205,13 @@ def mark_run_failed(conn: sqlite3.Connection, run_id: str, latency_ms: int) -> N
         SET status='failed', ended_at=?, latency_ms=?
         WHERE run_id=?
         """,
-        (_now_iso(), latency_ms, run_id),
+        (now_iso(), latency_ms, run_id),
     )
     conn.commit()
 
 
 def _table_escape(value: str) -> str:
     return value.replace("|", "\\|").replace("\n", " ").strip()
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def _stamp() -> str:
@@ -1245,7 +1307,7 @@ def main() -> int:
         artifact_path: Path | None = None
 
         if not args.dry_run:
-            run_date = _now_iso()
+            run_date = now_iso()
             write_results(conn=conn, run_id=run_id, results=results, run_date=run_date)
             artifact_path = settings.artifacts_dir / f"{_stamp()}_{run_id}.md"
             write_markdown_artifact(artifact_path=artifact_path, results=results, run_id=run_id, backend=args.backend)

@@ -58,6 +58,21 @@ if [[ -z "$ORIGINAL_MODEL" ]]; then
   exit 2
 fi
 
+wait_for_bridge() {
+  local attempts=30
+  local delay_seconds=2
+
+  for ((attempt = 1; attempt <= attempts; attempt++)); do
+    if curl -fsS "http://localhost:8090/v1/healthz" >/dev/null; then
+      return 0
+    fi
+    sleep "$delay_seconds"
+  done
+
+  echo "Bridge did not become healthy after restart." >&2
+  return 1
+}
+
 restore_original_model() {
   python3 - "$ENV_FILE" "$ORIGINAL_MODEL" <<'PY'
 from pathlib import Path
@@ -81,6 +96,7 @@ PY
   (
     cd "$DOCKER_DIR"
     docker compose -p recall --env-file .env -f docker-compose.yml up -d --no-deps --force-recreate recall-ingest-bridge >/dev/null
+    wait_for_bridge
     ./validate-stack.sh >/dev/null
   )
 }
@@ -118,12 +134,13 @@ PY
   (
     cd "$DOCKER_DIR"
     docker compose -p recall --env-file .env -f docker-compose.yml up -d --no-deps --force-recreate recall-ingest-bridge >/dev/null
+    wait_for_bridge
     ./validate-stack.sh >/dev/null
   )
 
   echo "==> Running eval for: $model"
   set +e
-  python3 "$EVAL_SCRIPT" \
+  PYTHONPATH="$ROOT_DIR${PYTHONPATH:+:$PYTHONPATH}" python3 "$EVAL_SCRIPT" \
     --backend webhook \
     --webhook-url "http://localhost:8090/v1/rag-queries" \
     --cases-file "$CASES_FILE" \

@@ -11,11 +11,11 @@ import os
 import re
 import time
 from collections import Counter
-from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from typing import Any
 
 from scripts import llm_client
+from scripts.shared_time import now_iso
 
 LOGGER = logging.getLogger(__name__)
 SEVERITY_TO_SCORE = {
@@ -83,15 +83,12 @@ def aggregate_gaps(jobs: list[dict[str, Any]]) -> dict[str, Any]:
         for skill, count in matching_skill_counter.most_common(TOP_MATCHING_SKILLS_LIMIT)
     ]
 
-    top_gaps = [
-        {"skill": item["gap"], "count": item["frequency"]}
-        for item in aggregated[:TOP_GAPS_LIMIT]
-    ]
+    top_gaps = [{"skill": item["gap"], "count": item["frequency"]} for item in aggregated[:TOP_GAPS_LIMIT]]
 
     payload = {
         "total_jobs_analyzed": len(evaluated),
         "aggregated_gaps": aggregated,
-        "generated_at": _now_iso(),
+        "generated_at": now_iso(),
         # Backwards-compatible fields used by existing Phase 6A docs/clients.
         "total_jobs": len(jobs),
         "evaluated_jobs": len(evaluated),
@@ -200,11 +197,7 @@ def _should_use_embeddings(gaps: list[dict[str, Any]]) -> bool:
     if limit <= 0:
         return False
     unique_gap_count = len(
-        {
-            str(item.get("gap") or "").strip().lower()
-            for item in gaps
-            if str(item.get("gap") or "").strip()
-        }
+        {str(item.get("gap") or "").strip().lower() for item in gaps if str(item.get("gap") or "").strip()}
     )
     return unique_gap_count <= limit
 
@@ -454,7 +447,3 @@ def _average(values: list[int]) -> float:
     if not values:
         return 0.0
     return sum(values) / len(values)
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")

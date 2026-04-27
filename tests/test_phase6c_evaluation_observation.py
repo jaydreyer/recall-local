@@ -290,9 +290,49 @@ class Phase6CEvaluatorObservationTests(unittest.TestCase):
         strict_prompt = ollama_mock.call_args.kwargs["prompt"]
         self.assertIn("IMPORTANT: Return ONLY a JSON object.", strict_prompt)
         self.assertIn("ORIGINAL_PROMPT", strict_prompt)
+        self.assertIn("Malformed response to repair:", strict_prompt)
+        self.assertIn("not-json", strict_prompt)
+
+    def test_parse_with_retry_uses_fresh_regeneration_prompt_when_no_json_object_exists(self) -> None:
+        with (
+            patch(
+                "scripts.phase6.job_evaluator.parse_evaluation",
+                side_effect=[
+                    job_evaluator.MalformedResponseError("Could not find a JSON object in model response."),
+                    {
+                        "fit_score": 78,
+                        "score_rationale": "Recovered after fresh regeneration.",
+                        "matching_skills": [],
+                        "gaps": [],
+                        "scorecard": {
+                            "role_alignment": 4,
+                            "technical_alignment": 4,
+                            "domain_alignment": 4,
+                            "seniority_alignment": 4,
+                            "communication_alignment": 4,
+                        },
+                    },
+                ],
+            ),
+            patch("scripts.phase6.job_evaluator._call_ollama", return_value="{}") as ollama_mock,
+        ):
+            parsed = job_evaluator._parse_with_retry(
+                first_response="This is a solid fit overall.",
+                prompt="ORIGINAL_PROMPT",
+                settings={},
+                retry_mode="local",
+            )
+
+        self.assertEqual(parsed["fit_score"], 78)
+        strict_prompt = ollama_mock.call_args.kwargs["prompt"]
+        self.assertIn("did not include any JSON object at all", strict_prompt)
+        self.assertIn("Re-run the evaluation from the original prompt", strict_prompt)
+        self.assertIn("Previous non-JSON response:", strict_prompt)
+        self.assertIn("This is a solid fit overall.", strict_prompt)
 
     def test_parse_with_retry_raises_when_retry_still_malformed(self) -> None:
         with (
+            patch.dict("os.environ", {}, clear=True),
             patch(
                 "scripts.phase6.job_evaluator.parse_evaluation",
                 side_effect=[
@@ -311,6 +351,44 @@ class Phase6CEvaluatorObservationTests(unittest.TestCase):
                 )
 
         self.assertIn("malformed evaluation JSON after retry", str(exc_info.exception))
+
+    def test_parse_with_retry_uses_cloud_repair_after_local_retry_fails(self) -> None:
+        with (
+            patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}, clear=True),
+            patch(
+                "scripts.phase6.job_evaluator.parse_evaluation",
+                side_effect=[
+                    job_evaluator.MalformedResponseError("invalid"),
+                    job_evaluator.MalformedResponseError("still-invalid"),
+                    {
+                        "fit_score": 81,
+                        "score_rationale": "Recovered from cloud repair.",
+                        "matching_skills": [],
+                        "gaps": [],
+                        "scorecard": {
+                            "role_alignment": 4,
+                            "technical_alignment": 4,
+                            "domain_alignment": 4,
+                            "seniority_alignment": 4,
+                            "communication_alignment": 4,
+                        },
+                    },
+                ],
+            ),
+            patch("scripts.phase6.job_evaluator._call_ollama", return_value="{}") as ollama_mock,
+            patch("scripts.phase6.job_evaluator._call_cloud", return_value="{}") as cloud_mock,
+        ):
+            parsed = job_evaluator._parse_with_retry(
+                first_response="not-json",
+                prompt="PROMPT",
+                settings={"cloud_provider": "anthropic"},
+                retry_mode="local",
+            )
+
+        self.assertEqual(parsed["fit_score"], 81)
+        self.assertEqual(parsed["_parse_recovery_mode"], "cloud_repair")
+        self.assertEqual(ollama_mock.call_count, 1)
+        self.assertEqual(cloud_mock.call_count, 1)
 
     def test_evaluate_job_records_observation_with_escalation_context(self) -> None:
         local_eval = {

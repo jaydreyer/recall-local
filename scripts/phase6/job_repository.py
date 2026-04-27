@@ -176,16 +176,17 @@ def _normalize_workflow(value: Any) -> dict[str, Any]:
     follow_up_status = str(follow_up.get("status") or "").strip().lower()
     return {
         "stage": stage if stage in WORKFLOW_STAGES else None,
-        "nextActionApproval": "approved" if str(source.get("nextActionApproval")).strip().lower() == "approved" else "pending",
+        "nextActionApproval": "approved"
+        if str(source.get("nextActionApproval")).strip().lower() == "approved"
+        else "pending",
         "packetApproval": "approved" if str(source.get("packetApproval")).strip().lower() == "approved" else "pending",
-        "packet": {
-            key: bool(packet.get(key, default))
-            for key, default in DEFAULT_WORKFLOW_PACKET.items()
-        },
+        "packet": {key: bool(packet.get(key, default)) for key, default in DEFAULT_WORKFLOW_PACKET.items()},
         "nextAction": _normalize_next_action(next_action),
         "artifacts": _normalize_workflow_artifacts(artifacts),
         "followUp": {
-            "status": follow_up_status if follow_up_status in WORKFLOW_FOLLOW_UP_STATUSES else DEFAULT_WORKFLOW_FOLLOW_UP["status"],
+            "status": follow_up_status
+            if follow_up_status in WORKFLOW_FOLLOW_UP_STATUSES
+            else DEFAULT_WORKFLOW_FOLLOW_UP["status"],
             "dueAt": str(follow_up.get("dueAt") or "").strip() or None,
             "lastCompletedAt": str(follow_up.get("lastCompletedAt") or "").strip() or None,
             "reminder": _normalize_follow_up_reminder(follow_up.get("reminder")),
@@ -202,14 +203,16 @@ def _normalize_workflow_patch(value: Any) -> dict[str, Any]:
         if stage in WORKFLOW_STAGES:
             normalized["stage"] = stage
     if "nextActionApproval" in source:
-        normalized["nextActionApproval"] = "approved" if str(source.get("nextActionApproval")).strip().lower() == "approved" else "pending"
+        normalized["nextActionApproval"] = (
+            "approved" if str(source.get("nextActionApproval")).strip().lower() == "approved" else "pending"
+        )
     if "packetApproval" in source:
-        normalized["packetApproval"] = "approved" if str(source.get("packetApproval")).strip().lower() == "approved" else "pending"
+        normalized["packetApproval"] = (
+            "approved" if str(source.get("packetApproval")).strip().lower() == "approved" else "pending"
+        )
     if isinstance(source.get("packet"), dict):
         normalized["packet"] = {
-            key: bool(value)
-            for key, value in source["packet"].items()
-            if key in DEFAULT_WORKFLOW_PACKET
+            key: bool(value) for key, value in source["packet"].items() if key in DEFAULT_WORKFLOW_PACKET
         }
     if isinstance(source.get("nextAction"), dict):
         normalized["nextAction"] = _normalize_next_action(source.get("nextAction"))
@@ -309,7 +312,8 @@ def _normalize_workflow_timeline(value: Any) -> list[dict[str, Any]]:
                 ),
                 "tone": (
                     str(item.get("tone") or "").strip().lower()
-                    if str(item.get("tone") or "").strip().lower() in {"default", "pending", "warning", "complete", "muted"}
+                    if str(item.get("tone") or "").strip().lower()
+                    in {"default", "pending", "warning", "complete", "muted"}
                     else _workflow_event_tone(
                         event_type=event_type,
                         category=(
@@ -364,6 +368,7 @@ def _matches_search(job: dict[str, Any], query: str) -> bool:
                 job.get("gaps"),
                 job.get("application_tips"),
                 job.get("cover_letter_angle"),
+                job.get("evaluation_error"),
                 job.get("notes"),
                 job.get("observation"),
             ]
@@ -415,6 +420,7 @@ def _normalize_job(record: Any) -> dict[str, Any]:
         "gaps": payload.get("gaps") or [],
         "application_tips": payload.get("application_tips") or "",
         "cover_letter_angle": payload.get("cover_letter_angle") or "",
+        "evaluation_error": payload.get("evaluation_error") or None,
         "observation": _normalize_observation(payload.get("observation")),
         "applied": bool(payload.get("applied", False)),
         "applied_at": payload.get("applied_at"),
@@ -652,7 +658,9 @@ def _normalize_follow_up_reminder(value: Any) -> dict[str, Any]:
     normalized.update(
         {
             "created": bool(source.get("created", False)),
-            "status": status if status in WORKFLOW_FOLLOW_UP_REMINDER_STATUSES else DEFAULT_WORKFLOW_FOLLOW_UP["reminder"]["status"],
+            "status": status
+            if status in WORKFLOW_FOLLOW_UP_REMINDER_STATUSES
+            else DEFAULT_WORKFLOW_FOLLOW_UP["reminder"]["status"],
             "channel": channel if channel in WORKFLOW_FOLLOW_UP_REMINDER_CHANNELS else None,
             "lastRunAt": str(source.get("lastRunAt") or "").strip() or None,
             "deliveredAt": str(source.get("deliveredAt") or "").strip() or None,
@@ -790,7 +798,9 @@ def _artifact_available(*, key: str, artifacts: dict[str, Any]) -> bool:
         artifact = _normalize_cover_letter_artifact(artifacts.get("coverLetterDraft"))
         return bool(artifact.get("generatedAt") or artifact.get("draftId") or artifact.get("vaultPath"))
     artifact = _normalize_packet_artifact(artifacts.get(key), key=key)
-    return bool(artifact.get("updatedAt") or artifact.get("vaultPath") or artifact.get("notes") or artifact.get("status"))
+    return bool(
+        artifact.get("updatedAt") or artifact.get("vaultPath") or artifact.get("notes") or artifact.get("status")
+    )
 
 
 def _workflow_packet_readiness(value: Any) -> dict[str, Any]:
@@ -799,9 +809,19 @@ def _workflow_packet_readiness(value: Any) -> dict[str, Any]:
     artifacts = workflow.get("artifacts", {})
     checked_items = [key for key in DEFAULT_WORKFLOW_PACKET if bool(packet.get(key))]
     linked_items = [key for key in DEFAULT_WORKFLOW_PACKET if _artifact_available(key=key, artifacts=artifacts)]
-    verified_items = [key for key in DEFAULT_WORKFLOW_PACKET if bool(packet.get(key)) and _artifact_available(key=key, artifacts=artifacts)]
-    checked_without_artifact = [key for key in DEFAULT_WORKFLOW_PACKET if bool(packet.get(key)) and key not in verified_items]
-    artifact_without_checklist = [key for key in DEFAULT_WORKFLOW_PACKET if _artifact_available(key=key, artifacts=artifacts) and not bool(packet.get(key))]
+    verified_items = [
+        key
+        for key in DEFAULT_WORKFLOW_PACKET
+        if bool(packet.get(key)) and _artifact_available(key=key, artifacts=artifacts)
+    ]
+    checked_without_artifact = [
+        key for key in DEFAULT_WORKFLOW_PACKET if bool(packet.get(key)) and key not in verified_items
+    ]
+    artifact_without_checklist = [
+        key
+        for key in DEFAULT_WORKFLOW_PACKET
+        if _artifact_available(key=key, artifacts=artifacts) and not bool(packet.get(key))
+    ]
     ready_for_approval = all(key in verified_items for key in PACKET_REQUIRED_KEYS)
     return {
         "totalItems": len(DEFAULT_WORKFLOW_PACKET),
@@ -973,7 +993,9 @@ def update_job(
         }
         if "reminder" in incoming_workflow.get("followUp", {}):
             merged_follow_up["reminder"] = {
-                **_normalize_follow_up_reminder(_normalize_follow_up_state(existing_workflow.get("followUp")).get("reminder")),
+                **_normalize_follow_up_reminder(
+                    _normalize_follow_up_state(existing_workflow.get("followUp")).get("reminder")
+                ),
                 **incoming_workflow.get("followUp", {}).get("reminder", {}),
             }
             merged_follow_up["reminder"] = _normalize_follow_up_reminder(merged_follow_up.get("reminder"))
@@ -986,19 +1008,25 @@ def update_job(
             "followUp": merged_follow_up,
             "updatedAt": now,
         }
-        if next_workflow["followUp"].get("status") == "completed" and not next_workflow["followUp"].get("lastCompletedAt"):
+        if next_workflow["followUp"].get("status") == "completed" and not next_workflow["followUp"].get(
+            "lastCompletedAt"
+        ):
             next_workflow["followUp"]["lastCompletedAt"] = now
         if next_workflow["followUp"].get("status") == "completed":
             next_workflow["followUp"]["dueAt"] = None
 
         if existing_workflow.get("nextActionApproval") != next_workflow.get("nextActionApproval"):
-                current["workflowTimeline"] = _append_workflow_event(
-                    current["workflowTimeline"],
-                    event_type="next_action_approved" if next_workflow.get("nextActionApproval") == "approved" else "next_action_pending",
-                    label="Next action approved" if next_workflow.get("nextActionApproval") == "approved" else "Next action sent back for review",
-                    at=now,
-                    category="approval",
-                )
+            current["workflowTimeline"] = _append_workflow_event(
+                current["workflowTimeline"],
+                event_type="next_action_approved"
+                if next_workflow.get("nextActionApproval") == "approved"
+                else "next_action_pending",
+                label="Next action approved"
+                if next_workflow.get("nextActionApproval") == "approved"
+                else "Next action sent back for review",
+                at=now,
+                category="approval",
+            )
         existing_next_action = _normalize_next_action(existing_workflow.get("nextAction"))
         next_next_action = _normalize_next_action(next_workflow.get("nextAction"))
         if existing_next_action != next_next_action and next_next_action.get("action"):
@@ -1021,7 +1049,9 @@ def update_job(
             current["workflowTimeline"] = _append_workflow_event(
                 current["workflowTimeline"],
                 event_type="packet_approved" if next_workflow.get("packetApproval") == "approved" else "packet_pending",
-                label="Packet approved" if next_workflow.get("packetApproval") == "approved" else "Packet returned to draft state",
+                label="Packet approved"
+                if next_workflow.get("packetApproval") == "approved"
+                else "Packet returned to draft state",
                 at=now,
                 category="approval",
             )
@@ -1045,7 +1075,9 @@ def update_job(
             current["workflowTimeline"] = _append_workflow_event(
                 current["workflowTimeline"],
                 event_type="packet_item_completed" if value else "packet_item_reopened",
-                label=f"{_workflow_packet_label(key)} completed" if value else f"{_workflow_packet_label(key)} reopened",
+                label=f"{_workflow_packet_label(key)} completed"
+                if value
+                else f"{_workflow_packet_label(key)} reopened",
                 at=now,
                 category="packet",
             )
@@ -1107,7 +1139,11 @@ def update_job(
                 at=now,
                 category="follow_up",
             )
-        elif existing_follow_up.get("dueAt") and not next_follow_up.get("dueAt") and next_follow_up.get("status") == "not_scheduled":
+        elif (
+            existing_follow_up.get("dueAt")
+            and not next_follow_up.get("dueAt")
+            and next_follow_up.get("status") == "not_scheduled"
+        ):
             current["workflowTimeline"] = _append_workflow_event(
                 current["workflowTimeline"],
                 event_type="follow_up_cleared",
@@ -1121,9 +1157,7 @@ def update_job(
                     current["workflowTimeline"],
                     event_type="follow_up_completed",
                     label="Follow-up completed",
-                    detail=(
-                        f"Completed {_timeline_datetime_label(next_follow_up.get('lastCompletedAt') or now)}"
-                    ),
+                    detail=(f"Completed {_timeline_datetime_label(next_follow_up.get('lastCompletedAt') or now)}"),
                     at=now,
                     category="follow_up",
                 )
@@ -1153,8 +1187,13 @@ def update_job(
                 )
             elif not existing_reminder.get("created") and next_reminder.get("created"):
                 reminder_event_type, reminder_label = ("follow_up_reminder_created", "Follow-up reminder created")
-            elif existing_reminder.get("lastRunAt") != next_reminder.get("lastRunAt") and next_reminder.get("lastRunAt"):
-                reminder_event_type, reminder_label = ("follow_up_reminder_run_recorded", "Follow-up reminder run recorded")
+            elif existing_reminder.get("lastRunAt") != next_reminder.get("lastRunAt") and next_reminder.get(
+                "lastRunAt"
+            ):
+                reminder_event_type, reminder_label = (
+                    "follow_up_reminder_run_recorded",
+                    "Follow-up reminder run recorded",
+                )
             if reminder_event_type and reminder_label:
                 current["workflowTimeline"] = _append_workflow_event(
                     current["workflowTimeline"],
@@ -1278,10 +1317,7 @@ def job_stats() -> dict[str, Any]:
         "high_fit_count": score_buckets["high"],
         "average_fit_score": round(score_sum / total_scored, 1) if total_scored else 0.0,
         "score_ranges": score_buckets,
-        "score_distribution": [
-            {"range": key, "count": value}
-            for key, value in score_distribution.items()
-        ],
+        "score_distribution": [{"range": key, "count": value} for key, value in score_distribution.items()],
         "by_source": by_source,
         "by_day": by_day,
     }

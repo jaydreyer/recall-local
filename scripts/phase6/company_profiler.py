@@ -22,10 +22,6 @@ CAREER_PAGES_PATH = ROOT / "config" / "career_pages.json"
 _COMPANY_PROFILE_CACHE: dict[tuple[bool, int | None], tuple[float, str, list[dict[str, Any]]]] = {}
 
 
-def _now_iso() -> str:
-    return now_iso()
-
-
 def _cache_ttl_seconds() -> float:
     try:
         return max(float(os.getenv("RECALL_PHASE6_COMPANY_CACHE_SECONDS", "180")), 0.0)
@@ -91,9 +87,14 @@ def list_tracked_company_configs() -> list[dict[str, Any]]:
         current["company_id"] = company_id
         current["name"] = str(row.get("company_name") or current.get("name") or "").strip()
         current["tier"] = int(row.get("tier") or current.get("tier") or 0)
-        current["your_connection"] = str(
-            row.get("your_connection") if row.get("your_connection") is not None else current.get("your_connection") or ""
-        ).strip() or None
+        current["your_connection"] = (
+            str(
+                row.get("your_connection")
+                if row.get("your_connection") is not None
+                else current.get("your_connection") or ""
+            ).strip()
+            or None
+        )
 
         if "ats" in metadata:
             current["ats"] = str(metadata.get("ats") or "").strip() or None
@@ -124,7 +125,9 @@ def upsert_tracked_company_config(*, company_id: str | None = None, patch: dict[
     if not company_name:
         raise ValueError("company_name is required.")
 
-    tier = int(patch.get("tier") if patch.get("tier") is not None else existing.get("tier") or persisted.get("tier") or 3)
+    tier = int(
+        patch.get("tier") if patch.get("tier") is not None else existing.get("tier") or persisted.get("tier") or 3
+    )
     your_connection = (
         str(patch.get("your_connection") or "").strip()
         if "your_connection" in patch
@@ -165,7 +168,7 @@ def upsert_tracked_company_config(*, company_id: str | None = None, patch: dict[
                 "description": persisted.get("description"),
                 "your_connection": your_connection,
                 "metadata": metadata,
-                "updated_at": _now_iso(),
+                "updated_at": now_iso(),
             },
         )
     finally:
@@ -251,9 +254,9 @@ def _remote_policy(jobs: list[dict[str, Any]]) -> str | None:
     for job in jobs:
         location_type = str(job.get("location_type") or "").strip().lower()
         location_text = str(job.get("location") or "").strip().lower()
-        preference_bucket = str(
-            ((job.get("observation") or {}).get("location") or {}).get("preference_bucket") or ""
-        ).strip().lower()
+        preference_bucket = (
+            str(((job.get("observation") or {}).get("location") or {}).get("preference_bucket") or "").strip().lower()
+        )
 
         if location_type in {"remote", "hybrid", "onsite"}:
             counter[location_type] += 1
@@ -321,7 +324,9 @@ def _hydrate_profile(
         key=lambda item: (_score_value(item), str(item.get("discovered_at") or "")),
         reverse=True,
     )
-    average_score = round(sum(_score_value(job) for job in company_jobs) / len(company_jobs), 1) if company_jobs else 0.0
+    average_score = (
+        round(sum(_score_value(job) for job in company_jobs) / len(company_jobs), 1) if company_jobs else 0.0
+    )
     description, about_source = _default_description(
         company_name=company_name,
         jobs=company_jobs,
@@ -364,7 +369,9 @@ def _hydrate_profile(
         "url": careers_url,
         "careers_url": careers_url,
         "title_filter": _normalize_title_filters(
-            persisted_metadata.get("title_filter") if "title_filter" in persisted_metadata else config.get("title_filter")
+            persisted_metadata.get("title_filter")
+            if "title_filter" in persisted_metadata
+            else config.get("title_filter")
         ),
         "domain": domain,
         "logo_url": metadata.get("logo_url"),
@@ -390,11 +397,13 @@ def _hydrate_profile(
         },
         "jobs": company_jobs if include_jobs else [],
         "metadata": metadata,
-        "updated_at": str(persisted.get("updated_at") or _now_iso()),
+        "updated_at": str(persisted.get("updated_at") or now_iso()),
     }
 
 
-def build_company_profiles(jobs: list[dict[str, Any]], *, include_jobs: bool = True, limit: int | None = None) -> list[dict[str, Any]]:
+def build_company_profiles(
+    jobs: list[dict[str, Any]], *, include_jobs: bool = True, limit: int | None = None
+) -> list[dict[str, Any]]:
     configured = list_tracked_company_configs()
     by_config = {slugify_company(str(item.get("name", ""))): item for item in configured}
     persisted = _load_persisted_profiles()
@@ -456,7 +465,9 @@ def build_company_profiles(jobs: list[dict[str, Any]], *, include_jobs: bool = T
     return profiles
 
 
-def list_company_profiles(jobs: list[dict[str, Any]], *, include_jobs: bool = True, limit: int | None = None) -> list[dict[str, Any]]:
+def list_company_profiles(
+    jobs: list[dict[str, Any]], *, include_jobs: bool = True, limit: int | None = None
+) -> list[dict[str, Any]]:
     return build_company_profiles(jobs, include_jobs=include_jobs, limit=limit)
 
 
@@ -475,7 +486,7 @@ def refresh_company_profile(company_id: str, jobs: list[dict[str, Any]]) -> dict
             "run_id": f"company_refresh_{slugify_company(company_id)}",
             "status": "not_found",
             "company_id": slugify_company(company_id),
-            "refreshed_at": _now_iso(),
+            "refreshed_at": now_iso(),
         }
 
     conn = storage.connect_db()
@@ -489,7 +500,7 @@ def refresh_company_profile(company_id: str, jobs: list[dict[str, Any]]) -> dict
                 "description": profile.get("description"),
                 "your_connection": profile.get("your_connection"),
                 "metadata": profile.get("metadata") or {},
-                "updated_at": _now_iso(),
+                "updated_at": now_iso(),
             },
         )
     finally:
@@ -502,7 +513,7 @@ def refresh_company_profile(company_id: str, jobs: list[dict[str, Any]]) -> dict
         "company_id": profile["company_id"],
         "jobs_considered": profile["job_count"],
         "profile": profile,
-        "refreshed_at": _now_iso(),
+        "refreshed_at": now_iso(),
     }
 
 

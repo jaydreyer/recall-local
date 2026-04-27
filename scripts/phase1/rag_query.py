@@ -53,8 +53,7 @@ JOB_SEARCH_GROUNDING_TERMS = (
     "fit",
 )
 JOB_SEARCH_GROUNDING_PREFIX = (
-    "For Jay's interview and role preparation, anchor this in his experience, impact, "
-    "business value, and company fit. "
+    "For Jay's interview and role preparation, anchor this in his experience, impact, business value, and company fit. "
 )
 UUID_PATTERN = re.compile(
     r"^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$",
@@ -79,8 +78,12 @@ EXACT_SECRET_QUERY_PATTERN = re.compile(
     r"\b(exact|currently configured|configured|production|private|current)\b",
     flags=re.IGNORECASE,
 )
-SUMMARY_QUERY_PATTERN = re.compile(r"\b(summarize|summary|highlights|key takeaways|recap|overview)\b", flags=re.IGNORECASE)
-DOCUMENT_REFERENCE_PATTERN = re.compile(r"\b(article|post|blog post|essay|paper|write-?up|document)\b", flags=re.IGNORECASE)
+SUMMARY_QUERY_PATTERN = re.compile(
+    r"\b(summarize|summary|highlights|key takeaways|recap|overview)\b", flags=re.IGNORECASE
+)
+DOCUMENT_REFERENCE_PATTERN = re.compile(
+    r"\b(article|post|blog post|essay|paper|write-?up|document)\b", flags=re.IGNORECASE
+)
 TARGETED_SOURCE_LOOKUP_PATTERN = re.compile(
     r"\b(according to|in the article|in the document|from the article|from the document|what does the article say|what does the document say)\b",
     flags=re.IGNORECASE,
@@ -286,7 +289,7 @@ def run_rag_query(
     if not question:
         raise ValueError("Query must be non-empty")
 
-    started_at = _now_iso()
+    started_at = now_iso()
     started_perf = time.perf_counter()
     run_id = uuid.uuid4().hex
 
@@ -389,16 +392,8 @@ def run_rag_query(
 
         if postprocess_reasons:
             combined_reason = "; ".join(postprocess_reasons)
-            fallback_reason = (
-                combined_reason
-                if fallback_reason is None
-                else f"{fallback_reason}; {combined_reason}"
-            )
-        grounding_reason = (
-            _ensure_job_search_grounding(response)
-            if active_mode == "job-search"
-            else None
-        )
+            fallback_reason = combined_reason if fallback_reason is None else f"{fallback_reason}; {combined_reason}"
+        grounding_reason = _ensure_job_search_grounding(response) if active_mode == "job-search" else None
         if grounding_reason is not None:
             postprocess_notes = response["audit"].get("postprocess_notes")
             if not isinstance(postprocess_notes, list):
@@ -408,7 +403,7 @@ def run_rag_query(
 
         latency_ms = int((time.perf_counter() - started_perf) * 1000)
         response["audit"]["run_id"] = run_id
-        response["audit"]["timestamp"] = _now_iso()
+        response["audit"]["timestamp"] = now_iso()
         response["audit"]["workflow"] = "workflow_02_rag_query"
         response["audit"]["provider"] = os.getenv("RECALL_LLM_PROVIDER", "ollama")
         response["audit"]["model"] = _active_model_name(response["audit"]["provider"])
@@ -425,19 +420,13 @@ def run_rag_query(
         response["audit"]["prompt_profile"] = _prompt_profile_name(active_mode, query_strategy=query_strategy)
         response["audit"]["retrieval_mode"] = retrieval_mode or os.getenv("RECALL_RAG_RETRIEVAL_MODE", "vector")
         response["audit"]["hybrid_alpha"] = (
-            float(hybrid_alpha)
-            if hybrid_alpha is not None
-            else _env_float("RECALL_RAG_HYBRID_ALPHA", 0.65)
+            float(hybrid_alpha) if hybrid_alpha is not None else _env_float("RECALL_RAG_HYBRID_ALPHA", 0.65)
         )
         response["audit"]["reranker_enabled"] = (
-            bool(enable_reranker)
-            if enable_reranker is not None
-            else _env_bool("RECALL_RAG_ENABLE_RERANK", False)
+            bool(enable_reranker) if enable_reranker is not None else _env_bool("RECALL_RAG_ENABLE_RERANK", False)
         )
         response["audit"]["reranker_weight"] = (
-            float(reranker_weight)
-            if reranker_weight is not None
-            else _env_float("RECALL_RAG_RERANK_WEIGHT", 0.35)
+            float(reranker_weight) if reranker_weight is not None else _env_float("RECALL_RAG_RERANK_WEIGHT", 0.35)
         )
         response["audit"]["retrieved_count"] = len(retrieved)
         response["audit"]["dry_run"] = dry_run
@@ -457,7 +446,7 @@ def run_rag_query(
                 _mark_run_completed(
                     conn=conn,
                     run_id=run_id,
-                    ended_at=_now_iso(),
+                    ended_at=now_iso(),
                     latency_ms=latency_ms,
                     model=response["audit"]["model"],
                     output_path=artifact_path,
@@ -470,7 +459,7 @@ def run_rag_query(
             _mark_run_failed(
                 conn=conn,
                 run_id=run_id,
-                ended_at=_now_iso(),
+                ended_at=now_iso(),
                 latency_ms=int((time.perf_counter() - started_perf) * 1000),
             )
         raise
@@ -726,7 +715,9 @@ def _build_compare_fallback_response(
     secondary_chunks = grouped[ordered_doc_ids[1]]
     primary = primary_chunks[0]
     secondary = secondary_chunks[0]
-    additional = primary_chunks[1] if len(primary_chunks) > 1 else (secondary_chunks[1] if len(secondary_chunks) > 1 else None)
+    additional = (
+        primary_chunks[1] if len(primary_chunks) > 1 else (secondary_chunks[1] if len(secondary_chunks) > 1 else None)
+    )
 
     answer_lines = [
         _compare_intro_sentence(question=question, primary=primary, secondary=secondary),
@@ -734,9 +725,7 @@ def _build_compare_fallback_response(
         f"- {_compare_focus_label(chunk=secondary, question=question)}: {_supporting_snippet(secondary.text, question=question)}",
     ]
     if additional is not None:
-        answer_lines.append(
-            f"- Additional evidence: {_supporting_snippet(additional.text, question=question)}"
-        )
+        answer_lines.append(f"- Additional evidence: {_supporting_snippet(additional.text, question=question)}")
     answer_lines.append(
         f"- Practical tradeoff: rely on {_topic_hint(primary.title)} guidance when the problem is mostly about {_topic_hint(primary.title)}, "
         f"and shift toward {_topic_hint(secondary.title)} guidance when the bottleneck is really about {_topic_hint(secondary.title)}."
@@ -994,9 +983,7 @@ def _normalize_low_confidence_response(response: dict[str, Any]) -> str | None:
     if not isinstance(assumptions, list):
         assumptions = []
         response["assumptions"] = assumptions
-    safety_assumption = (
-        "Low-confidence response was normalized to an explicit abstention to avoid unsupported claims."
-    )
+    safety_assumption = "Low-confidence response was normalized to an explicit abstention to avoid unsupported claims."
     if safety_assumption not in assumptions:
         assumptions.append(safety_assumption)
     return "Low-confidence response was normalized to an explicit abstention."
@@ -1175,20 +1162,18 @@ def _retrieve_for_query_strategy(
     per_query_results: list[list[RetrievedChunk]] = []
     for subquery in _synthesis_subqueries(question):
         subquery_chunks = retrieve_chunks(
-                subquery,
-                top_k=max(24, top_k * 4),
-                min_score=min(min_score, 0.05),
-                filter_tags=filter_tags,
-                filter_tag_mode=filter_tag_mode,
-                filter_group=filter_group,
-                retrieval_mode=retrieval_mode,
-                hybrid_alpha=hybrid_alpha,
-                enable_reranker=enable_reranker,
-                reranker_weight=reranker_weight,
-            )
-        per_query_results.append(
-            _prioritize_chunks_for_subquery(subquery_chunks, query=subquery)
+            subquery,
+            top_k=max(24, top_k * 4),
+            min_score=min(min_score, 0.05),
+            filter_tags=filter_tags,
+            filter_tag_mode=filter_tag_mode,
+            filter_group=filter_group,
+            retrieval_mode=retrieval_mode,
+            hybrid_alpha=hybrid_alpha,
+            enable_reranker=enable_reranker,
+            reranker_weight=reranker_weight,
         )
+        per_query_results.append(_prioritize_chunks_for_subquery(subquery_chunks, query=subquery))
     per_query_results.append(
         retrieve_chunks(
             question,
@@ -1384,9 +1369,7 @@ def _ranked_doc_ids(
     query_strategy: str,
 ) -> list[str]:
     title_hints = [
-        " ".join(match.strip().split()).lower()
-        for match in QUOTED_TARGET_PATTERN.findall(question)
-        if match.strip()
+        " ".join(match.strip().split()).lower() for match in QUOTED_TARGET_PATTERN.findall(question) if match.strip()
     ]
     query_tokens = _ranking_query_tokens(question)
 
@@ -1444,10 +1427,7 @@ def _sample_document_chunks(chunks: list[RetrievedChunk], *, max_chunks: int) ->
     if max_chunks <= 1:
         return [ordered[0]]
 
-    chosen_indexes = {
-        round((len(ordered) - 1) * position / (max_chunks - 1))
-        for position in range(max_chunks)
-    }
+    chosen_indexes = {round((len(ordered) - 1) * position / (max_chunks - 1)) for position in range(max_chunks)}
     selected = [ordered[index] for index in sorted(chosen_indexes)]
     if len(selected) == max_chunks:
         return selected
@@ -1672,7 +1652,9 @@ def _named_source_lookup_answer(*, question: str, title: str, snippet: str) -> s
             "It is getting the right context, information, and tools in front of the model at the right time."
         )
     if cleaned_snippet:
-        normalized_snippet = cleaned_snippet[0].lower() + cleaned_snippet[1:] if len(cleaned_snippet) > 1 else cleaned_snippet.lower()
+        normalized_snippet = (
+            cleaned_snippet[0].lower() + cleaned_snippet[1:] if len(cleaned_snippet) > 1 else cleaned_snippet.lower()
+        )
         return f"According to the named source, {normalized_snippet}."
     return f"According to {title}, the retrieved context supports a direct answer from that source."
 
@@ -1737,9 +1719,15 @@ def _general_qa_bullet_label(bullet: str) -> str:
 def _benefit_label_for_snippet(lower_snippet: str) -> str:
     if any(token in lower_snippet for token in ("evaluate", "evaluation", "quality", "diversity")):
         return "Easier evaluation and iteration"
-    if any(token in lower_snippet for token in ("guide model", "guide ai", "steer", "steering", "guide model behaviour", "desired responses")):
+    if any(
+        token in lower_snippet
+        for token in ("guide model", "guide ai", "steer", "steering", "guide model behaviour", "desired responses")
+    ):
         return "More control over outputs"
-    if any(token in lower_snippet for token in ("accurate", "accuracy", "relevant", "relevance", "customized", "desired responses")):
+    if any(
+        token in lower_snippet
+        for token in ("accurate", "accuracy", "relevant", "relevance", "customized", "desired responses")
+    ):
         return "Better relevance and accuracy"
     if any(token in lower_snippet for token in ("safe", "safety", "guardrail")):
         return "Safer interactions"
@@ -2058,7 +2046,9 @@ def _is_named_document_summary_query(question: str) -> bool:
     if not normalized:
         return False
     has_summary_intent = bool(SUMMARY_QUERY_PATTERN.search(normalized))
-    has_document_reference = bool(DOCUMENT_REFERENCE_PATTERN.search(normalized) or QUOTED_TARGET_PATTERN.search(normalized))
+    has_document_reference = bool(
+        DOCUMENT_REFERENCE_PATTERN.search(normalized) or QUOTED_TARGET_PATTERN.search(normalized)
+    )
     return has_summary_intent and has_document_reference
 
 
@@ -2066,7 +2056,11 @@ def _is_named_source_lookup_query(question: str) -> bool:
     normalized = " ".join(question.strip().split())
     if not normalized:
         return False
-    if _is_named_document_summary_query(question) or _is_compare_query(question) or _is_multi_document_synthesis_query(question):
+    if (
+        _is_named_document_summary_query(question)
+        or _is_compare_query(question)
+        or _is_multi_document_synthesis_query(question)
+    ):
         return False
     has_named_source = bool(QUOTED_TARGET_PATTERN.search(normalized) or DOCUMENT_REFERENCE_PATTERN.search(normalized))
     if not has_named_source:
@@ -2090,10 +2084,7 @@ def _is_multi_document_synthesis_query(question: str) -> bool:
     if not SYNTHESIS_CONNECTOR_PATTERN.search(normalized):
         return False
     lowered = normalized.lower()
-    return any(
-        marker in lowered
-        for marker in ("tradeoff", "tradeoffs", "practical", "ways", "implications", "expect")
-    )
+    return any(marker in lowered for marker in ("tradeoff", "tradeoffs", "practical", "ways", "implications", "expect"))
 
 
 def _is_explanatory_query(question: str) -> bool:
@@ -2108,7 +2099,11 @@ def _is_explanatory_query(question: str) -> bool:
         or _is_sensitive_secret_query(question)
     ):
         return False
-    return bool(EXPLANATION_QUERY_PATTERN.search(normalized) or STEPS_QUERY_PATTERN.search(normalized) or LIST_QUERY_PATTERN.search(normalized))
+    return bool(
+        EXPLANATION_QUERY_PATTERN.search(normalized)
+        or STEPS_QUERY_PATTERN.search(normalized)
+        or LIST_QUERY_PATTERN.search(normalized)
+    )
 
 
 def _is_sensitive_secret_query(question: str) -> bool:
@@ -2148,10 +2143,6 @@ def _truncate(text: str, max_chars: int) -> str:
 
 def _artifact_stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-
-
-def _now_iso() -> str:
-    return now_iso()
 
 
 def parse_args() -> argparse.Namespace:

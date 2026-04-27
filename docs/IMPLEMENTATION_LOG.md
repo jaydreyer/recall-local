@@ -70,6 +70,85 @@ Public-repo note: historical entries use placeholder hostnames and paths where t
 - The live primary aggregator lane is restored and has fresh April 27, 2026 JobSpy-backed jobs in the board.
 - The stack remains on the expected Compose project, network, and persistent volume attachments after the bridge recreate.
 
+## 2026-03-23 - Evaluator no-JSON-object retry path hardened
+
+### What was executed
+
+- Hardened the Phase 6 evaluator retry prompt in:
+  - `<repo-root>/scripts/phase6/job_evaluator.py`
+  - malformed-output recovery now distinguishes the specific parser failure where the model returned no JSON object at all
+  - that branch now asks the model to regenerate a fresh evaluation from the original prompt instead of trying to "repair" prose that contains nothing structurally salvageable
+  - the retry prompt now includes an explicit JSON shape example for both generic malformed-output repair and the no-object regeneration branch
+- Added focused regression coverage in:
+  - `<repo-root>/tests/test_phase6_job_evaluator_pytest.py`
+  - `<repo-root>/tests/test_phase6c_evaluation_observation.py`
+
+### Validation
+
+- Local validation:
+  - `./.venv/bin/python -m pytest -q tests/test_phase6_job_evaluator_pytest.py tests/test_phase6c_evaluation_observation.py`
+
+### Results
+
+- The evaluator should recover better from the dominant remaining malformed-output tail where the model answers in prose or otherwise emits no brace-delimited JSON object.
+- Partial-JSON repair behavior remains intact, but the no-object branch now uses a more appropriate "generate fresh JSON" instruction path.
+
+## 2026-03-23 - Evaluation repair prompt and tolerant parser defaults hardened
+
+### What was executed
+
+- Hardened malformed evaluation recovery in:
+  - `<repo-root>/scripts/phase6/job_evaluator.py`
+  - retry attempts now send the malformed model output back through an explicit repair prompt instead of only resubmitting the original task with stricter wording
+  - local malformed-output recovery now falls back to one cloud repair attempt when a configured cloud provider is available
+  - parser defaults now tolerate missing `gaps` by normalizing to `[]`
+  - parser defaults now tolerate missing `matching_skills` by normalizing to `[]`
+  - parser now accepts alternate rationale fields (`rationale`, `summary`, `reasoning`, `fit_rationale`) and synthesizes a concise fallback rationale when the model omits one entirely
+- Added regression coverage in:
+  - `<repo-root>/tests/test_phase6_job_evaluator_pytest.py`
+  - `<repo-root>/tests/test_phase6c_evaluation_observation.py`
+
+### Validation
+
+- Local validation:
+  - `./.venv/bin/python -m pytest -q tests/test_phase6_job_evaluator_pytest.py`
+  - `./.venv/bin/python -m pytest -q tests/test_phase6c_evaluation_observation.py -k "parse_with_retry_uses_strict_prompt_after_malformed_json or parse_evaluation"`
+
+### Results
+
+- The Phase 6 evaluator now has a better chance of recovering outputs that are semantically useful but structurally incomplete.
+- The three most common partial-JSON failure shapes seen during live retry cleanup (`missing matching_skills`, `missing gaps`, `missing score_rationale`) should now self-heal instead of forcing the job back into `status=error`.
+- Jobs that still fail the local repair path now get one cloud repair pass before the evaluator gives up, which should reduce repeat `status=error` rows in the live queue.
+
+## 2026-03-23 - Failed evaluation diagnostics surfaced on job reads and retry helper added
+
+### What was executed
+
+- Exposed persisted Phase 6 evaluation failure details on job reads in:
+  - `<repo-root>/scripts/phase6/job_repository.py`
+  - job search results and single-job reads now carry `evaluation_error` when a prior evaluation run stored one
+  - fuzzy search now also includes the failure text so operators can search for recurring parse/runtime problems
+- Added a focused retry helper in:
+  - `<repo-root>/scripts/phase6/retry_failed_job_evaluations.py`
+  - supports dry-run listing of failed jobs
+  - reruns only jobs currently marked `status=error`
+  - accepts explicit `--job-id` targeting or bulk retry from the current failed queue
+- Updated API examples and regression coverage in:
+  - `<repo-root>/scripts/phase1/ingest_bridge_api.py`
+  - `<repo-root>/tests/test_bridge_api_contract.py`
+  - `<repo-root>/tests/test_phase6_retry_failed_job_evaluations_pytest.py`
+
+### Validation
+
+- Local validation:
+  - `./.venv/bin/python -m pytest -q tests/test_bridge_api_contract.py -k "phase6_jobs_endpoint_returns_evaluation_error or phase6_get_job_endpoint_returns_evaluation_error"`
+  - `./.venv/bin/python -m pytest -q tests/test_phase6_retry_failed_job_evaluations_pytest.py`
+
+### Results
+
+- Failed evaluation triage is now visible through the existing `/v1/jobs` and `/v1/jobs/{jobId}` reads instead of being trapped only in persisted Qdrant payloads.
+- Operators now have a one-command path to inspect and rerun failed Phase 6 evaluations, which directly supports the remaining evaluation-coverage cleanup noted in prior Phase 6 logs.
+
 ## 2026-03-19 - Workflow 4 zero-item webhook response hardened and n8n import activation fix scripted
 
 ### What was executed

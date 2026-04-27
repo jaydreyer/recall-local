@@ -23,6 +23,7 @@ if str(ROOT) not in sys.path:
 
 from scripts.phase1.group_model import DEFAULT_GROUP, normalize_group  # noqa: E402
 from scripts.phase1.ingestion_pipeline import IngestRequest, ingest_request  # noqa: E402
+from scripts.shared_time import now_iso  # noqa: E402
 
 DEFAULT_VAULT_PATH = "~/obsidian-vault"
 DEFAULT_EXCLUDE_DIRS = ".obsidian,.trash,_attachments,recall-artifacts"
@@ -92,7 +93,7 @@ def run_vault_sync_once(
 
     ingested: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
-    synced_at = _now_iso()
+    synced_at = now_iso()
 
     for note in changed_notes:
         try:
@@ -190,7 +191,7 @@ def list_vault_tree(*, vault_path: str | Path | None = None) -> dict[str, Any]:
     return {
         "workflow": "workflow_05c_vault_tree",
         "vault_path": str(settings.vault_path),
-        "generated_at": _now_iso(),
+        "generated_at": now_iso(),
         "file_count": len(files),
         "tree": _build_tree([item["path"] for item in files]),
         "files": files,
@@ -205,7 +206,9 @@ def run_vault_sync_watch(
 ) -> int:
     settings = load_settings(vault_path=vault_path)
     _ensure_vault_exists(settings.vault_path)
-    print(json.dumps(run_vault_sync_once(vault_path=settings.vault_path, dry_run=dry_run, max_files=max_files), indent=2))
+    print(
+        json.dumps(run_vault_sync_once(vault_path=settings.vault_path, dry_run=dry_run, max_files=max_files), indent=2)
+    )
 
     try:
         from watchdog.events import FileSystemEvent, FileSystemEventHandler
@@ -438,7 +441,9 @@ def _scan_vault_notes(vault_path: Path, *, exclude_dirs: set[str]) -> list[Vault
                 absolute_path=file_path,
                 relative_path=relative_path,
                 content_hash=file_hash,
-                modified_at_iso=datetime.fromtimestamp(file_path.stat().st_mtime, tz=timezone.utc).isoformat(timespec="seconds"),
+                modified_at_iso=datetime.fromtimestamp(file_path.stat().st_mtime, tz=timezone.utc).isoformat(
+                    timespec="seconds"
+                ),
                 markdown=markdown,
             )
         )
@@ -483,7 +488,7 @@ def _upsert_state(state_db_path: Path, *, relative_path: str, content_hash: str)
                 content_hash=excluded.content_hash,
                 synced_at=excluded.synced_at
             """,
-            (relative_path, content_hash, _now_iso()),
+            (relative_path, content_hash, now_iso()),
         )
         conn.commit()
 
@@ -618,10 +623,6 @@ def _dedupe_preserving_order(values: list[str]) -> list[str]:
         seen.add(clean)
         deduped.append(clean)
     return deduped
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def parse_args() -> argparse.Namespace:

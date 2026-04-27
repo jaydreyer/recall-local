@@ -19,10 +19,6 @@ from scripts.shared_strings import slugify
 from scripts.shared_time import now_iso
 
 
-def _now_iso() -> str:
-    return now_iso()
-
-
 def _slugify(value: str) -> str:
     return slugify(value, fallback="job")
 
@@ -91,7 +87,7 @@ def _save_to_vault(*, job: dict[str, Any], draft_text: str) -> str | None:
             [
                 f"# Cover Letter Draft - {job.get('company')} - {job.get('title')}",
                 "",
-                f"Generated: {_now_iso()}",
+                f"Generated: {now_iso()}",
                 f"Job ID: {job.get('jobId')}",
                 f"Posting: {job.get('url') or 'n/a'}",
                 "",
@@ -133,7 +129,9 @@ def generate_cover_letter_draft(
     else:
         draft = _call_ollama(prompt=prompt, settings=runtime_settings)
         provider = "ollama"
-        model = str(runtime_settings.get("local_model") or os.getenv("RECALL_PHASE6_EVAL_LOCAL_MODEL") or "llama3.2:3b").strip()
+        model = str(
+            runtime_settings.get("local_model") or os.getenv("RECALL_PHASE6_EVAL_LOCAL_MODEL") or "llama3.2:3b"
+        ).strip()
 
     cleaned_draft = _clean_draft(draft)
     vault_path = _save_to_vault(job=job, draft_text=cleaned_draft) if save_to_vault else None
@@ -143,7 +141,7 @@ def generate_cover_letter_draft(
         "job_id": normalized_job_id,
         "provider": provider,
         "model": model,
-        "generated_at": _now_iso(),
+        "generated_at": now_iso(),
         "word_count": len([word for word in cleaned_draft.split() if word]),
         "draft": cleaned_draft,
         "saved_to_vault": vault_path is not None,

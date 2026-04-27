@@ -25,6 +25,7 @@ if str(ROOT) not in sys.path:
 
 from scripts import llm_client  # noqa: E402
 from scripts.phase1.ingestion_pipeline import qdrant_client_from_env  # noqa: E402
+from scripts.shared_time import now_iso  # noqa: E402
 from scripts.validate_output import ValidationResult, validate_meeting_output  # noqa: E402
 
 
@@ -92,7 +93,7 @@ def run_meeting_action_items(
     normalized_source = source_ref or f"meeting:{source_channel}"
     normalized_tags = _dedupe_tags(tags or [])
 
-    started_at = _now_iso()
+    started_at = now_iso()
     started_perf = time.perf_counter()
     run_id = uuid.uuid4().hex
 
@@ -149,7 +150,7 @@ def run_meeting_action_items(
         provider = os.getenv("RECALL_LLM_PROVIDER", "ollama")
         response["audit"] = {
             "run_id": run_id,
-            "timestamp": _now_iso(),
+            "timestamp": now_iso(),
             "workflow": "workflow_03_meeting_action_items",
             "provider": provider,
             "model": _active_model_name(provider),
@@ -168,7 +169,7 @@ def run_meeting_action_items(
             _mark_run_completed(
                 conn=conn,
                 run_id=run_id,
-                ended_at=_now_iso(),
+                ended_at=now_iso(),
                 latency_ms=latency_ms,
                 model=response["audit"]["model"],
                 output_path=artifact_path,
@@ -180,7 +181,7 @@ def run_meeting_action_items(
             _mark_run_failed(
                 conn=conn,
                 run_id=run_id,
-                ended_at=_now_iso(),
+                ended_at=now_iso(),
                 latency_ms=int((time.perf_counter() - started_perf) * 1000),
             )
         raise
@@ -300,7 +301,7 @@ def _write_markdown_artifact(
     lines.append(f"# {payload['meeting_title']}")
     lines.append("")
     lines.append(f"- run_id: `{run_id}`")
-    lines.append(f"- generated_at: `{_now_iso()}`")
+    lines.append(f"- generated_at: `{now_iso()}`")
     lines.append(f"- source_channel: `{source_channel}`")
     lines.append(f"- source_ref: `{source_ref}`")
     lines.append(f"- tags: `{', '.join(tags) if tags else 'none'}`")
@@ -376,7 +377,7 @@ def _upsert_meeting_summary(
         follow_ups=follow_ups,
     )
     embedding = llm_client.embed(summary_text)
-    created_at = _now_iso()
+    created_at = now_iso()
     payload = {
         "source": source_ref,
         "source_type": "meeting",
@@ -562,10 +563,6 @@ def _require_module(module_name: str, install_hint: str):
 
 def _artifact_stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def parse_args() -> argparse.Namespace:

@@ -87,7 +87,10 @@ def test_ground_evaluation_to_context_adds_explicit_gap_and_removes_conflicting_
         evaluation={
             "matching_skills": [
                 {"skill": "Technical problem solving", "evidence": "Led API platform enablement."},
-                {"skill": "Customer and stakeholder partnership", "evidence": "Worked with product and engineering leaders."},
+                {
+                    "skill": "Customer and stakeholder partnership",
+                    "evidence": "Worked with product and engineering leaders.",
+                },
             ],
             "gaps": [{"gap": "Technical problem solving", "severity": "moderate", "recommendations": []}],
             "scorecard": {
@@ -125,3 +128,69 @@ def test_evaluate_jobs_keeps_batch_running_when_one_job_fails(monkeypatch: pytes
     assert result["results"][0]["status"] == "completed"
     assert result["results"][1]["status"] == "error"
     assert "broken row" in result["results"][1]["error"]
+
+
+def test_parse_evaluation_defaults_missing_gaps_to_empty_list() -> None:
+    parsed = job_evaluator.parse_evaluation(
+        """
+        {
+          "matching_skills": [{"skill": "API design", "evidence": "Built API programs"}],
+          "scorecard": {
+            "role_alignment": 4,
+            "technical_alignment": 4,
+            "domain_alignment": 4,
+            "seniority_alignment": 3,
+            "communication_alignment": 4
+          }
+        }
+        """
+    )
+
+    assert parsed["gaps"] == []
+    assert parsed["score_rationale"].startswith("Recovered structured evaluation")
+
+
+def test_parse_evaluation_defaults_missing_matching_skills_to_empty_list() -> None:
+    parsed = job_evaluator.parse_evaluation(
+        """
+        {
+          "gaps": [],
+          "scorecard": {
+            "role_alignment": 4,
+            "technical_alignment": 4,
+            "domain_alignment": 4,
+            "seniority_alignment": 3,
+            "communication_alignment": 4
+          }
+        }
+        """
+    )
+
+    assert parsed["matching_skills"] == []
+    assert parsed["score_rationale"].startswith("Recovered structured evaluation")
+
+
+def test_parse_evaluation_uses_alternate_rationale_field_when_primary_missing() -> None:
+    parsed = job_evaluator.parse_evaluation(
+        """
+        {
+          "rationale": "Strong overlap with API and enablement work.",
+          "matching_skills": [{"skill": "API design", "evidence": "Built API programs"}],
+          "gaps": [],
+          "scorecard": {
+            "role_alignment": 4,
+            "technical_alignment": 4,
+            "domain_alignment": 4,
+            "seniority_alignment": 3,
+            "communication_alignment": 4
+          }
+        }
+        """
+    )
+
+    assert parsed["score_rationale"] == "Strong overlap with API and enablement work."
+
+
+def test_parse_evaluation_raises_specific_error_when_no_json_object_exists() -> None:
+    with pytest.raises(job_evaluator.MalformedResponseError, match="Could not find a JSON object"):
+        job_evaluator.parse_evaluation("I think this role is a decent fit, but here is my reasoning in prose only.")

@@ -60,13 +60,36 @@ REQUIREMENT_GAP_HINTS = (
     },
     {
         "label": "Commercial closing and sales cycle ownership",
-        "job_keywords": ("closing", "close new business", "sales cycle", "sales cycles", "full-cycle", "negotiate", "negotiation", "commercial terms"),
-        "resume_keywords": ("closed deals", "owned sales cycle", "negotiated contracts", "full-cycle sales", "carried commercial pipeline"),
+        "job_keywords": (
+            "closing",
+            "close new business",
+            "sales cycle",
+            "sales cycles",
+            "full-cycle",
+            "negotiate",
+            "negotiation",
+            "commercial terms",
+        ),
+        "resume_keywords": (
+            "closed deals",
+            "owned sales cycle",
+            "negotiated contracts",
+            "full-cycle sales",
+            "carried commercial pipeline",
+        ),
         "severity": "critical",
     },
     {
         "label": "Account management and renewals",
-        "job_keywords": ("renewal", "renewals", "account manager", "account management", "technical account manager", "tam", "strategic customer relationships"),
+        "job_keywords": (
+            "renewal",
+            "renewals",
+            "account manager",
+            "account management",
+            "technical account manager",
+            "tam",
+            "strategic customer relationships",
+        ),
         "resume_keywords": ("owned renewals", "renewal book", "account management", "managed named accounts"),
         "severity": "moderate",
     },
@@ -93,7 +116,13 @@ REQUIREMENT_MATCH_HINTS = (
     {
         "label": "Solutions architecture",
         "job_keywords": ("architecture", "architectures", "implementation programs", "deployment planning"),
-        "resume_keywords": ("api developer experience", "platform adoption", "rollout planning", "implementation", "architecture"),
+        "resume_keywords": (
+            "api developer experience",
+            "platform adoption",
+            "rollout planning",
+            "implementation",
+            "architecture",
+        ),
         "evidence": "Background includes platform adoption, implementation planning, and API ecosystem design.",
     },
     {
@@ -138,10 +167,6 @@ SKILL_NOISE_TOKENS = {
 }
 
 
-def _now_iso() -> str:
-    return now_iso()
-
-
 def queue_job_evaluations(
     *,
     job_ids: list[str],
@@ -162,7 +187,7 @@ def queue_job_evaluations(
                 "job_ids": unique_ids,
                 "status": "completed",
                 "wait": True,
-                "triggered_at": _now_iso(),
+                "triggered_at": now_iso(),
                 "latency_ms": int((time.perf_counter() - started) * 1000),
                 "settings": resolved_settings,
                 "message": f"Evaluated {result.get('evaluated', 0)} jobs.",
@@ -177,7 +202,7 @@ def queue_job_evaluations(
                 "job_ids": unique_ids,
                 "result": result,
                 "started_at": result.get("triggered_at"),
-                "ended_at": _now_iso(),
+                "ended_at": now_iso(),
             },
         )
         return result
@@ -190,7 +215,7 @@ def queue_job_evaluations(
             "queued": len(unique_ids),
             "job_ids": unique_ids,
             "settings": resolved_settings,
-            "triggered_at": _now_iso(),
+            "triggered_at": now_iso(),
             "started_at": None,
             "ended_at": None,
             "result": None,
@@ -215,21 +240,21 @@ def queue_job_evaluations(
         "job_ids": unique_ids,
         "status": "queued",
         "wait": False,
-        "triggered_at": _now_iso(),
+        "triggered_at": now_iso(),
         "settings": resolved_settings,
         "message": "Job evaluation run queued.",
     }
 
 
 def _run_job_eval_background(*, run_id: str, job_ids: list[str], settings: dict[str, Any]) -> None:
-    _update_job_eval_run(run_id, status="running", started_at=_now_iso())
+    _update_job_eval_run(run_id, status="running", started_at=now_iso())
     try:
         result = _evaluate_jobs(job_ids=job_ids, settings=settings)
     except Exception as exc:  # noqa: BLE001
-        _update_job_eval_run(run_id, status="failed", ended_at=_now_iso(), error=str(exc), result=None)
+        _update_job_eval_run(run_id, status="failed", ended_at=now_iso(), error=str(exc), result=None)
         return
 
-    _update_job_eval_run(run_id, status="completed", ended_at=_now_iso(), result=result, error=None)
+    _update_job_eval_run(run_id, status="completed", ended_at=now_iso(), result=result, error=None)
 
 
 def _evaluate_jobs(*, job_ids: list[str], settings: dict[str, Any]) -> dict[str, Any]:
@@ -290,21 +315,30 @@ def evaluate_job(*, job_id: str, settings: dict[str, Any]) -> dict[str, Any]:
     prompt = _build_evaluation_prompt(job=job, resume_text=resume_text)
     model_mode = str(settings.get("evaluation_model", "local")).strip().lower()
 
-    first_response = _call_cloud(prompt=prompt, settings=settings) if model_mode == "cloud" else _call_ollama(prompt=prompt, settings=settings)
+    first_response = (
+        _call_cloud(prompt=prompt, settings=settings)
+        if model_mode == "cloud"
+        else _call_ollama(prompt=prompt, settings=settings)
+    )
     evaluation = _parse_with_retry(
         first_response=first_response,
         prompt=prompt,
         settings=settings,
         retry_mode=model_mode,
     )
+    parse_recovery_mode = str(evaluation.pop("_parse_recovery_mode", "") or "")
     evaluation = _ground_evaluation_to_context(job=job, resume_text=resume_text, evaluation=evaluation)
 
     # Local-first is the default posture. We only pay the cloud cost when the
     # local result looks uncertain enough to justify escalation.
     escalation_reasons = _escalation_reasons(evaluation=evaluation, settings=settings) if model_mode == "local" else []
+    if parse_recovery_mode == "cloud_repair" and "malformed_local_output" not in escalation_reasons:
+        escalation_reasons = ["malformed_local_output", *escalation_reasons]
     escalated = model_mode == "local" and bool(escalation_reasons)
 
-    if escalated:
+    if parse_recovery_mode == "cloud_repair":
+        evaluation["evaluation_model"] = "cloud_repaired"
+    elif escalated:
         cloud_response = _call_cloud(prompt=prompt, settings=settings)
         cloud_eval = _parse_with_retry(
             first_response=cloud_response,
@@ -352,10 +386,11 @@ def _parse_with_retry(
 ) -> dict[str, Any]:
     try:
         return parse_evaluation(first_response)
-    except MalformedResponseError:
-        strict_prompt = (
-            "IMPORTANT: Return ONLY a JSON object. No explanation, no markdown, no code fences.\n\n"
-            f"{prompt}"
+    except MalformedResponseError as first_exc:
+        strict_prompt = _build_repair_prompt(
+            prompt=prompt,
+            malformed_response=first_response,
+            failure_reason=str(first_exc),
         )
         retry_response = (
             _call_cloud(prompt=strict_prompt, settings=settings)
@@ -363,8 +398,20 @@ def _parse_with_retry(
             else _call_ollama(prompt=strict_prompt, settings=settings)
         )
         try:
-            return parse_evaluation(retry_response)
+            parsed = parse_evaluation(retry_response)
+            parsed["_parse_recovery_mode"] = f"{retry_mode}_repair"
+            return parsed
         except MalformedResponseError as exc:
+            if retry_mode == "local" and _cloud_escalation_available(settings):
+                cloud_repair_response = _call_cloud(prompt=strict_prompt, settings=settings)
+                try:
+                    parsed = parse_evaluation(cloud_repair_response)
+                    parsed["_parse_recovery_mode"] = "cloud_repair"
+                    return parsed
+                except MalformedResponseError as cloud_exc:
+                    raise RuntimeError(
+                        f"LLM returned malformed evaluation JSON after retry and cloud repair: {cloud_exc}"
+                    ) from cloud_exc
             raise RuntimeError(f"LLM returned malformed evaluation JSON after retry: {exc}") from exc
 
 
@@ -378,19 +425,21 @@ def parse_evaluation(response_text: str) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise MalformedResponseError("Evaluation payload must be a JSON object.")
 
-    required_keys = ["score_rationale", "matching_skills", "gaps", "scorecard"]
+    required_keys = ["scorecard"]
     for key in required_keys:
         if key not in data:
             raise MalformedResponseError(f"Missing required key: {key}")
 
-    score_rationale = str(data.get("score_rationale") or "").strip()
-    if not score_rationale:
-        raise MalformedResponseError("score_rationale must be non-empty")
-
-    matching_skills = _normalize_matching_skills(data.get("matching_skills"))
-    gaps = _normalize_gaps(data.get("gaps"))
+    matching_skills = _normalize_matching_skills(data.get("matching_skills", []))
+    gaps = _normalize_gaps(data.get("gaps", []))
     matching_skills, gaps = _resolve_signal_conflicts(matching_skills=matching_skills, gaps=gaps)
     scorecard = _normalize_scorecard(data.get("scorecard"))
+    score_rationale = _coerce_score_rationale(
+        data=data,
+        matching_skills=matching_skills,
+        gaps=gaps,
+        scorecard=scorecard,
+    )
     fit_score = _compute_fit_score(scorecard=scorecard, matching_skills=matching_skills, gaps=gaps)
     raw_model_fit_score = None
     if "fit_score" in data and data.get("fit_score") not in (None, ""):
@@ -409,6 +458,77 @@ def parse_evaluation(response_text: str) -> dict[str, Any]:
         "application_tips": str(data.get("application_tips") or "").strip(),
         "cover_letter_angle": str(data.get("cover_letter_angle") or "").strip(),
     }
+
+
+def _build_repair_prompt(*, prompt: str, malformed_response: str, failure_reason: str = "") -> str:
+    response_excerpt = str(malformed_response or "").strip() or "[empty response]"
+    shared_prefix = (
+        "IMPORTANT: Return ONLY a JSON object. No explanation, no markdown, no code fences.\n\n"
+        "You previously answered a Recall.local job evaluation request with malformed output.\n"
+    )
+    shared_schema = (
+        "Return exactly one JSON object with this shape:\n"
+        "{\n"
+        '  "score_rationale": "<concise rationale>",\n'
+        '  "matching_skills": [{"skill": "<skill>", "evidence": "<resume evidence>"}],\n'
+        '  "gaps": [{"gap": "<gap>", "severity": "critical|moderate|minor", "recommendations": []}],\n'
+        '  "scorecard": {\n'
+        '    "role_alignment": 1,\n'
+        '    "technical_alignment": 1,\n'
+        '    "domain_alignment": 1,\n'
+        '    "seniority_alignment": 1,\n'
+        '    "communication_alignment": 1\n'
+        "  },\n"
+        '  "application_tips": "",\n'
+        '  "cover_letter_angle": ""\n'
+        "}\n\n"
+        "Rules:\n"
+        "- Use [] when matching_skills or gaps are missing.\n"
+        "- If score_rationale is missing, write a concise rationale grounded in the available output.\n"
+        "- scorecard must use 1-5 integer values for role_alignment, technical_alignment, domain_alignment, seniority_alignment, and communication_alignment.\n"
+    )
+
+    if _failure_is_no_json_object(failure_reason):
+        return (
+            f"{shared_prefix}"
+            "The previous answer did not include any JSON object at all.\n"
+            "Do not try to preserve prose formatting from that answer. Re-run the evaluation from the original prompt and respond fresh as valid JSON.\n\n"
+            f"{shared_schema}"
+            f"Original evaluation prompt:\n{prompt}\n\n"
+            f"Previous non-JSON response:\n{response_excerpt}"
+        )
+
+    return (
+        f"{shared_prefix}"
+        "Rewrite that answer as one valid JSON object.\n\n"
+        f"{shared_schema}"
+        "- Preserve the underlying evaluation intent from the malformed response when possible.\n\n"
+        f"Original evaluation prompt:\n{prompt}\n\n"
+        f"Malformed response to repair:\n{response_excerpt}"
+    )
+
+
+def _coerce_score_rationale(
+    *,
+    data: dict[str, Any],
+    matching_skills: list[dict[str, Any]],
+    gaps: list[dict[str, Any]],
+    scorecard: dict[str, int],
+) -> str:
+    for key in ("score_rationale", "rationale", "summary", "reasoning", "fit_rationale"):
+        value = str(data.get(key) or "").strip()
+        if value:
+            return value
+
+    strongest_signals = ", ".join(item["skill"] for item in matching_skills[:2]) or "documented role alignment"
+    gap_summary = (
+        "no major gaps identified" if not gaps else f"{len(gaps)} gap{'s' if len(gaps) != 1 else ''} identified"
+    )
+    average_alignment = round(sum(scorecard.values()) / max(len(scorecard), 1), 1)
+    return (
+        f"Recovered structured evaluation with average alignment {average_alignment}/5, "
+        f"highlighting {strongest_signals}; {gap_summary}."
+    )
 
 
 def _should_escalate(*, evaluation: dict[str, Any], settings: dict[str, Any]) -> bool:
@@ -482,9 +602,7 @@ def _build_observation(
 
     provider_sequence = "local->cloud" if escalated else initial_mode
     escalation_enabled = (
-        bool(settings.get("auto_escalate", False))
-        and initial_mode == "local"
-        and _cloud_escalation_available(settings)
+        bool(settings.get("auto_escalate", False)) and initial_mode == "local" and _cloud_escalation_available(settings)
     )
     return {
         "provider_sequence": provider_sequence,
@@ -756,6 +874,11 @@ def _clean_response_json(raw: str) -> str:
     if candidate is None:
         raise MalformedResponseError("Could not find a JSON object in model response.")
     return candidate
+
+
+def _failure_is_no_json_object(message: str) -> bool:
+    normalized = str(message or "").strip().lower()
+    return "could not find a json object" in normalized
 
 
 def _extract_first_json_object(text: str) -> str | None:
@@ -1101,7 +1224,7 @@ def _store_evaluation(*, job_id: str, evaluation: dict[str, Any]) -> None:
             "gaps": evaluation.get("gaps") or [],
             "application_tips": str(evaluation.get("application_tips") or ""),
             "cover_letter_angle": str(evaluation.get("cover_letter_angle") or ""),
-            "evaluated_at": _now_iso(),
+            "evaluated_at": now_iso(),
             "status": "evaluated",
             "evaluation_model": evaluation.get("evaluation_model"),
             "observation": evaluation.get("observation") or {},
@@ -1130,7 +1253,7 @@ def _store_error(*, job_id: str, error_message: str) -> None:
             "gaps": [],
             "application_tips": "",
             "cover_letter_angle": "",
-            "evaluated_at": _now_iso(),
+            "evaluated_at": now_iso(),
             "status": "error",
             "observation": payload.get("observation") or {},
             "evaluation_error": error_message,
@@ -1174,9 +1297,7 @@ def _load_runtime_settings(overrides: dict[str, Any] | None) -> dict[str, Any]:
 
 def _normalize_runtime_settings(settings: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(settings)
-    normalized["evaluation_model"] = (
-        str(normalized.get("evaluation_model") or "local").strip().lower()
-    )
+    normalized["evaluation_model"] = str(normalized.get("evaluation_model") or "local").strip().lower()
     if normalized["evaluation_model"] not in {"local", "cloud"}:
         normalized["evaluation_model"] = "local"
 

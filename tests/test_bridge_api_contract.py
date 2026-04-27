@@ -46,7 +46,11 @@ class BridgeApiContractTests(unittest.TestCase):
 
     def test_dashboard_checks_uses_warmed_gap_section_when_available(self) -> None:
         warmer = SimpleNamespace(
-            warmed_gap_section=lambda: {"status": "ok", "count": 7, "detail": "7 aggregated gaps across 4 evaluated jobs"},
+            warmed_gap_section=lambda: {
+                "status": "ok",
+                "count": 7,
+                "detail": "7 aggregated gaps across 4 evaluated jobs",
+            },
             snapshot=lambda: {
                 "enabled": True,
                 "interval_seconds": 300,
@@ -56,24 +60,30 @@ class BridgeApiContractTests(unittest.TestCase):
             },
         )
 
-        with patch(
-            "scripts.phase1.ingest_bridge_api.phase6_list_jobs",
-            return_value={"total": 12, "items": [{"jobId": "job-1"}]},
-        ), patch(
-            "scripts.phase1.ingest_bridge_api.phase6_job_stats",
-            return_value={"total_jobs": 12, "high_fit_count": 3},
-        ), patch(
-            "scripts.phase1.ingest_bridge_api.phase6_all_jobs",
-            return_value=[
-                self._fresh_job(source="jobspy", company="OpenAI"),
-                self._fresh_job(source="career_page", company="Target"),
-            ],
-        ), patch(
-            "scripts.phase1.ingest_bridge_api.phase6_list_company_profiles",
-            return_value=[{"company_id": "openai", "company_name": "OpenAI"}],
-        ), patch(
-            "scripts.phase1.ingest_bridge_api.phase6_aggregate_gaps",
-        ) as aggregate_mock:
+        with (
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_list_jobs",
+                return_value={"total": 12, "items": [{"jobId": "job-1"}]},
+            ),
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_job_stats",
+                return_value={"total_jobs": 12, "high_fit_count": 3},
+            ),
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_all_jobs",
+                return_value=[
+                    self._fresh_job(source="jobspy", company="OpenAI"),
+                    self._fresh_job(source="career_page", company="Target"),
+                ],
+            ),
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_list_company_profiles",
+                return_value=[{"company_id": "openai", "company_name": "OpenAI"}],
+            ),
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_aggregate_gaps",
+            ) as aggregate_mock,
+        ):
             payload = ingest_bridge_api._dashboard_checks_payload(include_gaps=True, cache_warmer=warmer)
 
         self.assertEqual(payload["status"], "ok")
@@ -93,24 +103,30 @@ class BridgeApiContractTests(unittest.TestCase):
             },
         )
 
-        with patch(
-            "scripts.phase1.ingest_bridge_api.phase6_list_jobs",
-            return_value={"total": 12, "items": [{"jobId": "job-1"}]},
-        ), patch(
-            "scripts.phase1.ingest_bridge_api.phase6_job_stats",
-            return_value={"total_jobs": 12, "high_fit_count": 3},
-        ), patch(
-            "scripts.phase1.ingest_bridge_api.phase6_all_jobs",
-            return_value=[
-                self._fresh_job(source="jobspy", company="OpenAI"),
-                self._fresh_job(source="career_page", company="Target"),
-            ],
-        ), patch(
-            "scripts.phase1.ingest_bridge_api.phase6_list_company_profiles",
-            return_value=[{"company_id": "openai", "company_name": "OpenAI"}],
-        ), patch(
-            "scripts.phase1.ingest_bridge_api.phase6_aggregate_gaps",
-        ) as aggregate_mock:
+        with (
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_list_jobs",
+                return_value={"total": 12, "items": [{"jobId": "job-1"}]},
+            ),
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_job_stats",
+                return_value={"total_jobs": 12, "high_fit_count": 3},
+            ),
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_all_jobs",
+                return_value=[
+                    self._fresh_job(source="jobspy", company="OpenAI"),
+                    self._fresh_job(source="career_page", company="Target"),
+                ],
+            ),
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_list_company_profiles",
+                return_value=[{"company_id": "openai", "company_name": "OpenAI"}],
+            ),
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_aggregate_gaps",
+            ) as aggregate_mock,
+        ):
             payload = ingest_bridge_api._dashboard_checks_payload(include_gaps=True, cache_warmer=warmer)
 
         self.assertEqual(payload["status"], "degraded")
@@ -130,25 +146,31 @@ class BridgeApiContractTests(unittest.TestCase):
         }
         fresh_career_page = self._fresh_job(source="career_page", company="Target")
 
-        with patch.dict(
-            os.environ,
-            {
-                "RECALL_DASHBOARD_FRESHNESS_SOURCES": "jobspy,career_page",
-                "RECALL_DASHBOARD_MAX_SOURCE_AGE_HOURS": "168",
-            },
-            clear=False,
-        ), patch(
-            "scripts.phase1.ingest_bridge_api.phase6_list_jobs",
-            return_value={"total": 12, "items": [{"jobId": "job-1"}]},
-        ), patch(
-            "scripts.phase1.ingest_bridge_api.phase6_job_stats",
-            return_value={"total_jobs": 12, "high_fit_count": 3},
-        ), patch(
-            "scripts.phase1.ingest_bridge_api.phase6_all_jobs",
-            return_value=[stale_jobspy, fresh_career_page],
-        ), patch(
-            "scripts.phase1.ingest_bridge_api.phase6_list_company_profiles",
-            return_value=[{"company_id": "openai", "company_name": "OpenAI"}],
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "RECALL_DASHBOARD_FRESHNESS_SOURCES": "jobspy,career_page",
+                    "RECALL_DASHBOARD_MAX_SOURCE_AGE_HOURS": "168",
+                },
+                clear=False,
+            ),
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_list_jobs",
+                return_value={"total": 12, "items": [{"jobId": "job-1"}]},
+            ),
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_job_stats",
+                return_value={"total_jobs": 12, "high_fit_count": 3},
+            ),
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_all_jobs",
+                return_value=[stale_jobspy, fresh_career_page],
+            ),
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_list_company_profiles",
+                return_value=[{"company_id": "openai", "company_name": "OpenAI"}],
+            ),
         ):
             payload = ingest_bridge_api._dashboard_checks_payload(include_gaps=False, cache_warmer=None)
 
@@ -531,7 +553,9 @@ class BridgeApiContractTests(unittest.TestCase):
             "message": "Prepared 1 follow-up reminder item and skipped 2 jobs.",
         }
 
-        with patch("scripts.phase1.bridge_routes_phase6.phase6_queue_follow_up_reminder_runs", return_value=run_payload) as run_mock:
+        with patch(
+            "scripts.phase1.bridge_routes_phase6.phase6_queue_follow_up_reminder_runs", return_value=run_payload
+        ) as run_mock:
             with build_client(env) as client:
                 response = client.post(
                     "/v1/follow-up-reminder-runs",
@@ -576,7 +600,9 @@ class BridgeApiContractTests(unittest.TestCase):
             "message": "Prepared 0 follow-up reminder items and skipped 4 jobs.",
         }
 
-        with patch("scripts.phase1.bridge_routes_phase6.phase6_queue_follow_up_reminder_runs", return_value=run_payload) as run_mock:
+        with patch(
+            "scripts.phase1.bridge_routes_phase6.phase6_queue_follow_up_reminder_runs", return_value=run_payload
+        ) as run_mock:
             with build_client(env) as client:
                 response = client.post(
                     "/v1/follow-up-reminder-runs",
@@ -710,7 +736,9 @@ class BridgeApiContractTests(unittest.TestCase):
             "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
             "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
         }
-        with patch("scripts.phase1.ingest_bridge_api.run_rag_query", return_value={"answer": "ok", "audit": {}}) as mock_rag:
+        with patch(
+            "scripts.phase1.ingest_bridge_api.run_rag_query", return_value={"answer": "ok", "audit": {}}
+        ) as mock_rag:
             with build_client(env) as client:
                 response = client.post(
                     "/v1/rag-queries?dry_run=true",
@@ -753,21 +781,30 @@ class BridgeApiContractTests(unittest.TestCase):
             "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
             "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
         }
-        with patch("scripts.phase1.ingest_bridge_api.phase6_list_jobs", return_value={"total": 12, "items": [{"jobId": "job-1"}]}), patch(
-            "scripts.phase1.ingest_bridge_api.phase6_job_stats",
-            return_value={"total_jobs": 12, "high_fit_count": 3},
-        ), patch(
-            "scripts.phase1.ingest_bridge_api.phase6_all_jobs",
-            return_value=[
-                self._fresh_job(source="jobspy", company="OpenAI"),
-                self._fresh_job(source="career_page", company="Target"),
-            ],
-        ), patch(
-            "scripts.phase1.ingest_bridge_api.phase6_list_company_profiles",
-            return_value=[{"company_id": "openai", "company_name": "OpenAI"}],
-        ), patch(
-            "scripts.phase1.ingest_bridge_api.phase6_aggregate_gaps",
-            return_value={"aggregated_gaps": [{"gap": "Kubernetes"}], "total_jobs_analyzed": 4},
+        with (
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_list_jobs",
+                return_value={"total": 12, "items": [{"jobId": "job-1"}]},
+            ),
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_job_stats",
+                return_value={"total_jobs": 12, "high_fit_count": 3},
+            ),
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_all_jobs",
+                return_value=[
+                    self._fresh_job(source="jobspy", company="OpenAI"),
+                    self._fresh_job(source="career_page", company="Target"),
+                ],
+            ),
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_list_company_profiles",
+                return_value=[{"company_id": "openai", "company_name": "OpenAI"}],
+            ),
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_aggregate_gaps",
+                return_value={"aggregated_gaps": [{"gap": "Kubernetes"}], "total_jobs_analyzed": 4},
+            ),
         ):
             with build_client(env) as client:
                 response = client.get("/v1/dashboard-checks")
@@ -874,7 +911,9 @@ class BridgeApiContractTests(unittest.TestCase):
             "generated_at": "2026-02-24T18:35:12+00:00",
             "file_count": 1,
             "tree": {"name": ".", "type": "directory", "children": []},
-            "files": [{"path": "notes/a.md", "title": "a", "group": "reference", "modified_at": "2026-02-24T18:30:00+00:00"}],
+            "files": [
+                {"path": "notes/a.md", "title": "a", "group": "reference", "modified_at": "2026-02-24T18:30:00+00:00"}
+            ],
         }
         with patch("scripts.phase1.ingest_bridge_api.list_vault_tree", return_value=payload):
             with build_client(env) as client:
@@ -909,7 +948,9 @@ class BridgeApiContractTests(unittest.TestCase):
         }
         with patch("scripts.phase1.ingest_bridge_api.run_vault_sync_once", return_value=sync_payload) as mock_sync:
             with build_client(env) as client:
-                response = client.post("/v1/vault-syncs", json={"dry_run": True, "max_files": 5, "vault_path": "/tmp/vault"})
+                response = client.post(
+                    "/v1/vault-syncs", json={"dry_run": True, "max_files": 5, "vault_path": "/tmp/vault"}
+                )
                 alias = client.post("/v1/vault/sync", json={"dry_run": True})
 
         self.assertEqual(response.status_code, 200)
@@ -1095,7 +1136,9 @@ class BridgeApiContractTests(unittest.TestCase):
             "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
         }
         with build_client(env) as client:
-            response = client.post("/v1/ingestions?dry_run=true", json={"type": "url", "content": "https://example.com"})
+            response = client.post(
+                "/v1/ingestions?dry_run=true", json={"type": "url", "content": "https://example.com"}
+            )
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"]["code"], "validation_failed")
@@ -1278,7 +1321,10 @@ class BridgeApiContractTests(unittest.TestCase):
             "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
             "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
         }
-        with patch("scripts.phase1.ingest_bridge_api.phase6_list_jobs", return_value={"total": 0, "limit": 50, "offset": 0, "items": []}) as mocked:
+        with patch(
+            "scripts.phase1.ingest_bridge_api.phase6_list_jobs",
+            return_value={"total": 0, "limit": 50, "offset": 0, "items": []},
+        ) as mocked:
             with build_client(env) as client:
                 response = client.get("/v1/jobs?status=new&min_score=-1&limit=5")
                 invalid = client.get("/v1/jobs?status=new&min_score=-2&limit=5")
@@ -1295,7 +1341,10 @@ class BridgeApiContractTests(unittest.TestCase):
             "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
             "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
         }
-        with patch("scripts.phase1.ingest_bridge_api.phase6_list_jobs", return_value={"total": 0, "limit": 50, "offset": 0, "items": []}) as mocked:
+        with patch(
+            "scripts.phase1.ingest_bridge_api.phase6_list_jobs",
+            return_value={"total": 0, "limit": 50, "offset": 0, "items": []},
+        ) as mocked:
             with build_client(env) as client:
                 response = client.get("/v1/jobs?status=all&limit=5")
 
@@ -1309,7 +1358,10 @@ class BridgeApiContractTests(unittest.TestCase):
             "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
             "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
         }
-        with patch("scripts.phase1.ingest_bridge_api.phase6_list_jobs", return_value={"total": 0, "limit": 50, "offset": 0, "items": []}) as mocked:
+        with patch(
+            "scripts.phase1.ingest_bridge_api.phase6_list_jobs",
+            return_value={"total": 0, "limit": 50, "offset": 0, "items": []},
+        ) as mocked:
             with build_client(env) as client:
                 response = client.get("/v1/jobs?search=openai%20remote%20demos&limit=5")
 
@@ -1323,7 +1375,10 @@ class BridgeApiContractTests(unittest.TestCase):
             "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
             "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
         }
-        with patch("scripts.phase1.ingest_bridge_api.phase6_list_jobs", return_value={"total": 0, "limit": 50, "offset": 0, "items": []}) as mocked:
+        with patch(
+            "scripts.phase1.ingest_bridge_api.phase6_list_jobs",
+            return_value={"total": 0, "limit": 50, "offset": 0, "items": []},
+        ) as mocked:
             with build_client(env) as client:
                 response = client.get("/v1/jobs?view=summary&limit=5")
                 invalid = client.get("/v1/jobs?view=compactest&limit=5")
@@ -1333,6 +1388,63 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertFalse(mocked.call_args.kwargs["include_details"])
         self.assertEqual(invalid.status_code, 400)
         self.assertEqual(invalid.json()["error"]["code"], "validation_failed")
+
+    def test_phase6_jobs_endpoint_returns_evaluation_error_for_failed_jobs(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        jobs_payload = {
+            "total": 1,
+            "limit": 50,
+            "offset": 0,
+            "items": [
+                {
+                    "jobId": "job-error-1",
+                    "title": "Solutions Engineer",
+                    "company": "OpenAI",
+                    "status": "error",
+                    "fit_score": -1,
+                    "source": "career_page",
+                    "evaluation_error": "LLM returned malformed evaluation JSON after retry: Missing required key: scorecard",
+                }
+            ],
+        }
+        with patch("scripts.phase1.ingest_bridge_api.phase6_list_jobs", return_value=jobs_payload):
+            with build_client(env) as client:
+                response = client.get("/v1/jobs?status=error&min_score=-1&limit=5")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json()["items"][0]["evaluation_error"],
+            "LLM returned malformed evaluation JSON after retry: Missing required key: scorecard",
+        )
+
+    def test_phase6_get_job_endpoint_returns_evaluation_error(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        job_payload = {
+            "jobId": "job-error-1",
+            "title": "Solutions Engineer",
+            "company": "OpenAI",
+            "status": "error",
+            "fit_score": -1,
+            "source": "career_page",
+            "evaluation_error": "LLM returned malformed evaluation JSON after retry: Missing required key: scorecard",
+        }
+        with patch("scripts.phase1.ingest_bridge_api.phase6_get_job", return_value=job_payload):
+            with build_client(env) as client:
+                response = client.get("/v1/jobs/job-error-1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json()["evaluation_error"],
+            "LLM returned malformed evaluation JSON after retry: Missing required key: scorecard",
+        )
 
     def test_phase6_llm_settings_patch_persists(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1404,7 +1516,9 @@ class BridgeApiContractTests(unittest.TestCase):
             "jobs_summary": {"highest_fit_score": 92},
         }
         with (
-            patch("scripts.phase1.ingest_bridge_api.phase6_upsert_tracked_company_config", return_value=saved) as mock_save,
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_upsert_tracked_company_config", return_value=saved
+            ) as mock_save,
             patch("scripts.phase1.ingest_bridge_api.phase6_update_company_tier", return_value=6) as mock_tier,
             patch("scripts.phase1.ingest_bridge_api.phase6_get_company_profile", return_value=profile),
             patch("scripts.phase1.ingest_bridge_api.phase6_all_jobs", return_value=[]),
@@ -1452,7 +1566,9 @@ class BridgeApiContractTests(unittest.TestCase):
         }
         with (
             patch("scripts.phase1.ingest_bridge_api.phase6_get_company_profile", side_effect=[current, updated]),
-            patch("scripts.phase1.ingest_bridge_api.phase6_upsert_tracked_company_config", return_value=saved) as mock_save,
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_upsert_tracked_company_config", return_value=saved
+            ) as mock_save,
             patch("scripts.phase1.ingest_bridge_api.phase6_update_company_tier", return_value=88) as mock_tier,
             patch("scripts.phase1.ingest_bridge_api.phase6_all_jobs", return_value=[]),
         ):
@@ -1479,7 +1595,9 @@ class BridgeApiContractTests(unittest.TestCase):
         }
         with (
             patch("scripts.phase1.ingest_bridge_api.phase6_all_jobs", return_value=[]),
-            patch("scripts.phase1.ingest_bridge_api.phase6_list_company_profiles", return_value=[{"company_id": "airbnb"}]) as mocked,
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_list_company_profiles", return_value=[{"company_id": "airbnb"}]
+            ) as mocked,
         ):
             with build_client(env) as client:
                 response = client.get("/v1/companies?limit=25&include_jobs=false")
@@ -1507,10 +1625,15 @@ class BridgeApiContractTests(unittest.TestCase):
             "saved_to_vault": False,
             "vault_path": None,
         }
-        with patch("scripts.phase1.ingest_bridge_api.phase6_generate_cover_letter_draft", return_value=fake_result) as mocked, patch(
-            "scripts.phase1.ingest_bridge_api.phase6_update_job",
-            return_value={"jobId": "job-1"},
-        ) as update_mock:
+        with (
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_generate_cover_letter_draft", return_value=fake_result
+            ) as mocked,
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_update_job",
+                return_value={"jobId": "job-1"},
+            ) as update_mock,
+        ):
             with build_client(env) as client:
                 response = client.post(
                     "/v1/cover-letter-drafts",
@@ -1563,10 +1686,15 @@ class BridgeApiContractTests(unittest.TestCase):
             "saved_to_vault": False,
             "vault_path": None,
         }
-        with patch("scripts.phase1.ingest_bridge_api.phase6_generate_tailored_summary", return_value=fake_result) as mocked, patch(
-            "scripts.phase1.ingest_bridge_api.phase6_update_job",
-            return_value={"jobId": "job-1"},
-        ) as update_mock:
+        with (
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_generate_tailored_summary", return_value=fake_result
+            ) as mocked,
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_update_job",
+                return_value={"jobId": "job-1"},
+            ) as update_mock,
+        ):
             with build_client(env) as client:
                 response = client.post(
                     "/v1/tailored-summaries",
@@ -1617,10 +1745,13 @@ class BridgeApiContractTests(unittest.TestCase):
             "saved_to_vault": False,
             "vault_path": None,
         }
-        with patch("scripts.phase1.ingest_bridge_api.phase6_generate_outreach_note", return_value=fake_result) as mocked, patch(
-            "scripts.phase1.ingest_bridge_api.phase6_update_job",
-            return_value={"jobId": "job-1"},
-        ) as update_mock:
+        with (
+            patch("scripts.phase1.ingest_bridge_api.phase6_generate_outreach_note", return_value=fake_result) as mocked,
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_update_job",
+                return_value={"jobId": "job-1"},
+            ) as update_mock,
+        ):
             with build_client(env) as client:
                 response = client.post(
                     "/v1/outreach-notes",
@@ -1672,10 +1803,15 @@ class BridgeApiContractTests(unittest.TestCase):
             "saved_to_vault": False,
             "vault_path": None,
         }
-        with patch("scripts.phase1.ingest_bridge_api.phase6_generate_resume_bullets", return_value=fake_result) as mocked, patch(
-            "scripts.phase1.ingest_bridge_api.phase6_update_job",
-            return_value={"jobId": "job-1"},
-        ) as update_mock:
+        with (
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_generate_resume_bullets", return_value=fake_result
+            ) as mocked,
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_update_job",
+                return_value={"jobId": "job-1"},
+            ) as update_mock,
+        ):
             with build_client(env) as client:
                 response = client.post(
                     "/v1/resume-bullets",
@@ -1726,10 +1862,15 @@ class BridgeApiContractTests(unittest.TestCase):
             "saved_to_vault": False,
             "vault_path": None,
         }
-        with patch("scripts.phase1.ingest_bridge_api.phase6_generate_interview_brief", return_value=fake_result) as mocked, patch(
-            "scripts.phase1.ingest_bridge_api.phase6_update_job",
-            return_value={"jobId": "job-1"},
-        ) as update_mock:
+        with (
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_generate_interview_brief", return_value=fake_result
+            ) as mocked,
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_update_job",
+                return_value={"jobId": "job-1"},
+            ) as update_mock,
+        ):
             with build_client(env) as client:
                 response = client.post(
                     "/v1/interview-briefs",
@@ -1781,10 +1922,15 @@ class BridgeApiContractTests(unittest.TestCase):
             "saved_to_vault": False,
             "vault_path": None,
         }
-        with patch("scripts.phase1.ingest_bridge_api.phase6_generate_talking_points", return_value=fake_result) as mocked, patch(
-            "scripts.phase1.ingest_bridge_api.phase6_update_job",
-            return_value={"jobId": "job-1"},
-        ) as update_mock:
+        with (
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_generate_talking_points", return_value=fake_result
+            ) as mocked,
+            patch(
+                "scripts.phase1.ingest_bridge_api.phase6_update_job",
+                return_value={"jobId": "job-1"},
+            ) as update_mock,
+        ):
             with build_client(env) as client:
                 response = client.post(
                     "/v1/talking-points",
@@ -1860,7 +2006,9 @@ class BridgeApiContractTests(unittest.TestCase):
                     "similarity_score": 1.0,
                 }
 
-        with patch("scripts.phase1.ingest_bridge_api.phase6_check_job_duplicate", return_value=_FakeDedup()) as mock_dedup:
+        with patch(
+            "scripts.phase1.ingest_bridge_api.phase6_check_job_duplicate", return_value=_FakeDedup()
+        ) as mock_dedup:
             with build_client(env) as client:
                 response = client.post(
                     "/v1/job-deduplications",
@@ -1899,7 +2047,10 @@ class BridgeApiContractTests(unittest.TestCase):
             "duplicates_skipped": 1,
             "message": "Discovered 2 new jobs.",
         }
-        fake_collections = [SimpleNamespace(name="recall_jobs", created=False), SimpleNamespace(name="recall_resume", created=False)]
+        fake_collections = [
+            SimpleNamespace(name="recall_jobs", created=False),
+            SimpleNamespace(name="recall_resume", created=False),
+        ]
         with patch("scripts.phase1.ingest_bridge_api.phase6_ensure_collections", return_value=fake_collections):
             with patch("scripts.phase1.ingest_bridge_api.phase6_run_discovery", return_value=fake_summary):
                 with build_client(env) as client:
@@ -1928,7 +2079,9 @@ class BridgeApiContractTests(unittest.TestCase):
             "wait": False,
             "results": [],
         }
-        with patch("scripts.phase1.ingest_bridge_api.phase6_queue_job_evaluations", return_value=queued_response) as mock_queue:
+        with patch(
+            "scripts.phase1.ingest_bridge_api.phase6_queue_job_evaluations", return_value=queued_response
+        ) as mock_queue:
             with build_client(env) as client:
                 response = client.post(
                     "/v1/job-evaluation-runs",
@@ -1957,7 +2110,9 @@ class BridgeApiContractTests(unittest.TestCase):
             "failed": 0,
             "results": [{"job_id": "job_1", "status": "completed", "fit_score": 82}],
         }
-        with patch("scripts.phase1.ingest_bridge_api.phase6_queue_job_evaluations", return_value=completed_response) as mock_queue:
+        with patch(
+            "scripts.phase1.ingest_bridge_api.phase6_queue_job_evaluations", return_value=completed_response
+        ) as mock_queue:
             with build_client(env) as client:
                 response = client.post(
                     "/v1/job-evaluation-runs",
@@ -2002,14 +2157,27 @@ class BridgeApiContractTests(unittest.TestCase):
             "salary_max": 180000,
         }
         discovery = {"run_id": "job_discovery_abc", "new_job_ids": ["job_a1b2"]}
-        queued_eval = {"run_id": "job_eval_abc", "status": "queued", "job_ids": ["job_a1b2"], "queued": 1, "wait": False}
+        queued_eval = {
+            "run_id": "job_eval_abc",
+            "status": "queued",
+            "job_ids": ["job_a1b2"],
+            "queued": 1,
+            "wait": False,
+        }
 
         with patch("scripts.phase1.ingest_bridge_api.ingest_request", return_value=fake_ingest):
             with patch("scripts.phase1.ingest_bridge_api.phase6_looks_like_job_url", return_value=True):
-                with patch("scripts.phase1.ingest_bridge_api._load_ingested_doc_text", return_value="Sample job content"):
+                with patch(
+                    "scripts.phase1.ingest_bridge_api._load_ingested_doc_text", return_value="Sample job content"
+                ):
                     with patch("scripts.phase1.ingest_bridge_api.phase6_extract_job_metadata", return_value=extracted):
-                        with patch("scripts.phase1.ingest_bridge_api.phase6_run_discovery", return_value=discovery) as mock_discovery:
-                            with patch("scripts.phase1.ingest_bridge_api.phase6_queue_job_evaluations", return_value=queued_eval) as mock_queue:
+                        with patch(
+                            "scripts.phase1.ingest_bridge_api.phase6_run_discovery", return_value=discovery
+                        ) as mock_discovery:
+                            with patch(
+                                "scripts.phase1.ingest_bridge_api.phase6_queue_job_evaluations",
+                                return_value=queued_eval,
+                            ) as mock_queue:
                                 with build_client(env) as client:
                                     response = client.post(
                                         "/v1/ingestions",

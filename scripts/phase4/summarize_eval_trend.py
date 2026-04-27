@@ -8,9 +8,10 @@ import glob
 import json
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from scripts.shared_time import now_iso
 
 
 @dataclass
@@ -54,10 +55,6 @@ def parse_args() -> argparse.Namespace:
         help="Exit non-zero when any threshold breach is detected.",
     )
     return parser.parse_args()
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 def _safe_int(value: Any, default: int = 0) -> int:
@@ -227,15 +224,11 @@ def _suite_threshold_breaches(
     if avg_case_pass_rate is None:
         breaches.append(f"{suite}:missing_case_pass_rate")
     elif avg_case_pass_rate < min_pass_rate:
-        breaches.append(
-            f"{suite}:avg_case_pass_rate_below_threshold:{avg_case_pass_rate:.3f}<{min_pass_rate:.3f}"
-        )
+        breaches.append(f"{suite}:avg_case_pass_rate_below_threshold:{avg_case_pass_rate:.3f}<{min_pass_rate:.3f}")
     if avg_latency_ms is None:
         breaches.append(f"{suite}:missing_latency")
     elif avg_latency_ms > max_avg_latency_ms:
-        breaches.append(
-            f"{suite}:avg_latency_above_threshold:{avg_latency_ms:.1f}>{max_avg_latency_ms}"
-        )
+        breaches.append(f"{suite}:avg_latency_above_threshold:{avg_latency_ms:.1f}>{max_avg_latency_ms}")
     if error_run_count > 0:
         breaches.append(f"{suite}:error_runs_present:{error_run_count}")
     return breaches
@@ -273,16 +266,8 @@ def _render_markdown(
                 pass_runs=suite_payload.get("pass_run_count", 0),
                 fail_runs=suite_payload.get("fail_run_count", 0),
                 error_runs=suite_payload.get("error_run_count", 0),
-                pass_rate=(
-                    f"{avg_case_pass_rate:.3f}"
-                    if isinstance(avg_case_pass_rate, (int, float))
-                    else "n/a"
-                ),
-                latency=(
-                    f"{avg_latency_ms:.1f}"
-                    if isinstance(avg_latency_ms, (int, float))
-                    else "n/a"
-                ),
+                pass_rate=(f"{avg_case_pass_rate:.3f}" if isinstance(avg_case_pass_rate, (int, float)) else "n/a"),
+                latency=(f"{avg_latency_ms:.1f}" if isinstance(avg_latency_ms, (int, float)) else "n/a"),
             )
         )
 
@@ -397,9 +382,7 @@ def main() -> int:
                 }
             )
 
-        avg_case_pass_rate = (
-            round(sum(pass_rate_values) / len(pass_rate_values), 6) if pass_rate_values else None
-        )
+        avg_case_pass_rate = round(sum(pass_rate_values) / len(pass_rate_values), 6) if pass_rate_values else None
         avg_latency_ms = round(sum(latency_values) / len(latency_values), 2) if latency_values else None
         suite_breaches = _suite_threshold_breaches(
             suite=suite_name,
@@ -423,7 +406,7 @@ def main() -> int:
             "runs": serialized_runs,
         }
 
-    generated_at = _now_iso()
+    generated_at = now_iso()
     overall_status = "pass" if not all_breaches else "fail"
     output_payload = {
         "label": args.label,

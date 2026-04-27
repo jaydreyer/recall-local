@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import os
 import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -15,13 +14,10 @@ from dotenv import load_dotenv
 from scripts.llm_client import embed
 from scripts.phase1.ingestion_pipeline import chunk_text, extract_text, load_settings, qdrant_client_from_env
 from scripts.phase6 import setup_collections, storage
+from scripts.shared_time import now_iso
 
 ROOT = Path(__file__).resolve().parents[2]
 RESUME_COLLECTION = setup_collections.COLLECTION_RESUME
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def _derive_section(chunk: str) -> str:
@@ -83,7 +79,7 @@ def ingest_resume(
     conn = storage.connect_db()
     try:
         version = storage.next_resume_version(conn)
-        ingested_at = _now_iso()
+        ingested_at = now_iso()
 
         if not dry_run:
             client = qdrant_client_from_env(os.getenv("QDRANT_HOST", "http://localhost:6333"))

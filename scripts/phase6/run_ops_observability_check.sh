@@ -11,10 +11,11 @@ ALERT_WEBHOOK_URL="${RECALL_UPTIME_ALERT_WEBHOOK_URL:-}"
 ALERT_TELEGRAM_TOKEN="${RECALL_UPTIME_ALERT_TELEGRAM_BOT_TOKEN:-${RECALL_TELEGRAM_BOT_TOKEN:-}}"
 ALERT_TELEGRAM_CHAT_ID="${RECALL_UPTIME_ALERT_TELEGRAM_CHAT_ID:-${RECALL_TELEGRAM_CHAT_ID:-}}"
 NOTIFY_ON_SUCCESS="${RECALL_UPTIME_NOTIFY_ON_SUCCESS:-false}"
+ALERT_COOLDOWN_MINUTES="${RECALL_UPTIME_ALERT_COOLDOWN_MINUTES:-60}"
 
 mkdir -p "$ARTIFACT_DIR"
 
-python3 - "$ROOT_DIR" "$BRIDGE_BASE_URL" "$DASHBOARD_URL" "$CHAT_UI_URL" "$ARTIFACT_DIR" "$API_KEY" "$ALERT_WEBHOOK_URL" "$ALERT_TELEGRAM_TOKEN" "$ALERT_TELEGRAM_CHAT_ID" "$NOTIFY_ON_SUCCESS" <<'PY'
+python3 - "$ROOT_DIR" "$BRIDGE_BASE_URL" "$DASHBOARD_URL" "$CHAT_UI_URL" "$ARTIFACT_DIR" "$API_KEY" "$ALERT_WEBHOOK_URL" "$ALERT_TELEGRAM_TOKEN" "$ALERT_TELEGRAM_CHAT_ID" "$NOTIFY_ON_SUCCESS" "$ALERT_COOLDOWN_MINUTES" <<'PY'
 import json
 import pathlib
 import sqlite3
@@ -22,6 +23,7 @@ import sys
 import urllib.request
 import urllib.parse
 from datetime import datetime, timezone
+from hashlib import sha256
 
 
 root_dir = pathlib.Path(sys.argv[1]).resolve()
@@ -34,9 +36,14 @@ alert_webhook_url = sys.argv[7].strip()
 alert_telegram_token = sys.argv[8].strip()
 alert_telegram_chat_id = sys.argv[9].strip()
 notify_on_success = sys.argv[10].strip().lower() in {"1", "true", "yes", "on"}
+try:
+    alert_cooldown_minutes = max(0, int(sys.argv[11].strip() or "60"))
+except ValueError:
+    alert_cooldown_minutes = 60
 
 timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 artifact_path = artifact_dir / f"{timestamp}_ops_observability_check.json"
+alert_state_path = artifact_dir / "ops_observability_alert_state.json"
 
 
 def api_headers(extra=None):
@@ -109,6 +116,19 @@ def post_json(url, payload, *, timeout=15):
         return response.status
 
 
+def load_alert_state():
+    if not alert_state_path.exists():
+        return {}
+    try:
+        return json.loads(alert_state_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def save_alert_state(payload):
+    alert_state_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
 def run_check(name, fn):
     try:
         result = fn()
@@ -132,36 +152,40 @@ checks.append(
 
 def dashboard_check():
     endpoint = f"{bridge_base}/v1/dashboard-checks"
-    attempts = (
-        {"include_gaps": True, "timeout": 60, "label": "full"},
-        {"include_gaps": False, "timeout": 30, "label": "core"},
-    )
-    failures: list[str] = []
+    core_url = build_url(endpoint, include_gaps=False)
+    core_payload = fetch_json(core_url, timeout=30)
+    core_body = core_payload["body"]
+    if str(core_body.get("status") or "").lower() != "ok":
+        raise RuntimeError(f"dashboard-checks core status={core_body.get('status')!r}")
+    if int((core_body.get("jobs") or {}).get("count") or 0) <= 0:
+        raise RuntimeError("dashboard-checks core reported no jobs")
+    if int((core_body.get("companies") or {}).get("count") or 0) <= 0:
+        raise RuntimeError("dashboard-checks core reported no companies")
 
-    for index, attempt in enumerate(attempts):
-        include_gaps = attempt["include_gaps"]
-        url = build_url(endpoint, include_gaps=include_gaps)
-        try:
-            payload = fetch_json(url, timeout=attempt["timeout"])
-            body = payload["body"]
-            if str(body.get("status") or "").lower() != "ok":
-                raise RuntimeError(f"dashboard-checks status={body.get('status')!r}")
-            if int((body.get("jobs") or {}).get("count") or 0) <= 0:
-                raise RuntimeError("dashboard-checks reported no jobs")
-            if int((body.get("companies") or {}).get("count") or 0) <= 0:
-                raise RuntimeError("dashboard-checks reported no companies")
-            gaps = body.get("gaps") or {}
-            if include_gaps and gaps and str(gaps.get("status") or "").lower() != "ok":
-                raise RuntimeError(f"dashboard-checks gaps status={gaps.get('status')!r}")
-            result = {"endpoint": url, **payload, "include_gaps": include_gaps}
-            if index > 0:
-                result["fallback_used"] = True
-                result["fallback_reason"] = failures[-1] if failures else "dashboard-checks retry"
-            return result
-        except Exception as exc:  # noqa: BLE001
-            failures.append(f"{attempt['label']} attempt failed: {exc}")
+    result = {
+        "endpoint": core_url,
+        **core_payload,
+        "include_gaps": False,
+    }
 
-    raise RuntimeError("; ".join(failures))
+    full_url = build_url(endpoint, include_gaps=True)
+    try:
+        full_payload = fetch_json(full_url, timeout=60)
+        full_body = full_payload["body"]
+        gaps = full_body.get("gaps") or {}
+        if str(full_body.get("status") or "").lower() != "ok":
+            raise RuntimeError(f"dashboard-checks full status={full_body.get('status')!r}")
+        if gaps and str(gaps.get("status") or "").lower() != "ok":
+            raise RuntimeError(f"dashboard-checks gaps status={gaps.get('status')!r}")
+        result = {
+            "endpoint": full_url,
+            **full_payload,
+            "include_gaps": True,
+        }
+    except Exception as exc:  # noqa: BLE001
+        result["full_check_warning"] = f"full attempt failed: {exc}"
+
+    return result
 
 
 checks.append(run_check("dashboard_checks", dashboard_check))
@@ -175,10 +199,29 @@ def job_alert_workflow_check():
             "skipped": True,
             "reason": "n8n database not present on this host",
         }
+    if db_path.stat().st_size == 0:
+        return {
+            "database": str(db_path),
+            "skipped": True,
+            "reason": "n8n database is empty on this host",
+        }
 
     conn = sqlite3.connect(db_path)
     try:
         cur = conn.cursor()
+        tables = {
+            row[0]
+            for row in cur.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+        if "workflow_entity" not in tables:
+            return {
+                "database": str(db_path),
+                "skipped": True,
+                "reason": "n8n workflow_entity table not present on this host",
+            }
+
         workflow_row = cur.execute(
             "SELECT active, nodes FROM workflow_entity WHERE id = ?",
             ("9DEQqfD8JA5PCiVP",),
@@ -338,8 +381,94 @@ def build_alert_message():
     return "\n".join(lines)
 
 
+def failure_fingerprint():
+    failing = [
+        {
+            "name": check["name"],
+            "error": check.get("error"),
+        }
+        for check in checks
+        if check["status"] != "ok"
+    ]
+    return sha256(
+        json.dumps(
+            {
+                "bridge_base_url": bridge_base,
+                "dashboard_url": dashboard_url,
+                "chat_ui_url": chat_ui_url,
+                "failing": failing,
+            },
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+
+
 alert_message = build_alert_message()
-should_notify = overall_status != "ok" or notify_on_success
+now_ts = datetime.now(timezone.utc).timestamp()
+alert_state = load_alert_state()
+state_changed = False
+should_notify = False
+suppression_reason = None
+
+if overall_status != "ok":
+    fingerprint = failure_fingerprint()
+    last_fingerprint = str(alert_state.get("last_failure_fingerprint") or "")
+    last_notified_at = float(alert_state.get("last_failure_notified_at") or 0)
+    cooldown_seconds = alert_cooldown_minutes * 60
+    fingerprint_changed = fingerprint != last_fingerprint
+    cooldown_elapsed = cooldown_seconds <= 0 or (now_ts - last_notified_at) >= cooldown_seconds
+    should_notify = fingerprint_changed or cooldown_elapsed
+    if should_notify:
+        alert_state.update(
+            {
+                "last_status": "error",
+                "last_failure_fingerprint": fingerprint,
+                "last_failure_notified_at": now_ts,
+                "last_failure_artifact": str(artifact_path),
+                "last_failure_generated_at": artifact["generated_at"],
+            }
+        )
+        state_changed = True
+    else:
+        suppression_reason = (
+            f"repeated failure suppressed for {alert_cooldown_minutes}m cooldown"
+        )
+        alert_state.update(
+            {
+                "last_status": "error",
+                "last_failure_fingerprint": fingerprint,
+                "last_failure_artifact": str(artifact_path),
+                "last_failure_generated_at": artifact["generated_at"],
+            }
+        )
+        state_changed = True
+elif notify_on_success:
+    prior_status = str(alert_state.get("last_status") or "")
+    should_notify = prior_status == "error"
+    alert_state.update(
+        {
+            "last_status": "ok",
+            "last_success_artifact": str(artifact_path),
+            "last_success_generated_at": artifact["generated_at"],
+        }
+    )
+    state_changed = True
+else:
+    alert_state.update(
+        {
+            "last_status": "ok",
+            "last_success_artifact": str(artifact_path),
+            "last_success_generated_at": artifact["generated_at"],
+        }
+    )
+    state_changed = True
+
+if state_changed:
+    save_alert_state(alert_state)
+
+if suppression_reason:
+    print(f"[info] {suppression_reason}")
+
 if should_notify and alert_webhook_url:
     try:
         post_json(alert_webhook_url, {"text": alert_message})

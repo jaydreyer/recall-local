@@ -22,6 +22,7 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 try:
     from dotenv import load_dotenv
 except ModuleNotFoundError:
+
     def load_dotenv(
         dotenv_path: str | os.PathLike[str] | None = None,
         stream: IO[str] | None = None,
@@ -32,6 +33,7 @@ except ModuleNotFoundError:
     ) -> bool:
         _ = (dotenv_path, stream, verbose, override, interpolate, encoding)
         return False
+
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -134,7 +136,7 @@ def ingest_request(request: IngestRequest, *, dry_run: bool = False) -> IngestRe
         settings.db_path.parent.mkdir(parents=True, exist_ok=True)
         settings.processed_dir.mkdir(parents=True, exist_ok=True)
 
-    started_at = _now_iso()
+    started_at = now_iso()
     started_perf = time.perf_counter()
     run_id = uuid.uuid4().hex
     ingest_id = uuid.uuid4().hex
@@ -195,7 +197,7 @@ def ingest_request(request: IngestRequest, *, dry_run: bool = False) -> IngestRe
         elif request.replace_existing:
             replacement_status = "dry_run"
 
-        ended_at = _now_iso()
+        ended_at = now_iso()
         latency_ms = int((time.perf_counter() - started_perf) * 1000)
         status = "dry_run" if dry_run else "completed"
 
@@ -233,7 +235,7 @@ def ingest_request(request: IngestRequest, *, dry_run: bool = False) -> IngestRe
             status=status,
         )
     except Exception:
-        ended_at = _now_iso()
+        ended_at = now_iso()
         latency_ms = int((time.perf_counter() - started_perf) * 1000)
         if conn is not None:
             _mark_run_failed(conn=conn, run_id=run_id, ended_at=ended_at, latency_ms=latency_ms)
@@ -579,7 +581,7 @@ def _build_qdrant_points(
     PointStruct = models_module.PointStruct
 
     points: list[Any] = []
-    created_at = _now_iso()
+    created_at = now_iso()
 
     for index, chunk in enumerate(chunks):
         chunk_id = f"{doc_id}:{index:04d}"
@@ -691,11 +693,7 @@ def _replace_existing_source_points(*, qdrant: Any, collection_name: str, source
         return 0
 
     filter_selector_cls = getattr(models_module, "FilterSelector", None)
-    points_selector = (
-        filter_selector_cls(filter=source_filter)
-        if filter_selector_cls is not None
-        else source_filter
-    )
+    points_selector = filter_selector_cls(filter=source_filter) if filter_selector_cls is not None else source_filter
 
     try:
         qdrant.delete(collection_name=collection_name, points_selector=points_selector, wait=True)
@@ -940,10 +938,6 @@ def _is_http_status_error(exc: Exception, *, status_code: int) -> bool:
 
 def _reader_proxy_url(url: str) -> str:
     return f"https://r.jina.ai/{url}"
-
-
-def _now_iso() -> str:
-    return now_iso()
 
 
 def parse_args() -> argparse.Namespace:

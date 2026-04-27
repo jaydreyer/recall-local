@@ -54,7 +54,7 @@ from scripts.phase6.company_profiler import list_company_profiles as phase6_list
 from scripts.phase6.company_profiler import refresh_company_profile as phase6_refresh_company_profile  # noqa: F401,E402
 from scripts.phase6.company_profiler import upsert_tracked_company_config as phase6_upsert_tracked_company_config  # noqa: F401,E402
 from scripts.phase6.cover_letter_drafter import generate_cover_letter_draft as phase6_generate_cover_letter_draft  # noqa: F401,E402
-from scripts.phase6.follow_up_reminders import queue_follow_up_reminder_runs as phase6_queue_follow_up_reminder_runs  # noqa: E402
+from scripts.phase6.follow_up_reminders import queue_follow_up_reminder_runs as phase6_queue_follow_up_reminder_runs  # noqa: F401,E402
 from scripts.phase6.gap_aggregator import aggregate_gaps as phase6_aggregate_gaps  # noqa: E402
 from scripts.phase6.ingest_resume import ingest_resume as phase6_ingest_resume  # noqa: F401,E402
 from scripts.phase6.interview_brief_drafter import generate_interview_brief as phase6_generate_interview_brief  # noqa: F401,E402
@@ -478,9 +478,7 @@ class AutoTagRulesResponse(BaseModel):
     filename_patterns: dict[str, list[str]] = Field(
         default_factory=dict, description="Group-level filename keyword patterns."
     )
-    vault_folders: dict[str, str] = Field(
-        default_factory=dict, description="Vault folder name to group mapping."
-    )
+    vault_folders: dict[str, str] = Field(default_factory=dict, description="Vault folder name to group mapping.")
     suggested_tags: dict[str, list[str]] = Field(
         default_factory=dict, description="Group-level suggested tags shown in clients."
     )
@@ -882,11 +880,12 @@ JOBS_LIST_SUCCESS_EXAMPLE = {
             "jobId": "job_002",
             "title": "Solutions Architect",
             "company": "Postman",
-            "status": "evaluated",
-            "fit_score": 79,
+            "status": "error",
+            "fit_score": -1,
             "source": "jobspy",
+            "evaluation_error": "LLM returned malformed evaluation JSON after retry: scorecard must be an object",
             "observation": {
-                "provider_sequence": "local->cloud",
+                "provider_sequence": "local",
                 "location": {"preference_bucket": "twin_cities"},
             },
         },
@@ -1214,7 +1213,11 @@ RAG_REQUEST_BODY = {
                     "query": {"type": "string", "description": "Question to answer."},
                     "top_k": {"type": "integer", "minimum": 1, "description": "Max chunks to retrieve."},
                     "min_score": {"type": "number", "description": "Retrieval score threshold."},
-                    "max_retries": {"type": "integer", "minimum": 0, "description": "Structured output retry attempts."},
+                    "max_retries": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "description": "Structured output retry attempts.",
+                    },
                     "mode": {"type": "string", "description": "Prompt mode (`default`, `job-search`, `learning`)."},
                     "filter_tags": {
                         "oneOf": [
@@ -1574,8 +1577,14 @@ JOB_PATCH_REQUEST_BODY = {
                                         "type": "object",
                                         "properties": {
                                             "created": {"type": "boolean"},
-                                            "status": {"type": "string", "enum": ["not_created", "queued", "sent", "failed"]},
-                                            "channel": {"type": ["string", "null"], "enum": ["manual", "n8n", "email", "calendar", None]},
+                                            "status": {
+                                                "type": "string",
+                                                "enum": ["not_created", "queued", "sent", "failed"],
+                                            },
+                                            "channel": {
+                                                "type": ["string", "null"],
+                                                "enum": ["manual", "n8n", "email", "calendar", None],
+                                            },
                                             "lastRunAt": {"type": ["string", "null"], "format": "date-time"},
                                             "deliveredAt": {"type": ["string", "null"], "format": "date-time"},
                                             "automationId": {"type": ["string", "null"]},
@@ -2003,8 +2012,14 @@ def create_app() -> FastAPI:
             {"name": "Dashboard", "description": "Readiness and smoke-check endpoints for the daily dashboard."},
             {"name": "Ingestions", "description": "Create ingestion operations from supported channels."},
             {"name": "RAG Queries", "description": "Run cited retrieval-augmented queries."},
-            {"name": "Meeting Action Items", "description": "Extract action items and structured notes from meeting transcripts."},
-            {"name": "Auto Tag Rules", "description": "Read shared auto-tag configuration for dashboard and extension clients."},
+            {
+                "name": "Meeting Action Items",
+                "description": "Extract action items and structured notes from meeting transcripts.",
+            },
+            {
+                "name": "Auto Tag Rules",
+                "description": "Read shared auto-tag configuration for dashboard and extension clients.",
+            },
             {"name": "Vault", "description": "List vault notes and trigger Obsidian vault sync operations."},
             {"name": "Activities", "description": "Read recent ingestion activity for dashboard monitoring."},
             {"name": "Evaluations", "description": "Read latest eval metrics and trigger eval runs."},
@@ -2012,11 +2027,26 @@ def create_app() -> FastAPI:
             {"name": "Resumes", "description": "Ingest and inspect resume versions used for job evaluation."},
             {"name": "Companies", "description": "List and refresh company profile summaries for job intelligence."},
             {"name": "LLM Settings", "description": "Read and update Phase 6 evaluation model settings."},
-            {"name": "Cover Letter Drafts", "description": "Generate cover letter drafts from the current resume and job context."},
-            {"name": "Resume Bullets", "description": "Generate tailored resume bullets from the current resume and job context."},
-            {"name": "Tailored Summaries", "description": "Generate tailored summaries from the current resume and job context."},
-            {"name": "Outreach Notes", "description": "Generate outreach notes from the current resume and job context."},
-            {"name": "Talking Points", "description": "Generate interview talking points from the current resume and job context."},
+            {
+                "name": "Cover Letter Drafts",
+                "description": "Generate cover letter drafts from the current resume and job context.",
+            },
+            {
+                "name": "Resume Bullets",
+                "description": "Generate tailored resume bullets from the current resume and job context.",
+            },
+            {
+                "name": "Tailored Summaries",
+                "description": "Generate tailored summaries from the current resume and job context.",
+            },
+            {
+                "name": "Outreach Notes",
+                "description": "Generate outreach notes from the current resume and job context.",
+            },
+            {
+                "name": "Talking Points",
+                "description": "Generate interview talking points from the current resume and job context.",
+            },
         ],
     )
     cors_origins = _cors_origins_from_env()
@@ -2074,7 +2104,6 @@ def create_app() -> FastAPI:
     register_core_routes(app, rate_limiter=rate_limiter, dashboard_cache_warmer=dashboard_cache_warmer)
     register_phase6_routes(app, rate_limiter=rate_limiter)
 
-
     @app.get("/{_path:path}", include_in_schema=False)
     async def not_found_get(_path: str) -> JSONResponse:
         _ = _path
@@ -2113,7 +2142,9 @@ def _required_ollama_models() -> list[str]:
 
 def _ensure_required_ollama_models() -> None:
     host = os.getenv("OLLAMA_HOST", "http://localhost:11434").strip() or "http://localhost:11434"
-    timeout_seconds = _read_positive_float_env("RECALL_OLLAMA_PULL_TIMEOUT_SECONDS", DEFAULT_OLLAMA_PULL_TIMEOUT_SECONDS)
+    timeout_seconds = _read_positive_float_env(
+        "RECALL_OLLAMA_PULL_TIMEOUT_SECONDS", DEFAULT_OLLAMA_PULL_TIMEOUT_SECONDS
+    )
     required_models = _required_ollama_models()
 
     if not required_models:
@@ -2205,21 +2236,21 @@ def _dashboard_checks_payload(
             runner=lambda: _dashboard_companies_section(),
             notes=notes,
         ),
-        "gaps": (
-            _dashboard_gaps_section_for_request(cache_warmer=cache_warmer, notes=notes)
-            if include_gaps
-            else None
-        ),
+        "gaps": (_dashboard_gaps_section_for_request(cache_warmer=cache_warmer, notes=notes) if include_gaps else None),
     }
     statuses = [section["status"] for section in sections.values() if isinstance(section, dict)]
     overall_status = "ok" if statuses and all(status == "ok" for status in statuses) else "degraded"
-    warmer_snapshot = cache_warmer.snapshot() if cache_warmer is not None else {
-        "enabled": False,
-        "interval_seconds": 0,
-        "last_started_at": None,
-        "last_completed_at": None,
-        "last_error": None,
-    }
+    warmer_snapshot = (
+        cache_warmer.snapshot()
+        if cache_warmer is not None
+        else {
+            "enabled": False,
+            "interval_seconds": 0,
+            "last_started_at": None,
+            "last_completed_at": None,
+            "last_error": None,
+        }
+    )
     if warmer_snapshot.get("last_error"):
         notes.append(f"Cache warmer last error: {warmer_snapshot['last_error']}")
         overall_status = "degraded"
@@ -2500,9 +2531,7 @@ def _read_latest_evaluations(*, recent_limit: int) -> tuple[dict[str, Any] | Non
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
-        table_exists = conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='eval_results'"
-        ).fetchone()
+        table_exists = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='eval_results'").fetchone()
         if table_exists is None:
             return None, []
 
@@ -3066,9 +3095,7 @@ def _load_ingested_doc_text(doc_id: str) -> str:
         collection_name = os.getenv("QDRANT_COLLECTION", "recall_docs")
         from qdrant_client import models
 
-        query_filter = models.Filter(
-            must=[models.FieldCondition(key="doc_id", match=models.MatchValue(value=target))]
-        )
+        query_filter = models.Filter(must=[models.FieldCondition(key="doc_id", match=models.MatchValue(value=target))])
         response = None
         try:
             response = client.scroll(
@@ -3148,9 +3175,7 @@ def _process_rag_query(*, payload: dict[str, Any], dry_run: bool, request_id: st
         hybrid_alpha_value = float(hybrid_alpha) if hybrid_alpha is not None else None
         reranker_weight_value = float(reranker_weight) if reranker_weight is not None else None
         enable_reranker_value = (
-            _normalize_bool(enable_reranker, field_name="enable_reranker")
-            if enable_reranker is not None
-            else None
+            _normalize_bool(enable_reranker, field_name="enable_reranker") if enable_reranker is not None else None
         )
     except (TypeError, ValueError) as exc:
         return _error_response(

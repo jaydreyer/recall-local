@@ -46,10 +46,6 @@ DEFAULT_CAREER_PAGE_SOURCE_LIMIT = 3
 JOBSPY_SITES = ["indeed", "glassdoor", "zip_recruiter"]
 
 
-def _now_iso() -> str:
-    return now_iso()
-
-
 def _read_json(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -180,7 +176,7 @@ def _set_json_setting(*, key: str, value: dict[str, Any]) -> None:
             ON CONFLICT(setting_key)
             DO UPDATE SET setting_value_json = excluded.setting_value_json, updated_at = excluded.updated_at
             """,
-            (key, json.dumps(value, separators=(",", ":")), _now_iso()),
+            (key, json.dumps(value, separators=(",", ":")), now_iso()),
         )
         conn.commit()
     finally:
@@ -224,7 +220,7 @@ def _select_rotated_queries(*, combos: list[dict[str, str]], batch_size: int) ->
         selected.append(combos[(start + offset) % len(combos)])
 
     next_index = (start + safe_batch) % len(combos)
-    _set_json_setting(key="job_discovery_cursor", value={"next_index": next_index, "updated_at": _now_iso()})
+    _set_json_setting(key="job_discovery_cursor", value={"next_index": next_index, "updated_at": now_iso()})
     return selected
 
 
@@ -242,7 +238,7 @@ def _normalize_job_payload(
     salary_max: int | None = None,
     date_posted: str | None = None,
 ) -> dict[str, Any]:
-    discovered_at = _now_iso()
+    discovered_at = now_iso()
     company_normalized = _normalize_company_name(company)
     stable_id_seed = "|".join(
         [
@@ -389,9 +385,7 @@ def _discover_jobspy(
                     country_indeed=JOBSPY_COUNTRY,
                 )
             except Exception as exc:  # noqa: BLE001
-                errors.append(
-                    f"jobspy search failed for {query['title']} @ {query['location']} ({site}): {exc}"
-                )
+                errors.append(f"jobspy search failed for {query['title']} @ {query['location']} ({site}): {exc}")
                 continue
 
             for item in _extract_jobspy_rows(raw_jobs):
@@ -430,7 +424,11 @@ def _discover_adzuna(
     app_id = os.getenv("RECALL_ADZUNA_APP_ID", "").strip()
     app_key = os.getenv("RECALL_ADZUNA_APP_KEY", "").strip()
     if not app_id or not app_key:
-        return [], ["adzuna skipped: missing RECALL_ADZUNA_APP_ID or RECALL_ADZUNA_APP_KEY."], {"attempted": 0, "returned": 0}
+        return (
+            [],
+            ["adzuna skipped: missing RECALL_ADZUNA_APP_ID or RECALL_ADZUNA_APP_KEY."],
+            {"attempted": 0, "returned": 0},
+        )
 
     discovered: list[dict[str, Any]] = []
     errors: list[str] = []
@@ -546,7 +544,11 @@ def _discover_serpapi(
                     company_tier=tier,
                     salary_min=None,
                     salary_max=None,
-                    date_posted=_to_iso(item.get("detected_extensions", {}).get("posted_at") if isinstance(item.get("detected_extensions"), dict) else None),
+                    date_posted=_to_iso(
+                        item.get("detected_extensions", {}).get("posted_at")
+                        if isinstance(item.get("detected_extensions"), dict)
+                        else None
+                    ),
                 )
             )
 
@@ -577,7 +579,11 @@ def _discover_career_pages(
 ) -> tuple[list[dict[str, Any]], list[str], dict[str, Any]]:
     companies = career_config.get("companies") if isinstance(career_config, dict) else []
     if not isinstance(companies, list):
-        return [], ["career_page skipped: config/career_pages.json missing companies[]"], {"attempted": 0, "returned": 0}
+        return (
+            [],
+            ["career_page skipped: config/career_pages.json missing companies[]"],
+            {"attempted": 0, "returned": 0},
+        )
 
     discovered: list[dict[str, Any]] = []
     errors: list[str] = []
@@ -741,9 +747,7 @@ def _store_jobs(candidates: list[dict[str, Any]]) -> tuple[list[str], list[str]]
 def _record_activity_log(*, run_id: str, summary: dict[str, Any]) -> None:
     conn = storage.connect_db()
     try:
-        has_table = conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='ingestion_log'"
-        ).fetchone()
+        has_table = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='ingestion_log'").fetchone()
         if not has_table:
             return
         conn.execute(
@@ -760,7 +764,7 @@ def _record_activity_log(*, run_id: str, summary: dict[str, Any]) -> None:
                 None,
                 int(summary.get("new_jobs", 0) or 0),
                 "completed" if summary.get("status") == "completed" else "failed",
-                summary.get("triggered_at") or _now_iso(),
+                summary.get("triggered_at") or now_iso(),
                 "job-search",
                 json.dumps(["phase6", "job-discovery"], separators=(",", ":")),
             ),
@@ -785,11 +789,7 @@ def run_discovery(payload: dict[str, Any]) -> dict[str, Any]:
     normalized_keywords = [_norm(item) for item in keywords if _norm(item)]
 
     configured_sources = payload.get("sources") or DEFAULT_SOURCE_ORDER
-    sources = [
-        _norm_lower(item)
-        for item in configured_sources
-        if _norm_lower(item) in SUPPORTED_DISCOVERY_SOURCES
-    ]
+    sources = [_norm_lower(item) for item in configured_sources if _norm_lower(item) in SUPPORTED_DISCOVERY_SOURCES]
     if not sources:
         sources = list(DEFAULT_SOURCE_ORDER)
 
@@ -799,7 +799,9 @@ def run_discovery(payload: dict[str, Any]) -> dict[str, Any]:
     for key, value in source_limits_payload.items():
         normalized = _norm_lower(key)
         if normalized in source_limits:
-            source_limits[normalized] = max(1, _coerce_int(value, default=source_limits[normalized]) or source_limits[normalized])
+            source_limits[normalized] = max(
+                1, _coerce_int(value, default=source_limits[normalized]) or source_limits[normalized]
+            )
 
     max_days_old = _coerce_int(payload.get("max_days_old"), default=DEFAULT_MAX_DAYS_OLD) or DEFAULT_MAX_DAYS_OLD
     delay_seconds = float(payload.get("delay_seconds", DEFAULT_DELAY_SECONDS) or DEFAULT_DELAY_SECONDS)
@@ -813,7 +815,9 @@ def run_discovery(payload: dict[str, Any]) -> dict[str, Any]:
         or DEFAULT_SIMILARITY_THRESHOLD
     )
 
-    search_queries = _build_queries(titles=normalized_titles, locations=normalized_locations, keywords=normalized_keywords)
+    search_queries = _build_queries(
+        titles=normalized_titles, locations=normalized_locations, keywords=normalized_keywords
+    )
     selected_queries = _select_rotated_queries(combos=search_queries, batch_size=batch_size) if search_queries else []
 
     manual_jobs_payload = payload.get("jobs") if isinstance(payload.get("jobs"), list) else []
@@ -823,7 +827,7 @@ def run_discovery(payload: dict[str, Any]) -> dict[str, Any]:
     )
 
     run_id = f"job_discovery_{uuid.uuid4().hex[:12]}"
-    started_at = _now_iso()
+    started_at = now_iso()
 
     discovered: list[dict[str, Any]] = list(manual_jobs)
     errors: list[str] = []
@@ -868,7 +872,11 @@ def run_discovery(payload: dict[str, Any]) -> dict[str, Any]:
                         career_config=career_config,
                     )
                 else:
-                    rows, source_errors, metrics = [], [f"unsupported source: {source}"], {"attempted": 0, "returned": 0}
+                    rows, source_errors, metrics = (
+                        [],
+                        [f"unsupported source: {source}"],
+                        {"attempted": 0, "returned": 0},
+                    )
 
                 discovered.extend(rows)
                 errors.extend(source_errors)
@@ -898,7 +906,7 @@ def run_discovery(payload: dict[str, Any]) -> dict[str, Any]:
         "run_id": run_id,
         "status": "completed" if not persistence_errors else "partial",
         "triggered_at": started_at,
-        "finished_at": _now_iso(),
+        "finished_at": now_iso(),
         "sources": sources,
         "titles": normalized_titles,
         "locations": normalized_locations,
@@ -913,8 +921,7 @@ def run_discovery(payload: dict[str, Any]) -> dict[str, Any]:
         "dry_run": dry_run,
         "errors": errors,
         "message": (
-            f"Discovered {len(new_job_ids)} new jobs, skipped {duplicate_count} duplicates "
-            f"from {', '.join(sources)}."
+            f"Discovered {len(new_job_ids)} new jobs, skipped {duplicate_count} duplicates from {', '.join(sources)}."
         ),
     }
     _record_activity_log(run_id=run_id, summary=summary)
