@@ -2,6 +2,29 @@
 
 Public-repo note: historical entries use placeholder hostnames and paths where the original logs referenced private machine details. Older file references remain as evidence-first text and may no longer be directly clickable.
 
+## 2026-04-27 - Dashboard source freshness check added
+
+### What was executed
+
+- Extended `GET /v1/dashboard-checks` with a `freshness` section so Ops can detect a source lane that is stale even when the dashboard, n8n workflow, and aggregate job counts still look healthy.
+- Added configurable freshness thresholds:
+  - `RECALL_DASHBOARD_MAX_JOB_AGE_HOURS` defaults to `48`
+  - `RECALL_DASHBOARD_MAX_SOURCE_AGE_HOURS` defaults to `168`
+  - `RECALL_DASHBOARD_FRESHNESS_SOURCES` defaults to `jobspy,career_page`
+- Included machine-readable freshness metadata for monitored sources in the dashboard-check response.
+- Made the dashboard cache warmer opt-in by default after live validation showed the gap aggregation pass can occupy the bridge long enough to time out readiness probes on the current host.
+- Updated the dashboard smoke wrapper to validate the lightweight readiness path by default, with `RECALL_DASHBOARD_SMOKE_INCLUDE_GAPS=true` available for explicit full gap validation.
+
+### Validation
+
+- Local validation:
+  - `./.venv/bin/python -m pytest -q tests/test_bridge_api_contract.py`
+
+### Results
+
+- The Ops console readiness API now degrades when a monitored source has no parseable discovery timestamp or exceeds the configured freshness window.
+- Routine readiness checks no longer require the expensive gap aggregation path unless explicitly requested.
+
 ## 2026-04-27 - JobSpy dependency made durable for bridge rebuilds
 
 ### What was executed

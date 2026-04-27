@@ -59,15 +59,21 @@ Typical symptoms:
 
 ## Bridge-side cache warming
 
-The bridge now supports a background dashboard cache warmer for jobs, companies, and skill gaps.
+The bridge supports an optional background dashboard cache warmer for jobs, companies, and skill gaps. Leave it disabled for routine Ops readiness unless the host has enough headroom for the gap aggregation pass.
 
 Environment controls:
 
-- `RECALL_DASHBOARD_CACHE_WARMER=true|false`
+- `RECALL_DASHBOARD_CACHE_WARMER=true|false` (default `false`)
 - `RECALL_DASHBOARD_CACHE_WARM_INTERVAL_SECONDS` (default `300`)
 - `RECALL_PHASE6_COMPANY_CACHE_SECONDS` (default `180`)
 - `RECALL_PHASE6_JOBS_CACHE_SECONDS` (default `15`)
 - `RECALL_PHASE6_GAP_CACHE_SECONDS` (default `300`)
+
+The dashboard smoke wrapper checks the lightweight readiness path by default:
+
+- `scripts/phase6/run_dashboard_smoke.sh`
+
+Set `RECALL_DASHBOARD_SMOKE_INCLUDE_GAPS=true` to require the full gap check during a focused gap-readiness validation.
 
 ## Proxy settings
 

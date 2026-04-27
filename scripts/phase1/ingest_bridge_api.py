@@ -16,6 +16,7 @@ import uuid
 from collections import deque
 from contextlib import asynccontextmanager
 from dataclasses import asdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional
 
@@ -198,6 +199,7 @@ class DashboardCheckSection(BaseModel):
     count: Optional[int] = Field(default=None, description="Count of records or items loaded for this section.")
     detail: Optional[str] = Field(default=None, description="Short human-readable summary for this section.")
     latency_ms: int = Field(..., description="Time spent loading this section in milliseconds.")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Optional machine-readable check details.")
 
 
 class DashboardChecksResponse(BaseModel):
@@ -205,6 +207,7 @@ class DashboardChecksResponse(BaseModel):
     status: Literal["ok", "degraded"]
     checked_at: str
     jobs: DashboardCheckSection
+    freshness: Optional[DashboardCheckSection] = None
     companies: DashboardCheckSection
     gaps: Optional[DashboardCheckSection] = None
     cache_warmer: dict[str, Any] = Field(default_factory=dict)
@@ -1966,7 +1969,7 @@ def create_app() -> FastAPI:
                 DEFAULT_DASHBOARD_WARM_INTERVAL_SECONDS,
             )
         )
-        if _env_flag("RECALL_DASHBOARD_CACHE_WARMER", default=True)
+        if _env_flag("RECALL_DASHBOARD_CACHE_WARMER", default=False)
         else None
     )
     observability = init_observability()
@@ -2172,6 +2175,14 @@ def _env_flag(name: str, *, default: bool) -> bool:
     return raw in {"1", "true", "yes", "on"}
 
 
+def _env_csv(name: str, *, default: tuple[str, ...]) -> tuple[str, ...]:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    values = tuple(part.strip() for part in raw.split(",") if part.strip())
+    return values or default
+
+
 def _dashboard_checks_payload(
     *,
     include_gaps: bool,
@@ -2182,6 +2193,11 @@ def _dashboard_checks_payload(
         "jobs": _run_dashboard_check(
             label="jobs",
             runner=lambda: _dashboard_jobs_section(),
+            notes=notes,
+        ),
+        "freshness": _run_dashboard_check(
+            label="freshness",
+            runner=lambda: _dashboard_freshness_section(),
             notes=notes,
         ),
         "companies": _run_dashboard_check(
@@ -2212,6 +2228,7 @@ def _dashboard_checks_payload(
         "status": overall_status,
         "checked_at": now_iso(),
         "jobs": sections["jobs"],
+        "freshness": sections["freshness"],
         "companies": sections["companies"],
         "gaps": sections["gaps"],
         "cache_warmer": warmer_snapshot,
@@ -2249,6 +2266,90 @@ def _dashboard_jobs_section() -> dict[str, Any]:
     status = "ok" if total_jobs > 0 and item_count > 0 else "degraded"
     detail = f"{item_count} jobs loaded for the board, {total_jobs} total tracked, {high_fit} high-fit"
     return {"status": status, "count": total_jobs, "detail": detail}
+
+
+def _parse_dashboard_datetime(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    if raw.endswith("Z"):
+        raw = f"{raw[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _dashboard_freshness_section() -> dict[str, Any]:
+    jobs = phase6_all_jobs()
+    now = datetime.now(timezone.utc)
+    max_overall_age_hours = _read_positive_float_env("RECALL_DASHBOARD_MAX_JOB_AGE_HOURS", 48.0)
+    max_source_age_hours = _read_positive_float_env("RECALL_DASHBOARD_MAX_SOURCE_AGE_HOURS", 168.0)
+    monitored_sources = _env_csv("RECALL_DASHBOARD_FRESHNESS_SOURCES", default=("jobspy", "career_page"))
+
+    latest_overall: datetime | None = None
+    source_latest: dict[str, datetime] = {}
+    source_counts: dict[str, int] = {}
+    for job in jobs:
+        source = str(job.get("source") or "unknown").strip() or "unknown"
+        discovered_at = _parse_dashboard_datetime(job.get("discovered_at"))
+        source_counts[source] = source_counts.get(source, 0) + 1
+        if discovered_at is None:
+            continue
+        if latest_overall is None or discovered_at > latest_overall:
+            latest_overall = discovered_at
+        if source not in source_latest or discovered_at > source_latest[source]:
+            source_latest[source] = discovered_at
+
+    stale_reasons: list[str] = []
+    latest_age_hours: float | None = None
+    if latest_overall is None:
+        stale_reasons.append("no jobs have a parseable discovery timestamp")
+    else:
+        latest_age_hours = max(0.0, (now - latest_overall).total_seconds() / 3600)
+        if latest_age_hours > max_overall_age_hours:
+            stale_reasons.append(f"latest job is {latest_age_hours:.1f}h old")
+
+    source_metadata: dict[str, dict[str, Any]] = {}
+    for source in monitored_sources:
+        latest = source_latest.get(source)
+        count = source_counts.get(source, 0)
+        if latest is None:
+            source_metadata[source] = {"count": count, "latest_at": None, "age_hours": None}
+            stale_reasons.append(f"{source} has no recent discovery timestamp")
+            continue
+        age_hours = max(0.0, (now - latest).total_seconds() / 3600)
+        source_metadata[source] = {
+            "count": count,
+            "latest_at": latest.isoformat(),
+            "age_hours": round(age_hours, 1),
+        }
+        if age_hours > max_source_age_hours:
+            stale_reasons.append(f"{source} is {age_hours:.1f}h old")
+
+    status = "ok" if jobs and not stale_reasons else "degraded"
+    if status == "ok":
+        detail = f"Latest job is {latest_age_hours:.1f}h old; monitored sources are fresh"
+    else:
+        detail = "; ".join(stale_reasons[:3]) if stale_reasons else "No jobs available for freshness checks"
+    return {
+        "status": status,
+        "count": len(jobs),
+        "detail": detail,
+        "metadata": {
+            "latest_at": latest_overall.isoformat() if latest_overall else None,
+            "latest_age_hours": round(latest_age_hours, 1) if latest_age_hours is not None else None,
+            "max_overall_age_hours": max_overall_age_hours,
+            "max_source_age_hours": max_source_age_hours,
+            "monitored_sources": list(monitored_sources),
+            "sources": source_metadata,
+        },
+    }
 
 
 def _dashboard_companies_section() -> dict[str, Any]:

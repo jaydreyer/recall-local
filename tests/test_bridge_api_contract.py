@@ -9,6 +9,7 @@ import sqlite3
 import tempfile
 import unittest
 from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Iterator
 from unittest.mock import patch
@@ -33,6 +34,16 @@ def build_client(env_updates: dict[str, str]) -> Iterator[TestClient]:
 
 
 class BridgeApiContractTests(unittest.TestCase):
+    def _fresh_job(self, *, source: str = "jobspy", company: str = "OpenAI") -> dict[str, object]:
+        return {
+            "jobId": f"job-{source}",
+            "company": company,
+            "status": "evaluated",
+            "fit_score": 90,
+            "source": source,
+            "discovered_at": datetime.now(timezone.utc).isoformat(),
+        }
+
     def test_dashboard_checks_uses_warmed_gap_section_when_available(self) -> None:
         warmer = SimpleNamespace(
             warmed_gap_section=lambda: {"status": "ok", "count": 7, "detail": "7 aggregated gaps across 4 evaluated jobs"},
@@ -53,7 +64,10 @@ class BridgeApiContractTests(unittest.TestCase):
             return_value={"total_jobs": 12, "high_fit_count": 3},
         ), patch(
             "scripts.phase1.ingest_bridge_api.phase6_all_jobs",
-            return_value=[{"jobId": "job-1", "company": "OpenAI", "status": "evaluated", "fit_score": 90}],
+            return_value=[
+                self._fresh_job(source="jobspy", company="OpenAI"),
+                self._fresh_job(source="career_page", company="Target"),
+            ],
         ), patch(
             "scripts.phase1.ingest_bridge_api.phase6_list_company_profiles",
             return_value=[{"company_id": "openai", "company_name": "OpenAI"}],
@@ -87,7 +101,10 @@ class BridgeApiContractTests(unittest.TestCase):
             return_value={"total_jobs": 12, "high_fit_count": 3},
         ), patch(
             "scripts.phase1.ingest_bridge_api.phase6_all_jobs",
-            return_value=[{"jobId": "job-1", "company": "OpenAI", "status": "evaluated", "fit_score": 90}],
+            return_value=[
+                self._fresh_job(source="jobspy", company="OpenAI"),
+                self._fresh_job(source="career_page", company="Target"),
+            ],
         ), patch(
             "scripts.phase1.ingest_bridge_api.phase6_list_company_profiles",
             return_value=[{"company_id": "openai", "company_name": "OpenAI"}],
@@ -101,6 +118,44 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertIn("warming in the background", payload["gaps"]["detail"].lower())
         self.assertIn("warming in background", payload["notes"][0].lower())
         aggregate_mock.assert_not_called()
+
+    def test_dashboard_checks_degrades_when_monitored_source_is_stale(self) -> None:
+        stale_jobspy = {
+            "jobId": "job-jobspy",
+            "company": "OpenAI",
+            "status": "evaluated",
+            "fit_score": 90,
+            "source": "jobspy",
+            "discovered_at": (datetime.now(timezone.utc) - timedelta(days=20)).isoformat(),
+        }
+        fresh_career_page = self._fresh_job(source="career_page", company="Target")
+
+        with patch.dict(
+            os.environ,
+            {
+                "RECALL_DASHBOARD_FRESHNESS_SOURCES": "jobspy,career_page",
+                "RECALL_DASHBOARD_MAX_SOURCE_AGE_HOURS": "168",
+            },
+            clear=False,
+        ), patch(
+            "scripts.phase1.ingest_bridge_api.phase6_list_jobs",
+            return_value={"total": 12, "items": [{"jobId": "job-1"}]},
+        ), patch(
+            "scripts.phase1.ingest_bridge_api.phase6_job_stats",
+            return_value={"total_jobs": 12, "high_fit_count": 3},
+        ), patch(
+            "scripts.phase1.ingest_bridge_api.phase6_all_jobs",
+            return_value=[stale_jobspy, fresh_career_page],
+        ), patch(
+            "scripts.phase1.ingest_bridge_api.phase6_list_company_profiles",
+            return_value=[{"company_id": "openai", "company_name": "OpenAI"}],
+        ):
+            payload = ingest_bridge_api._dashboard_checks_payload(include_gaps=False, cache_warmer=None)
+
+        self.assertEqual(payload["status"], "degraded")
+        self.assertEqual(payload["freshness"]["status"], "degraded")
+        self.assertIn("jobspy", payload["freshness"]["detail"])
+        self.assertIn("career_page", payload["freshness"]["metadata"]["sources"])
 
     def test_cors_defaults_to_no_cross_origin_access_when_unset(self) -> None:
         env = {
@@ -703,7 +758,10 @@ class BridgeApiContractTests(unittest.TestCase):
             return_value={"total_jobs": 12, "high_fit_count": 3},
         ), patch(
             "scripts.phase1.ingest_bridge_api.phase6_all_jobs",
-            return_value=[{"jobId": "job-1", "company": "OpenAI", "status": "evaluated", "fit_score": 90}],
+            return_value=[
+                self._fresh_job(source="jobspy", company="OpenAI"),
+                self._fresh_job(source="career_page", company="Target"),
+            ],
         ), patch(
             "scripts.phase1.ingest_bridge_api.phase6_list_company_profiles",
             return_value=[{"company_id": "openai", "company_name": "OpenAI"}],
@@ -719,6 +777,7 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(payload["workflow"], "workflow_06a_dashboard_checks")
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["jobs"]["count"], 12)
+        self.assertEqual(payload["freshness"]["status"], "ok")
         self.assertEqual(payload["companies"]["count"], 1)
         self.assertEqual(payload["gaps"]["count"], 1)
 
