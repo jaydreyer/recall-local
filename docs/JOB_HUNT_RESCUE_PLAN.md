@@ -470,7 +470,7 @@ Results recorded 2026-05-19:
 
 Goal: use the live dashboard as Jay's daily job-search cockpit while tightening recommendation quality from observed workflow outcomes.
 
-Status: ready to start.
+Status: in progress; first daily loop completed on 2026-05-19.
 
 Implementation notes:
 
@@ -486,6 +486,32 @@ Acceptance criteria:
 - Application packets can be generated cleanly for selected roles.
 - Re-evaluation outcomes improve action quality by demoting stale or weak-fit recommendations.
 - Dashboard smoke and ops observability remain green during normal operation.
+
+Results recorded 2026-05-19:
+
+- Ran the live Top 3 moves queue from `GET /v1/job-actions?limit=5`.
+- Initial queue was dominated by current/recent Solutions Engineer-family roles, but several carried old local-evaluator observations:
+  - `job_a3309aae2cdc071b` - `Solutions Consultant`, Avalara, old local score 78.
+  - `job_0607b5cfbd7a6eb7` - `Physical Security Solutions Engineer`, New Era Technology, old local score 80.
+  - `job_7330966d0ceb14de` - `Solution Engineer (in API Integration and AI Automation)`, Integry, old local score 78.
+- Re-evaluated those three with the live cloud evaluator `openai:gpt-4.1-mini`:
+  - Avalara dropped from 78 to 46 because the role is heavily tax-compliance and sales-cycle/domain specific.
+  - New Era Technology dropped from 80 to 35 because physical security, video surveillance, access control, intrusion detection, and bill-of-material estimating are critical domain gaps.
+  - Integry landed at 65 and remained the best concrete action because the API integration, SaaS workflow, n8n, and AI automation requirements map closely to Jay's strongest evidence.
+- Archived/deprioritized the New Era physical-security role as `dismissed` with calibration notes, preserving job history.
+- Generated an Integry application packet through the live application-prep endpoints:
+  - `POST /v1/tailored-summaries` returned HTTP 200, OpenAI `gpt-4.1-mini`, 80 words.
+  - `POST /v1/resume-bullets` returned HTTP 200, OpenAI `gpt-4.1-mini`, 83 words.
+  - `POST /v1/cover-letter-drafts` returned HTTP 200, OpenAI `gpt-4.1-mini`, 343 words.
+  - The job workflow now reports required packet items checked, linked, verified, and `readyForApproval=true`.
+  - `save_to_vault=true` was accepted, but the returned artifact paths were `null` and the cover-letter `savedToVault` flag was `false`; treat this as a persistence/metadata follow-up, not a prose-generation failure.
+- After demotion and packet generation, the next queue advanced to Smartsheet, monday.com, and Workato roles, which is a healthier daily cockpit state.
+
+Calibration examples collected:
+
+- Title false positive: `Physical Security Solutions Engineer` should not receive high daily priority from title matching alone when the domain is video surveillance/access control/intrusion hardware and estimating.
+- Domain-specific Solutions Consultant false positive: Avalara-style tax compliance overlay roles should be downweighted unless the candidate evidence or packet strategy directly covers tax compliance product/domain expertise and sales-cycle ownership.
+- Strong target example with manageable gaps: Integry-style API Integration and AI Automation Solution Engineer roles are valuable even at mid/high 60s when the gaps are specific and learnable, such as OAuth/SAML/JWT depth and broader iPaaS exposure.
 
 ## Verification Commands
 
