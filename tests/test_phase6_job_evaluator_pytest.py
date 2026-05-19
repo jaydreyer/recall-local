@@ -130,6 +130,43 @@ def test_evaluate_jobs_keeps_batch_running_when_one_job_fails(monkeypatch: pytes
     assert "broken row" in result["results"][1]["error"]
 
 
+def test_evaluate_jobs_skips_jobs_beyond_budget_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        job_evaluator,
+        "evaluate_job",
+        lambda *, job_id, settings: {"fit_score": 80, "observation": {}},
+    )
+
+    result = job_evaluator._evaluate_jobs(
+        job_ids=["job-1", "job-2", "job-3"],
+        settings={"evaluation_model": "local", "max_jobs_per_run": 2, "local_model": "gemma3:12b-it-qat"},
+    )
+
+    assert result["evaluated"] == 2
+    assert result["skipped"] == 1
+    assert result["results"][2]["status"] == "skipped"
+    assert result["results"][2]["error"] == "budget_guardrail:max_jobs_per_run"
+
+
+def test_evaluate_jobs_blocks_cloud_batch_when_estimated_cost_exceeds_budget() -> None:
+    result = job_evaluator._evaluate_jobs(
+        job_ids=["job-1"],
+        settings={
+            "evaluation_model": "cloud",
+            "cloud_provider": "openai",
+            "cloud_model": "gpt-5",
+            "max_tokens": 2200,
+            "max_jobs_per_run": 10,
+            "max_cloud_cost_usd": 0.001,
+        },
+    )
+
+    assert result["evaluated"] == 0
+    assert result["failed"] == 1
+    assert result["budget"]["within_cloud_budget"] is False
+    assert result["results"][0]["error"] == "budget_guardrail:max_cloud_cost_usd"
+
+
 def test_parse_evaluation_defaults_missing_gaps_to_empty_list() -> None:
     parsed = job_evaluator.parse_evaluation(
         """

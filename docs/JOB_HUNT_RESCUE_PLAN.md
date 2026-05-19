@@ -1,6 +1,6 @@
 # Job Hunt Rescue Plan
 
-Current phase: Phase 2 - Evaluation pipeline cleanup
+Current phase: Phase 3 - Job Relevance And Ranking
 
 Last updated: 2026-05-19
 
@@ -156,6 +156,8 @@ Phase 1 recommendation:
 
 Goal: make job evaluation reliable, even if the winning evaluator is cloud-first instead of local-first.
 
+Status: complete enough to promote a guarded evaluator path; quality/ranking cleanup continues in Phase 3.
+
 Implementation notes:
 
 - First discover cloud model availability from the live ai-lab credentials. Record the exact callable OpenAI and Anthropic model IDs, endpoint support, and any auth/rate-limit failures.
@@ -184,9 +186,107 @@ Acceptance criteria:
 - Budget guardrails are documented before any broad cloud evaluation run.
 - Required validation passes after sync to ai-lab.
 
+Results recorded 2026-05-19:
+
+- Added `scripts/eval/discover_cloud_models.py` to discover callable OpenAI/Anthropic models from live ai-lab credentials and write JSON artifacts.
+- Added `scripts/eval/run_job_fit_bakeoff.py` to run the same job-fit golden cases plus sampled real-job calibration across local/cloud candidates.
+- Added OpenAI Responses API support for GPT-5-family evaluator calls; GPT-4.1/4o-family calls continue to use Chat Completions with JSON mode.
+- Added evaluator budget guardrails:
+  - `max_jobs_per_run`, default `10`
+  - `max_cloud_cost_usd`, default `1.0`
+  - batches above the job cap are skipped instead of silently expanding cloud spend
+  - cloud batches above the estimated cap fail closed before model calls
+- Replaced Phase 6 evaluator defaults away from `llama3.2:3b`; local fallback is now `gemma3:12b-it-qat`.
+- Persisted live ai-lab evaluator settings to:
+  - `evaluation_model=cloud`
+  - `cloud_provider=openai`
+  - `cloud_model=gpt-4.1-mini`
+  - `local_model=gemma3:12b-it-qat`
+  - `auto_escalate=false`
+  - `max_jobs_per_run=10`
+  - `max_cloud_cost_usd=1.0`
+
+Cloud discovery artifacts:
+
+- `/home/jaydreyer/recall-local/data/artifacts/evals/cloud-model-discovery/20260519T183840Z_cloud_model_discovery.json`
+- `/home/jaydreyer/recall-local/data/artifacts/evals/cloud-model-discovery/20260519T185341Z_cloud_model_discovery.json`
+
+Callable OpenAI models observed through live ai-lab credentials:
+
+| Model | Endpoint | Structured JSON probe | Notes |
+| --- | --- | --- | --- |
+| `gpt-4o-mini` | Chat Completions | pass | Cheapest viable OpenAI scorer, but over-scored a negative-control internship in calibration. |
+| `gpt-4.1-mini` | Chat Completions | pass | Selected default: best cost/latency/reliability tradeoff in the sampled bakeoff. |
+| `gpt-5-mini` | Responses | pass after Responses wiring | Callable, stricter, but slower and initially exhausted output cap without GPT-5-specific handling. |
+| `gpt-5` | Responses | pass after Responses wiring | Callable, not chosen for bulk scoring due expected cost/latency. |
+| `gpt-5.1` | Responses | pass | Callable, stricter on negatives, but slowest sampled candidate and under-scored target golden cases. |
+| `gpt-5.2` | Responses | pass | Callable in probe; not run through full calibration in this pass. |
+
+Callable Anthropic models observed through live ai-lab credentials:
+
+| Model | Endpoint | Structured JSON probe | Notes |
+| --- | --- | --- | --- |
+| `claude-sonnet-4-20250514` | Messages | pass | Callable; reserved for deeper artifacts unless it wins a future scoring bakeoff. |
+| `claude-opus-4-1-20250805` | Messages | pass | Callable but likely too expensive for bulk job scoring. |
+| `claude-opus-4-20250514` | Messages | pass | Callable but likely too expensive for bulk job scoring. |
+| `claude-opus-4-5-20251101` | Messages | pass in first probe | Not selected for bulk scoring. |
+| `claude-opus-4-6` | Messages | pass in first probe | Not selected for bulk scoring. |
+
+Cloud bakeoff artifact:
+
+- `/home/jaydreyer/recall-local/data/artifacts/evals/job-fit-bakeoff/20260519T190922Z_job_fit_bakeoff.json`
+
+Sampled bakeoff summary:
+
+| Candidate | Golden subset | Real-job JSON | Avg latency | Phase 2 call |
+| --- | ---: | ---: | ---: | --- |
+| `openai:gpt-4o-mini` | 0/3 | 3/3 | 17.5s | reject as default; over-scored negative internship at 74 |
+| `openai:gpt-4.1-mini` | 0/3 | 3/3 | 12.0s | selected default; strongest current cost/reliability balance |
+| `openai:gpt-5-mini` | 0/3 | 3/3 | 13.5s | keep as future escalation candidate after more prompt/rubric tuning |
+| `openai:gpt-5.1` | 0/3 | 3/3 | 25.8s | reject for bulk scoring; stricter but slower and under-scored targets |
+
+Interpretation:
+
+- No cloud model passed the current golden thresholds without additional prompt/rubric calibration.
+- All sampled OpenAI cloud candidates returned valid structured JSON for sampled real jobs after the Responses path was added for GPT-5-family models.
+- `gpt-4o-mini` is cheapest, but it over-scored an obvious negative control (`Engineering Intern`) at 74.
+- GPT-5-family models were stricter on negatives, but under-scored strong target cases and added latency/cost risk.
+- `gpt-4.1-mini` is the best reliable default for now because it returned valid JSON, separated the internship negative better than `4o-mini`, and is materially cheaper/faster than GPT-5-family models.
+- Phase 3 should focus on relevance/ranking and rubric calibration; the current golden thresholds may be too coupled to local-model behavior and should be revisited after corpus cleanup.
+
+Validation:
+
+- Synced changed files from Mac to ai-lab and spot-checked contents before live validation.
+- Ran `docker/validate-stack.sh` before and after restarting `recall-ingest-bridge`; both passed.
+- Restarted only `recall-ingest-bridge` with `docker compose -p recall --env-file .env -f docker-compose.yml restart recall-ingest-bridge`; no `docker run`, no project-name change, no volume changes.
+- `GET /v1/healthz` returned `{"status":"ok"}` after restart.
+- `GET /v1/llm-settings` returned the selected `openai:gpt-4.1-mini` cloud evaluator and `gemma3:12b-it-qat` fallback.
+- Dashboard smoke with gaps disabled passed with status `ok`.
+- Ops observability check artifact `/home/jaydreyer/recall-local/data/artifacts/observability/20260519T191258Z_ops_observability_check.json` returned `error` because `job_alert_workflow` and `rag_probe` timed out; bridge health, dashboard checks, daily dashboard UI, and chat UI were `ok`. Treat this as residual workflow/RAG slowness for follow-up, not as evaluator model selection failure.
+
 ### Phase 3 - Job Relevance And Ranking
 
 Goal: make the job corpus useful by prioritizing the right roles and archiving obvious noise.
+
+Handoff prompt for the next chat:
+
+```text
+Read AGENTS.md and docs/JOB_HUNT_RESCUE_PLAN.md in /Users/jaydreyer/projects/recall-local.
+
+Continue from the current phase: Phase 3 - Job Relevance And Ranking.
+
+Important context:
+- Phase 2 selected the guarded default evaluator path: cloud `openai:gpt-4.1-mini` with local fallback `gemma3:12b-it-qat`.
+- Do not rerun model shopping first. The next value is ranking/corpus cleanup, not another bakeoff.
+- Top live issue: too many false high-fit and broad/off-target roles. Recent sampled negative controls included `Engineering Intern` and Java/Spring/Azure backend roles that should not rank highly for Jay.
+- Preserve history; archive or deprioritize noisy jobs rather than deleting them.
+- Keep company discovery broad. Known companies can get a soft boost, but company lists must not become hard filters.
+- Target titles remain: Solutions Engineer, AI Engineer, Technical Account Manager, Customer Engineer, Forward Deployed Engineer.
+- Follow AGENTS.md strictly: sync Mac changes to ai-lab before live validation, preserve Docker/Compose invariants, use rest-api-design for API work, and do not disturb unrelated dirty ai-lab worktree changes.
+
+Goal for this chat:
+Implement Phase 3 enough that the daily job list is dominated by the five target title families and obvious noise is archived/deprioritized while remaining inspectable.
+```
 
 Implementation notes:
 
@@ -311,3 +411,4 @@ When credentials are present, query provider model availability through the conf
 - 2026-05-19: Installed `api-testing`, `reactive-dashboard-performance`, and `local-llm-expert`. Attempted `local-llm-ops`; skills search listed it, but the source installed only `mcp-protocol-builder`, so `local-llm-expert` is the active local-LLM helper skill.
 - 2026-05-19: Phase 1 completed. Pulled `deepseek-v2:16b`, `qwen3:14b`, and `qwen3:30b`; verified `ollama list`; ran stack validation; ran synthetic golden and real-job calibration. No new model beat the current best reliable fallback. Current phase set to Phase 2 - Evaluation pipeline cleanup.
 - 2026-05-19: Phase 2 plan updated to evaluate cloud-first scoring. Do not assume `gpt-5-mini`, `gpt-4.1-mini`, or any Claude model is available to the live account; discover callable models from ai-lab credentials, then bake off cloud candidates against the same golden and real-job calibration sets.
+- 2026-05-19: Phase 2 implemented a guarded cloud-first evaluator path. Discovered callable OpenAI/Anthropic models from live ai-lab credentials, added GPT-5-family Responses support, added cloud/local bakeoff scripts, added budget guardrails, set live evaluator to `openai:gpt-4.1-mini`, retained `gemma3:12b-it-qat` as local fallback, validated stack/dashboard smoke, and advanced current phase to Phase 3 - Job Relevance And Ranking. Ops observability still needs follow-up for `job_alert_workflow` and `rag_probe` timeouts.

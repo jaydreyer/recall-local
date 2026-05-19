@@ -28,6 +28,7 @@ JOB_EVAL_RUNS_LOCK = threading.Lock()
 JOB_EVAL_RUNS: dict[str, dict[str, Any]] = {}
 
 ALLOWED_CLOUD_PROVIDERS = {"anthropic", "openai", "gemini"}
+DEFAULT_LOCAL_EVALUATOR_MODEL = "gemma3:12b-it-qat"
 ALLOWED_RECOMMENDATION_TYPES = {"course", "project", "video", "certification", "article"}
 ALLOWED_SEVERITY = {"critical", "moderate", "minor"}
 ALLOWED_LOCATION_TYPES = {"remote", "hybrid", "onsite"}
@@ -268,8 +269,39 @@ def _evaluate_jobs(*, job_ids: list[str], settings: dict[str, Any]) -> dict[str,
     rows: list[dict[str, Any]] = []
     evaluated = 0
     failed = 0
+    skipped = 0
 
-    for job_id in job_ids:
+    selected_job_ids, skipped_job_ids = _apply_job_budget_guardrails(job_ids=job_ids, settings=settings)
+    budget = _budget_snapshot(job_count=len(selected_job_ids), settings=settings)
+    if not budget["within_cloud_budget"]:
+        for job_id in selected_job_ids:
+            failed += 1
+            rows.append(
+                {
+                    "job_id": job_id,
+                    "status": "error",
+                    "fit_score": -1,
+                    "error": "budget_guardrail:max_cloud_cost_usd",
+                }
+            )
+        for skipped_job_id in skipped_job_ids:
+            rows.append(
+                {
+                    "job_id": skipped_job_id,
+                    "status": "skipped",
+                    "fit_score": -1,
+                    "error": "budget_guardrail:max_jobs_per_run",
+                }
+            )
+        return {
+            "evaluated": evaluated,
+            "failed": failed,
+            "skipped": len(skipped_job_ids),
+            "results": rows,
+            "budget": budget,
+        }
+
+    for job_id in selected_job_ids:
         try:
             evaluation = evaluate_job(job_id=job_id, settings=settings)
             rows.append(
@@ -296,10 +328,23 @@ def _evaluate_jobs(*, job_ids: list[str], settings: dict[str, Any]) -> dict[str,
                 }
             )
 
+    for skipped_job_id in skipped_job_ids:
+        skipped += 1
+        rows.append(
+            {
+                "job_id": skipped_job_id,
+                "status": "skipped",
+                "fit_score": -1,
+                "error": "budget_guardrail:max_jobs_per_run",
+            }
+        )
+
     return {
         "evaluated": evaluated,
         "failed": failed,
+        "skipped": skipped,
         "results": rows,
+        "budget": budget,
     }
 
 
@@ -717,7 +762,9 @@ def _build_evaluation_prompt(*, job: dict[str, Any], resume_text: str) -> str:
 
 def _call_ollama(*, prompt: str, settings: dict[str, Any]) -> str:
     host = os.getenv("OLLAMA_HOST", "http://localhost:11434").strip() or "http://localhost:11434"
-    model = str(settings.get("local_model") or os.getenv("RECALL_PHASE6_EVAL_LOCAL_MODEL") or "llama3.2:3b").strip()
+    model = str(
+        settings.get("local_model") or os.getenv("RECALL_PHASE6_EVAL_LOCAL_MODEL") or DEFAULT_LOCAL_EVALUATOR_MODEL
+    ).strip()
     payload = {
         "model": model,
         "prompt": prompt,
@@ -741,13 +788,13 @@ def _call_ollama(*, prompt: str, settings: dict[str, Any]) -> str:
 
 def _call_cloud(*, prompt: str, settings: dict[str, Any]) -> str:
     provider = str(settings.get("cloud_provider") or "anthropic").strip().lower()
-    model = str(settings.get("cloud_model") or "").strip()
+    model = _selected_cloud_model(provider=provider, settings=settings)
     max_tokens = int(settings.get("max_tokens") or 2200)
 
     if provider == "anthropic":
         api_key = _require_env("ANTHROPIC_API_KEY")
         payload: dict[str, Any] = {
-            "model": model or os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929"),
+            "model": model,
             "max_tokens": max_tokens,
             "temperature": 0.2,
             "messages": [{"role": "user", "content": prompt}],
@@ -769,21 +816,23 @@ def _call_cloud(*, prompt: str, settings: dict[str, Any]) -> str:
 
     if provider == "openai":
         api_key = _require_env("OPENAI_API_KEY")
+        if model.startswith("gpt-5"):
+            response = _post_openai_responses_json(
+                api_key=api_key,
+                model=model,
+                prompt=prompt,
+                max_tokens=max_tokens,
+                timeout_seconds=120.0,
+            )
+            return response
         payload = {
-            "model": model or os.getenv("OPENAI_MODEL", "gpt-4o"),
+            "model": model,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.2,
             "max_tokens": max_tokens,
+            "response_format": {"type": "json_object"},
         }
-        response = _post_json_with_retries(
-            url="https://api.openai.com/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            payload=payload,
-            timeout_seconds=120.0,
-        )
+        response = _post_openai_chat_json(api_key=api_key, payload=payload, timeout_seconds=120.0)
         choices = response.json().get("choices") or []
         if not choices:
             raise RuntimeError("OpenAI response missing choices.")
@@ -791,7 +840,7 @@ def _call_cloud(*, prompt: str, settings: dict[str, Any]) -> str:
 
     if provider == "gemini":
         api_key = _require_env("GEMINI_API_KEY")
-        model_name = model or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        model_name = model
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
@@ -814,6 +863,105 @@ def _call_cloud(*, prompt: str, settings: dict[str, Any]) -> str:
         return "\n".join(str(part.get("text") or "") for part in parts).strip()
 
     raise ValueError(f"Unsupported cloud provider: {provider}")
+
+
+def _post_openai_responses_json(
+    *,
+    api_key: str,
+    model: str,
+    prompt: str,
+    max_tokens: int,
+    timeout_seconds: float,
+) -> str:
+    payload: dict[str, Any] = {
+        "model": model,
+        "input": prompt,
+        "text": {"format": {"type": "json_object"}},
+        "reasoning": {"effort": "low"},
+        "max_output_tokens": max(max_tokens, 4096),
+    }
+    response = _post_json_with_retries(
+        url="https://api.openai.com/v1/responses",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        payload=payload,
+        timeout_seconds=timeout_seconds,
+    )
+    data = response.json()
+    status = str(data.get("status") or "")
+    if status == "incomplete":
+        reason = data.get("incomplete_details") or data.get("incomplete_reason") or {}
+        raise RuntimeError(f"OpenAI Responses call incomplete for {model}: {reason}")
+
+    output_text = str(data.get("output_text") or "").strip()
+    if output_text:
+        return output_text
+
+    parts: list[str] = []
+    for item in data.get("output") or []:
+        if not isinstance(item, dict):
+            continue
+        for content in item.get("content") or []:
+            if not isinstance(content, dict):
+                continue
+            if content.get("type") in {"output_text", "text"}:
+                parts.append(str(content.get("text") or ""))
+    text = "".join(parts).strip()
+    if not text:
+        raise RuntimeError(f"OpenAI Responses call for {model} returned no output text.")
+    return text
+
+
+def _post_openai_chat_json(*, api_key: str, payload: dict[str, Any], timeout_seconds: float) -> httpx.Response:
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    try:
+        return _post_json_with_retries(
+            url="https://api.openai.com/v1/chat/completions",
+            headers=headers,
+            payload=payload,
+            timeout_seconds=timeout_seconds,
+        )
+    except httpx.HTTPStatusError as exc:
+        message = ""
+        try:
+            body = exc.response.json()
+            if isinstance(body, dict):
+                message = str(body.get("error", {}).get("message") or "")
+        except Exception:  # noqa: BLE001
+            message = ""
+        if exc.response.status_code != 400 or "max_tokens" not in message:
+            raise
+        fallback_payload = dict(payload)
+        fallback_payload["max_completion_tokens"] = fallback_payload.pop("max_tokens", 2200)
+        fallback_payload.pop("temperature", None)
+        return _post_json_with_retries(
+            url="https://api.openai.com/v1/chat/completions",
+            headers=headers,
+            payload=fallback_payload,
+            timeout_seconds=timeout_seconds,
+        )
+
+
+def _selected_cloud_model(*, provider: str, settings: dict[str, Any]) -> str:
+    model = str(settings.get("cloud_model") or "").strip()
+    if not model:
+        env_name = {
+            "anthropic": "ANTHROPIC_MODEL",
+            "openai": "OPENAI_MODEL",
+            "gemini": "GEMINI_MODEL",
+        }.get(provider, "")
+        if env_name:
+            model = os.getenv(env_name, "").strip()
+    if not model:
+        raise RuntimeError(
+            f"No {provider} cloud model configured. Run cloud model discovery and set cloud_model before cloud evaluation."
+        )
+    return model
 
 
 def _post_json_with_retries(
@@ -1289,6 +1437,8 @@ def _load_runtime_settings(overrides: dict[str, Any] | None) -> dict[str, Any]:
             "escalate_threshold_rationale_words",
             "local_model",
             "max_tokens",
+            "max_jobs_per_run",
+            "max_cloud_cost_usd",
         }:
             merged[key] = value
 
@@ -1305,9 +1455,7 @@ def _normalize_runtime_settings(settings: dict[str, Any]) -> dict[str, Any]:
     if normalized["cloud_provider"] not in ALLOWED_CLOUD_PROVIDERS:
         normalized["cloud_provider"] = "anthropic"
 
-    normalized["cloud_model"] = str(normalized.get("cloud_model") or "").strip() or os.getenv(
-        "ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929"
-    )
+    normalized["cloud_model"] = str(normalized.get("cloud_model") or "").strip()
     normalized["auto_escalate"] = _coerce_bool(normalized.get("auto_escalate", True), default=True)
     normalized["escalate_threshold_gaps"] = max(_coerce_int(normalized.get("escalate_threshold_gaps"), default=0), 0)
     normalized["escalate_threshold_rationale_words"] = max(
@@ -1315,10 +1463,72 @@ def _normalize_runtime_settings(settings: dict[str, Any]) -> dict[str, Any]:
         0,
     )
     if "local_model" in normalized and normalized["local_model"] is not None:
-        normalized["local_model"] = str(normalized["local_model"]).strip()
+        normalized["local_model"] = str(normalized["local_model"]).strip() or DEFAULT_LOCAL_EVALUATOR_MODEL
     if "max_tokens" in normalized and normalized["max_tokens"] is not None:
         normalized["max_tokens"] = max(_coerce_int(normalized["max_tokens"], default=2200), 256)
+    normalized["max_jobs_per_run"] = max(_coerce_int(normalized.get("max_jobs_per_run"), default=10), 1)
+    normalized["max_cloud_cost_usd"] = max(_coerce_float(normalized.get("max_cloud_cost_usd"), default=1.0), 0.0)
     return normalized
+
+
+def _apply_job_budget_guardrails(*, job_ids: list[str], settings: dict[str, Any]) -> tuple[list[str], list[str]]:
+    max_jobs = max(_coerce_int(settings.get("max_jobs_per_run"), default=10), 1)
+    return job_ids[:max_jobs], job_ids[max_jobs:]
+
+
+def _budget_snapshot(*, job_count: int, settings: dict[str, Any]) -> dict[str, Any]:
+    mode = str(settings.get("evaluation_model") or "local").strip().lower()
+    provider = str(settings.get("cloud_provider") or "").strip().lower()
+    model = str(settings.get("cloud_model") or "").strip()
+    max_jobs = max(_coerce_int(settings.get("max_jobs_per_run"), default=10), 1)
+    max_cloud_cost_usd = max(_coerce_float(settings.get("max_cloud_cost_usd"), default=1.0), 0.0)
+    estimated_cost_usd = 0.0
+    if mode == "cloud":
+        estimated_cost_usd = _estimate_cloud_eval_cost_usd(
+            provider=provider,
+            model=model,
+            job_count=job_count,
+            max_tokens=max(_coerce_int(settings.get("max_tokens"), default=2200), 256),
+        )
+    return {
+        "mode": mode,
+        "provider": provider if mode == "cloud" else "ollama",
+        "model": model if mode == "cloud" else str(settings.get("local_model") or DEFAULT_LOCAL_EVALUATOR_MODEL),
+        "max_jobs_per_run": max_jobs,
+        "max_cloud_cost_usd": max_cloud_cost_usd,
+        "estimated_cost_usd": estimated_cost_usd,
+        "within_cloud_budget": mode != "cloud" or estimated_cost_usd <= max_cloud_cost_usd,
+    }
+
+
+def _estimate_cloud_eval_cost_usd(*, provider: str, model: str, job_count: int, max_tokens: int) -> float:
+    # Conservative planning estimate only. Real token usage is recorded by provider billing.
+    # Assumes roughly 7k input tokens plus configured output cap per job.
+    estimated_input_tokens = 7000 * max(job_count, 0)
+    estimated_output_tokens = max_tokens * max(job_count, 0)
+    pricing = _cloud_pricing_per_million_tokens(provider=provider, model=model)
+    return round(
+        (estimated_input_tokens / 1_000_000 * pricing["input"])
+        + (estimated_output_tokens / 1_000_000 * pricing["output"]),
+        4,
+    )
+
+
+def _cloud_pricing_per_million_tokens(*, provider: str, model: str) -> dict[str, float]:
+    normalized = f"{provider}:{model}".lower()
+    if "gpt-4.1-mini" in normalized or "gpt-4o-mini" in normalized:
+        return {"input": 0.40, "output": 1.60}
+    if "gpt-5-mini" in normalized:
+        return {"input": 0.25, "output": 2.00}
+    if "gpt-5" in normalized or "gpt-4.1" in normalized or "gpt-4o" in normalized:
+        return {"input": 5.00, "output": 15.00}
+    if "haiku" in normalized:
+        return {"input": 0.80, "output": 4.00}
+    if "sonnet" in normalized:
+        return {"input": 3.00, "output": 15.00}
+    if "opus" in normalized:
+        return {"input": 15.00, "output": 75.00}
+    return {"input": 5.00, "output": 15.00}
 
 
 def _load_resume_text() -> str:
@@ -1454,6 +1664,13 @@ def _coerce_int(value: Any, *, field: str | None = None, default: int = 0) -> in
         if field is None:
             return default
         raise MalformedResponseError(f"{field} must be an integer") from exc
+
+
+def _coerce_float(value: Any, *, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _coerce_bool(value: Any, *, default: bool) -> bool:

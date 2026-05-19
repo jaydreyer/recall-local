@@ -993,12 +993,14 @@ LLM_SETTINGS_SUCCESS_EXAMPLE = {
     "workflow": "workflow_06a_llm_settings",
     "settings": {
         "evaluation_model": "local",
-        "local_model": "llama3.2:3b",
-        "cloud_provider": "anthropic",
-        "cloud_model": "claude-sonnet-4-5-20250929",
+        "local_model": "gemma3:12b-it-qat",
+        "cloud_provider": "openai",
+        "cloud_model": "",
         "auto_escalate": True,
         "escalate_threshold_gaps": 2,
         "escalate_threshold_rationale_words": 20,
+        "max_jobs_per_run": 10,
+        "max_cloud_cost_usd": 1.0,
     },
 }
 
@@ -1668,6 +1670,8 @@ LLM_SETTINGS_PATCH_REQUEST_BODY = {
                     "auto_escalate": {"type": "boolean"},
                     "escalate_threshold_gaps": {"type": "integer", "minimum": 0},
                     "escalate_threshold_rationale_words": {"type": "integer", "minimum": 0},
+                    "max_jobs_per_run": {"type": "integer", "minimum": 1},
+                    "max_cloud_cost_usd": {"type": "number", "minimum": 0},
                 },
                 "additionalProperties": False,
             }

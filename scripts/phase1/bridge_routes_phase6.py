@@ -33,14 +33,24 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
         tags=["Jobs"],
         summary="List jobs",
         description=(
-            "Lists jobs from `recall_jobs` with filtering, sorting, and pagination controls "
-            "for the Daily Dashboard."
+            "Lists jobs from `recall_jobs` with filtering, sorting, and pagination controls for the Daily Dashboard."
         ),
         response_model=JobsCollectionResponse,
         responses={
-            200: {"description": "Jobs loaded.", "content": {"application/json": {"example": JOBS_LIST_SUCCESS_EXAMPLE}}},
-            400: {"model": ErrorResponse, "description": "Invalid list query options.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
-            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            200: {
+                "description": "Jobs loaded.",
+                "content": {"application/json": {"example": JOBS_LIST_SUCCESS_EXAMPLE}},
+            },
+            400: {
+                "model": ErrorResponse,
+                "description": "Invalid list query options.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}},
+            },
+            401: {
+                "model": ErrorResponse,
+                "description": "Missing or invalid API key.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}},
+            },
             **RATE_LIMIT_ERROR_RESPONSE,
         },
     )
@@ -82,7 +92,9 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                 code="validation_failed",
                 message=f"Invalid status: {status}",
                 request_id=request_id,
-                details=[{"field": "status", "issue": f"allowed values: {', '.join(sorted(PHASE6_JOB_STATUSES | {'all'}))}"}],
+                details=[
+                    {"field": "status", "issue": f"allowed values: {', '.join(sorted(PHASE6_JOB_STATUSES | {'all'}))}"}
+                ],
             )
 
         normalized_source = str(source or "").strip().lower() or None
@@ -157,7 +169,11 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
         description="Returns one job with full evaluation metadata.",
         responses={
             200: {"description": "Job loaded."},
-            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            401: {
+                "model": ErrorResponse,
+                "description": "Missing or invalid API key.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}},
+            },
             404: {"model": ErrorResponse, "description": "Job not found."},
             **RATE_LIMIT_ERROR_RESPONSE,
         },
@@ -185,8 +201,16 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
         description="Updates mutable job fields (`status`, `applied`, `dismissed`, `notes`, `workflow`).",
         responses={
             200: {"description": "Job updated."},
-            400: {"model": ErrorResponse, "description": "Invalid update payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
-            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            400: {
+                "model": ErrorResponse,
+                "description": "Invalid update payload.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}},
+            },
+            401: {
+                "model": ErrorResponse,
+                "description": "Missing or invalid API key.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}},
+            },
             404: {"model": ErrorResponse, "description": "Job not found."},
             **RATE_LIMIT_ERROR_RESPONSE,
         },
@@ -228,14 +252,10 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
 
         try:
             applied_value = (
-                _normalize_bool(payload.get("applied"), field_name="applied")
-                if "applied" in payload
-                else None
+                _normalize_bool(payload.get("applied"), field_name="applied") if "applied" in payload else None
             )
             dismissed_value = (
-                _normalize_bool(payload.get("dismissed"), field_name="dismissed")
-                if "dismissed" in payload
-                else None
+                _normalize_bool(payload.get("dismissed"), field_name="dismissed") if "dismissed" in payload else None
             )
         except ValueError as exc:
             return _error_response(
@@ -260,7 +280,15 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                     details=[{"field": "workflow", "issue": "value must be an object"}],
                 )
 
-            allowed_workflow_fields = {"stage", "nextActionApproval", "packetApproval", "packet", "nextAction", "artifacts", "followUp"}
+            allowed_workflow_fields = {
+                "stage",
+                "nextActionApproval",
+                "packetApproval",
+                "packet",
+                "nextAction",
+                "artifacts",
+                "followUp",
+            }
             unknown_workflow_fields = [key for key in workflow_value.keys() if key not in allowed_workflow_fields]
             if unknown_workflow_fields:
                 return _error_response(
@@ -268,7 +296,10 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                     code="validation_failed",
                     message="Invalid workflow payload.",
                     request_id=request_id,
-                    details=[{"field": f"workflow.{key}", "issue": "field is not supported"} for key in unknown_workflow_fields],
+                    details=[
+                        {"field": f"workflow.{key}", "issue": "field is not supported"}
+                        for key in unknown_workflow_fields
+                    ],
                 )
 
             if "stage" in workflow_value:
@@ -279,7 +310,12 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                         code="validation_failed",
                         message="Invalid workflow stage value.",
                         request_id=request_id,
-                        details=[{"field": "workflow.stage", "issue": "allowed values: focus, review, follow_up, monitor, closed"}],
+                        details=[
+                            {
+                                "field": "workflow.stage",
+                                "issue": "allowed values: focus, review, follow_up, monitor, closed",
+                            }
+                        ],
                     )
                 workflow_value["stage"] = normalized_stage
 
@@ -292,7 +328,9 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                             code="validation_failed",
                             message=f"Invalid workflow approval value for {approval_field}.",
                             request_id=request_id,
-                            details=[{"field": f"workflow.{approval_field}", "issue": "allowed values: pending, approved"}],
+                            details=[
+                                {"field": f"workflow.{approval_field}", "issue": "allowed values: pending, approved"}
+                            ],
                         )
                     workflow_value[approval_field] = normalized_approval
 
@@ -321,7 +359,10 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                         code="validation_failed",
                         message="Invalid workflow packet payload.",
                         request_id=request_id,
-                        details=[{"field": f"workflow.packet.{key}", "issue": "field is not supported"} for key in unknown_packet_fields],
+                        details=[
+                            {"field": f"workflow.packet.{key}", "issue": "field is not supported"}
+                            for key in unknown_packet_fields
+                        ],
                     )
                 try:
                     workflow_value["packet"] = {
@@ -347,14 +388,19 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                         details=[{"field": "workflow.nextAction", "issue": "value must be an object"}],
                     )
                 allowed_next_action_fields = {"action", "rationale", "confidence", "dueAt"}
-                unknown_next_action_fields = [key for key in next_action_value.keys() if key not in allowed_next_action_fields]
+                unknown_next_action_fields = [
+                    key for key in next_action_value.keys() if key not in allowed_next_action_fields
+                ]
                 if unknown_next_action_fields:
                     return _error_response(
                         status_code=400,
                         code="validation_failed",
                         message="Invalid workflow next action payload.",
                         request_id=request_id,
-                        details=[{"field": f"workflow.nextAction.{key}", "issue": "field is not supported"} for key in unknown_next_action_fields],
+                        details=[
+                            {"field": f"workflow.nextAction.{key}", "issue": "field is not supported"}
+                            for key in unknown_next_action_fields
+                        ],
                     )
                 if "action" in next_action_value:
                     normalized_action = str(next_action_value.get("action") or "").strip().lower()
@@ -385,7 +431,12 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                             code="validation_failed",
                             message="Invalid workflow next action confidence value.",
                             request_id=request_id,
-                            details=[{"field": "workflow.nextAction.confidence", "issue": "allowed values: low, medium, high"}],
+                            details=[
+                                {
+                                    "field": "workflow.nextAction.confidence",
+                                    "issue": "allowed values: low, medium, high",
+                                }
+                            ],
                         )
                     next_action_value["confidence"] = normalized_confidence
                 if "rationale" in next_action_value:
@@ -415,14 +466,19 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                         details=[{"field": "workflow.followUp", "issue": "value must be an object"}],
                     )
                 allowed_follow_up_fields = {"status", "dueAt", "lastCompletedAt", "reminder"}
-                unknown_follow_up_fields = [key for key in follow_up_value.keys() if key not in allowed_follow_up_fields]
+                unknown_follow_up_fields = [
+                    key for key in follow_up_value.keys() if key not in allowed_follow_up_fields
+                ]
                 if unknown_follow_up_fields:
                     return _error_response(
                         status_code=400,
                         code="validation_failed",
                         message="Invalid workflow follow-up payload.",
                         request_id=request_id,
-                        details=[{"field": f"workflow.followUp.{key}", "issue": "field is not supported"} for key in unknown_follow_up_fields],
+                        details=[
+                            {"field": f"workflow.followUp.{key}", "issue": "field is not supported"}
+                            for key in unknown_follow_up_fields
+                        ],
                     )
                 if "status" in follow_up_value:
                     normalized_status = str(follow_up_value.get("status") or "").strip().lower()
@@ -432,12 +488,19 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                             code="validation_failed",
                             message="Invalid workflow follow-up status value.",
                             request_id=request_id,
-                            details=[{"field": "workflow.followUp.status", "issue": "allowed values: not_scheduled, scheduled, completed"}],
+                            details=[
+                                {
+                                    "field": "workflow.followUp.status",
+                                    "issue": "allowed values: not_scheduled, scheduled, completed",
+                                }
+                            ],
                         )
                     follow_up_value["status"] = normalized_status
                 try:
                     if "dueAt" in follow_up_value:
-                        follow_up_value["dueAt"] = _normalize_optional_iso8601(follow_up_value.get("dueAt"), field_name="workflow.followUp.dueAt")
+                        follow_up_value["dueAt"] = _normalize_optional_iso8601(
+                            follow_up_value.get("dueAt"), field_name="workflow.followUp.dueAt"
+                        )
                     if "lastCompletedAt" in follow_up_value:
                         follow_up_value["lastCompletedAt"] = _normalize_optional_iso8601(
                             follow_up_value.get("lastCompletedAt"),
@@ -460,8 +523,18 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                             request_id=request_id,
                             details=[{"field": "workflow.followUp.reminder", "issue": "value must be an object"}],
                         )
-                    allowed_reminder_fields = {"created", "status", "channel", "lastRunAt", "deliveredAt", "automationId", "notes"}
-                    unknown_reminder_fields = [key for key in reminder_value.keys() if key not in allowed_reminder_fields]
+                    allowed_reminder_fields = {
+                        "created",
+                        "status",
+                        "channel",
+                        "lastRunAt",
+                        "deliveredAt",
+                        "automationId",
+                        "notes",
+                    }
+                    unknown_reminder_fields = [
+                        key for key in reminder_value.keys() if key not in allowed_reminder_fields
+                    ]
                     if unknown_reminder_fields:
                         return _error_response(
                             status_code=400,
@@ -493,7 +566,12 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                         reminder_value["status"] = normalized_reminder_status
                     if "channel" in reminder_value:
                         normalized_channel = str(reminder_value.get("channel") or "").strip().lower() or None
-                        if normalized_channel is not None and normalized_channel not in {"manual", "n8n", "email", "calendar"}:
+                        if normalized_channel is not None and normalized_channel not in {
+                            "manual",
+                            "n8n",
+                            "email",
+                            "calendar",
+                        }:
                             return _error_response(
                                 status_code=400,
                                 code="validation_failed",
@@ -555,7 +633,10 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                         code="validation_failed",
                         message="Invalid workflow artifacts payload.",
                         request_id=request_id,
-                        details=[{"field": f"workflow.artifacts.{key}", "issue": "field is not supported"} for key in unknown_artifact_fields],
+                        details=[
+                            {"field": f"workflow.artifacts.{key}", "issue": "field is not supported"}
+                            for key in unknown_artifact_fields
+                        ],
                     )
                 if "coverLetterDraft" in artifacts_value:
                     cover_letter_value = artifacts_value.get("coverLetterDraft")
@@ -565,17 +646,35 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                             code="validation_failed",
                             message="workflow.artifacts.coverLetterDraft must be an object.",
                             request_id=request_id,
-                            details=[{"field": "workflow.artifacts.coverLetterDraft", "issue": "value must be an object"}],
+                            details=[
+                                {"field": "workflow.artifacts.coverLetterDraft", "issue": "value must be an object"}
+                            ],
                         )
-                    allowed_cover_letter_fields = {"draftId", "generatedAt", "provider", "model", "wordCount", "savedToVault", "vaultPath"}
-                    unknown_cover_letter_fields = [key for key in cover_letter_value.keys() if key not in allowed_cover_letter_fields]
+                    allowed_cover_letter_fields = {
+                        "draftId",
+                        "generatedAt",
+                        "provider",
+                        "model",
+                        "wordCount",
+                        "savedToVault",
+                        "vaultPath",
+                    }
+                    unknown_cover_letter_fields = [
+                        key for key in cover_letter_value.keys() if key not in allowed_cover_letter_fields
+                    ]
                     if unknown_cover_letter_fields:
                         return _error_response(
                             status_code=400,
                             code="validation_failed",
                             message="Invalid cover letter artifact payload.",
                             request_id=request_id,
-                            details=[{"field": f"workflow.artifacts.coverLetterDraft.{key}", "issue": "field is not supported"} for key in unknown_cover_letter_fields],
+                            details=[
+                                {
+                                    "field": f"workflow.artifacts.coverLetterDraft.{key}",
+                                    "issue": "field is not supported",
+                                }
+                                for key in unknown_cover_letter_fields
+                            ],
                         )
                     try:
                         if "generatedAt" in cover_letter_value:
@@ -597,7 +696,13 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                             message=str(exc),
                             request_id=request_id,
                         )
-                for artifact_key in ("tailoredSummary", "resumeBullets", "outreachNote", "interviewBrief", "talkingPoints"):
+                for artifact_key in (
+                    "tailoredSummary",
+                    "resumeBullets",
+                    "outreachNote",
+                    "interviewBrief",
+                    "talkingPoints",
+                ):
                     if artifact_key not in artifacts_value:
                         continue
                     packet_artifact_value = artifacts_value.get(artifact_key)
@@ -607,7 +712,9 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                             code="validation_failed",
                             message=f"workflow.artifacts.{artifact_key} must be an object.",
                             request_id=request_id,
-                            details=[{"field": f"workflow.artifacts.{artifact_key}", "issue": "value must be an object"}],
+                            details=[
+                                {"field": f"workflow.artifacts.{artifact_key}", "issue": "value must be an object"}
+                            ],
                         )
                     allowed_packet_artifact_fields = {"status", "updatedAt", "source", "vaultPath", "notes"}
                     unknown_packet_artifact_fields = [
@@ -632,7 +739,12 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                                 code="validation_failed",
                                 message=f"Invalid workflow artifact status for {artifact_key}.",
                                 request_id=request_id,
-                                details=[{"field": f"workflow.artifacts.{artifact_key}.status", "issue": "allowed values: draft, ready"}],
+                                details=[
+                                    {
+                                        "field": f"workflow.artifacts.{artifact_key}.status",
+                                        "issue": "allowed values: draft, ready",
+                                    }
+                                ],
                             )
                         packet_artifact_value["status"] = normalized_status
                     if "source" in packet_artifact_value:
@@ -665,7 +777,9 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                                 request_id=request_id,
                             )
                     if "vaultPath" in packet_artifact_value:
-                        packet_artifact_value["vaultPath"] = str(packet_artifact_value.get("vaultPath") or "").strip() or None
+                        packet_artifact_value["vaultPath"] = (
+                            str(packet_artifact_value.get("vaultPath") or "").strip() or None
+                        )
                     if "notes" in packet_artifact_value:
                         packet_artifact_value["notes"] = str(packet_artifact_value.get("notes") or "").strip() or None
 
@@ -693,11 +807,29 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
         description="Queues or executes evaluation run(s) for one or more job identifiers.",
         response_model=JobEvaluationRunResponse,
         responses={
-            200: {"description": "Synchronous evaluation run completed.", "content": {"application/json": {"example": JOB_EVALUATION_RUN_COMPLETED_EXAMPLE}}},
-            202: {"description": "Async evaluation run accepted.", "content": {"application/json": {"example": JOB_EVALUATION_RUN_ACCEPTED_EXAMPLE}}},
-            400: {"model": ErrorResponse, "description": "Invalid run payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
-            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
-            500: {"model": ErrorResponse, "description": "Evaluation run failed.", "content": {"application/json": {"example": ERROR_EXAMPLE_WORKFLOW}}},
+            200: {
+                "description": "Synchronous evaluation run completed.",
+                "content": {"application/json": {"example": JOB_EVALUATION_RUN_COMPLETED_EXAMPLE}},
+            },
+            202: {
+                "description": "Async evaluation run accepted.",
+                "content": {"application/json": {"example": JOB_EVALUATION_RUN_ACCEPTED_EXAMPLE}},
+            },
+            400: {
+                "model": ErrorResponse,
+                "description": "Invalid run payload.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}},
+            },
+            401: {
+                "model": ErrorResponse,
+                "description": "Missing or invalid API key.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}},
+            },
+            500: {
+                "model": ErrorResponse,
+                "description": "Evaluation run failed.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_WORKFLOW}},
+            },
             **RATE_LIMIT_ERROR_RESPONSE,
         },
         openapi_extra={"requestBody": JOB_EVALUATION_RUN_REQUEST_BODY},
@@ -730,7 +862,9 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
         settings = payload.get("settings") if isinstance(payload.get("settings"), dict) else {}
 
         try:
-            result = phase6_queue_job_evaluations(job_ids=[str(item) for item in raw_job_ids], wait=wait, settings=settings)
+            result = phase6_queue_job_evaluations(
+                job_ids=[str(item) for item in raw_job_ids], wait=wait, settings=settings
+            )
         except Exception as exc:  # noqa: BLE001
             return _error_response(
                 status_code=500,
@@ -750,10 +884,25 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
         description="Selects due follow-up jobs, queues reminder metadata, and returns reminder-ready payloads for n8n delivery.",
         response_model=FollowUpReminderRunResponse,
         responses={
-            200: {"description": "Follow-up reminder run completed.", "content": {"application/json": {"example": FOLLOW_UP_REMINDER_RUN_COMPLETED_EXAMPLE}}},
-            400: {"model": ErrorResponse, "description": "Invalid reminder run payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
-            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
-            500: {"model": ErrorResponse, "description": "Reminder run failed.", "content": {"application/json": {"example": ERROR_EXAMPLE_WORKFLOW}}},
+            200: {
+                "description": "Follow-up reminder run completed.",
+                "content": {"application/json": {"example": FOLLOW_UP_REMINDER_RUN_COMPLETED_EXAMPLE}},
+            },
+            400: {
+                "model": ErrorResponse,
+                "description": "Invalid reminder run payload.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}},
+            },
+            401: {
+                "model": ErrorResponse,
+                "description": "Missing or invalid API key.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}},
+            },
+            500: {
+                "model": ErrorResponse,
+                "description": "Reminder run failed.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_WORKFLOW}},
+            },
             **RATE_LIMIT_ERROR_RESPONSE,
         },
         openapi_extra={"requestBody": FOLLOW_UP_REMINDER_RUN_REQUEST_BODY},
@@ -807,7 +956,9 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                 details=[{"field": "channel", "issue": "allowed values: manual, n8n, email, calendar"}],
             )
 
-        automation_id = str(payload.get("automation_id") or "phase6-follow-up-reminder").strip() or "phase6-follow-up-reminder"
+        automation_id = (
+            str(payload.get("automation_id") or "phase6-follow-up-reminder").strip() or "phase6-follow-up-reminder"
+        )
 
         try:
             result = phase6_queue_follow_up_reminder_runs(
@@ -835,8 +986,15 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
         summary="Get job stats",
         description="Returns dashboard-friendly aggregate job stats grouped by source, score range, and day.",
         responses={
-            200: {"description": "Job stats loaded.", "content": {"application/json": {"example": JOB_STATS_SUCCESS_EXAMPLE}}},
-            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            200: {
+                "description": "Job stats loaded.",
+                "content": {"application/json": {"example": JOB_STATS_SUCCESS_EXAMPLE}},
+            },
+            401: {
+                "model": ErrorResponse,
+                "description": "Missing or invalid API key.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}},
+            },
             **RATE_LIMIT_ERROR_RESPONSE,
         },
     )
@@ -856,8 +1014,15 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
         summary="Get job gap analysis",
         description="Aggregates gaps and matching skills across evaluated jobs.",
         responses={
-            200: {"description": "Gap analysis loaded.", "content": {"application/json": {"example": JOB_GAPS_SUCCESS_EXAMPLE}}},
-            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            200: {
+                "description": "Gap analysis loaded.",
+                "content": {"application/json": {"example": JOB_GAPS_SUCCESS_EXAMPLE}},
+            },
+            401: {
+                "model": ErrorResponse,
+                "description": "Missing or invalid API key.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}},
+            },
             **RATE_LIMIT_ERROR_RESPONSE,
         },
     )
@@ -879,8 +1044,16 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
         description="Checks whether a candidate job payload already exists in `recall_jobs`.",
         responses={
             200: {"description": "Deduplication check complete."},
-            400: {"model": ErrorResponse, "description": "Invalid candidate payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
-            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            400: {
+                "model": ErrorResponse,
+                "description": "Invalid candidate payload.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}},
+            },
+            401: {
+                "model": ErrorResponse,
+                "description": "Missing or invalid API key.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}},
+            },
             **RATE_LIMIT_ERROR_RESPONSE,
         },
         openapi_extra={"requestBody": JOB_DEDUP_REQUEST_BODY},
@@ -952,8 +1125,16 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
         description="Triggers the discovery runner scaffold and returns queued run metadata.",
         responses={
             200: {"description": "Discovery run accepted."},
-            400: {"model": ErrorResponse, "description": "Invalid discovery payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
-            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            400: {
+                "model": ErrorResponse,
+                "description": "Invalid discovery payload.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}},
+            },
+            401: {
+                "model": ErrorResponse,
+                "description": "Missing or invalid API key.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}},
+            },
             **RATE_LIMIT_ERROR_RESPONSE,
         },
         openapi_extra={"requestBody": JOB_DISCOVERY_RUN_REQUEST_BODY},
@@ -989,9 +1170,7 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                 request_id=request_id,
             )
         summary["workflow"] = "workflow_06a_job_discovery"
-        summary["collections"] = [
-            {"name": item.name, "created": item.created} for item in collections
-        ]
+        summary["collections"] = [{"name": item.name, "created": item.created} for item in collections]
         return _json_response(200, summary)
 
     @app.post(
@@ -1001,11 +1180,30 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
         description="Ingests markdown or file-based resume content into `recall_resume`.",
         response_model=ResumeIngestionResponse,
         responses={
-            200: {"description": "Resume ingested.", "content": {"application/json": {"example": RESUME_SUCCESS_EXAMPLE}}},
-            400: {"model": ErrorResponse, "description": "Invalid resume payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
-            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
-            415: {"model": ErrorResponse, "description": "Unsupported media/file type.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
-            500: {"model": ErrorResponse, "description": "Resume ingestion failed.", "content": {"application/json": {"example": ERROR_EXAMPLE_WORKFLOW}}},
+            200: {
+                "description": "Resume ingested.",
+                "content": {"application/json": {"example": RESUME_SUCCESS_EXAMPLE}},
+            },
+            400: {
+                "model": ErrorResponse,
+                "description": "Invalid resume payload.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}},
+            },
+            401: {
+                "model": ErrorResponse,
+                "description": "Missing or invalid API key.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}},
+            },
+            415: {
+                "model": ErrorResponse,
+                "description": "Unsupported media/file type.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}},
+            },
+            500: {
+                "model": ErrorResponse,
+                "description": "Resume ingestion failed.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_WORKFLOW}},
+            },
             **RATE_LIMIT_ERROR_RESPONSE,
         },
         openapi_extra={"requestBody": RESUME_REQUEST_BODY},
@@ -1044,7 +1242,9 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                         details=[{"field": "file", "issue": "allowed extensions: .md, .txt, .pdf, .docx"}],
                     )
 
-                with tempfile.NamedTemporaryFile(prefix="recall-resume-", suffix=suffix or ".md", delete=False) as handle:
+                with tempfile.NamedTemporaryFile(
+                    prefix="recall-resume-", suffix=suffix or ".md", delete=False
+                ) as handle:
                     temp_path = Path(handle.name)
                     data = await uploaded.read()
                     handle.write(data)
@@ -1095,7 +1295,11 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
         description="Returns latest ingested resume version metadata.",
         responses={
             200: {"description": "Resume metadata loaded."},
-            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            401: {
+                "model": ErrorResponse,
+                "description": "Missing or invalid API key.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}},
+            },
             404: {"model": ErrorResponse, "description": "Resume not found."},
             **RATE_LIMIT_ERROR_RESPONSE,
         },
@@ -1127,7 +1331,11 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
         description="Lists company profile rollups with attached jobs.",
         responses={
             200: {"description": "Company profiles loaded."},
-            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            401: {
+                "model": ErrorResponse,
+                "description": "Missing or invalid API key.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}},
+            },
             **RATE_LIMIT_ERROR_RESPONSE,
         },
     )
@@ -1151,7 +1359,11 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
         description="Returns one company profile with associated jobs.",
         responses={
             200: {"description": "Company profile loaded."},
-            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            401: {
+                "model": ErrorResponse,
+                "description": "Missing or invalid API key.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}},
+            },
             404: {"model": ErrorResponse, "description": "Company profile not found."},
             **RATE_LIMIT_ERROR_RESPONSE,
         },
@@ -1178,9 +1390,20 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
         summary="Create watched company",
         description="Creates or persists a watched company entry used by the companies dashboard and future discovery runs.",
         responses={
-            201: {"description": "Watched company created.", "content": {"application/json": {"example": COMPANY_SUCCESS_EXAMPLE}}},
-            400: {"model": ErrorResponse, "description": "Invalid company payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
-            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            201: {
+                "description": "Watched company created.",
+                "content": {"application/json": {"example": COMPANY_SUCCESS_EXAMPLE}},
+            },
+            400: {
+                "model": ErrorResponse,
+                "description": "Invalid company payload.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}},
+            },
+            401: {
+                "model": ErrorResponse,
+                "description": "Missing or invalid API key.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}},
+            },
             **RATE_LIMIT_ERROR_RESPONSE,
         },
         openapi_extra={"requestBody": COMPANY_CREATE_REQUEST_BODY},
@@ -1220,9 +1443,20 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
         summary="Update watched company",
         description="Updates tracked company settings such as tier, ATS source, title filters, and connection notes.",
         responses={
-            200: {"description": "Watched company updated.", "content": {"application/json": {"example": COMPANY_SUCCESS_EXAMPLE}}},
-            400: {"model": ErrorResponse, "description": "Invalid company payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
-            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            200: {
+                "description": "Watched company updated.",
+                "content": {"application/json": {"example": COMPANY_SUCCESS_EXAMPLE}},
+            },
+            400: {
+                "model": ErrorResponse,
+                "description": "Invalid company payload.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}},
+            },
+            401: {
+                "model": ErrorResponse,
+                "description": "Missing or invalid API key.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}},
+            },
             404: {"model": ErrorResponse, "description": "Company not found."},
             **RATE_LIMIT_ERROR_RESPONSE,
         },
@@ -1273,8 +1507,16 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
         description="Refreshes a single company profile summary.",
         responses={
             200: {"description": "Refresh run completed."},
-            400: {"model": ErrorResponse, "description": "Invalid refresh payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
-            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            400: {
+                "model": ErrorResponse,
+                "description": "Invalid refresh payload.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}},
+            },
+            401: {
+                "model": ErrorResponse,
+                "description": "Missing or invalid API key.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}},
+            },
             **RATE_LIMIT_ERROR_RESPONSE,
         },
     )
@@ -1312,8 +1554,16 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                 "description": "Tailored summary generated.",
                 "content": {"application/json": {"example": TAILORED_SUMMARY_SUCCESS_EXAMPLE}},
             },
-            400: {"model": ErrorResponse, "description": "Invalid summary payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
-            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            400: {
+                "model": ErrorResponse,
+                "description": "Invalid summary payload.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}},
+            },
+            401: {
+                "model": ErrorResponse,
+                "description": "Missing or invalid API key.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}},
+            },
             404: {"model": ErrorResponse, "description": "Job not found."},
             500: {"model": ErrorResponse, "description": "Summary generation failed."},
             **RATE_LIMIT_ERROR_RESPONSE,
@@ -1410,8 +1660,16 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                 "description": "Resume bullets generated.",
                 "content": {"application/json": {"example": RESUME_BULLETS_SUCCESS_EXAMPLE}},
             },
-            400: {"model": ErrorResponse, "description": "Invalid resume-bullets payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
-            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            400: {
+                "model": ErrorResponse,
+                "description": "Invalid resume-bullets payload.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}},
+            },
+            401: {
+                "model": ErrorResponse,
+                "description": "Missing or invalid API key.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}},
+            },
             404: {"model": ErrorResponse, "description": "Job not found."},
             500: {"model": ErrorResponse, "description": "Resume bullets generation failed."},
             **RATE_LIMIT_ERROR_RESPONSE,
@@ -1508,8 +1766,16 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                 "description": "Interview brief generated.",
                 "content": {"application/json": {"example": INTERVIEW_BRIEF_SUCCESS_EXAMPLE}},
             },
-            400: {"model": ErrorResponse, "description": "Invalid interview-brief payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
-            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            400: {
+                "model": ErrorResponse,
+                "description": "Invalid interview-brief payload.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}},
+            },
+            401: {
+                "model": ErrorResponse,
+                "description": "Missing or invalid API key.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}},
+            },
             404: {"model": ErrorResponse, "description": "Job not found."},
             500: {"model": ErrorResponse, "description": "Interview brief generation failed."},
             **RATE_LIMIT_ERROR_RESPONSE,
@@ -1606,8 +1872,16 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                 "description": "Talking points generated.",
                 "content": {"application/json": {"example": TALKING_POINTS_SUCCESS_EXAMPLE}},
             },
-            400: {"model": ErrorResponse, "description": "Invalid talking-points payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
-            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            400: {
+                "model": ErrorResponse,
+                "description": "Invalid talking-points payload.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}},
+            },
+            401: {
+                "model": ErrorResponse,
+                "description": "Missing or invalid API key.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}},
+            },
             404: {"model": ErrorResponse, "description": "Job not found."},
             500: {"model": ErrorResponse, "description": "Talking points generation failed."},
             **RATE_LIMIT_ERROR_RESPONSE,
@@ -1704,8 +1978,16 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                 "description": "Outreach note generated.",
                 "content": {"application/json": {"example": OUTREACH_NOTE_SUCCESS_EXAMPLE}},
             },
-            400: {"model": ErrorResponse, "description": "Invalid outreach payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
-            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            400: {
+                "model": ErrorResponse,
+                "description": "Invalid outreach payload.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}},
+            },
+            401: {
+                "model": ErrorResponse,
+                "description": "Missing or invalid API key.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}},
+            },
             404: {"model": ErrorResponse, "description": "Job not found."},
             500: {"model": ErrorResponse, "description": "Outreach note generation failed."},
             **RATE_LIMIT_ERROR_RESPONSE,
@@ -1802,8 +2084,16 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                 "description": "Cover letter draft generated.",
                 "content": {"application/json": {"example": COVER_LETTER_DRAFT_SUCCESS_EXAMPLE}},
             },
-            400: {"model": ErrorResponse, "description": "Invalid draft payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
-            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            400: {
+                "model": ErrorResponse,
+                "description": "Invalid draft payload.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}},
+            },
+            401: {
+                "model": ErrorResponse,
+                "description": "Missing or invalid API key.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}},
+            },
             404: {"model": ErrorResponse, "description": "Job not found."},
             500: {"model": ErrorResponse, "description": "Draft generation failed."},
             **RATE_LIMIT_ERROR_RESPONSE,
@@ -1898,8 +2188,15 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
         summary="Get LLM settings",
         description="Returns current persisted LLM settings for job evaluation.",
         responses={
-            200: {"description": "LLM settings loaded.", "content": {"application/json": {"example": LLM_SETTINGS_SUCCESS_EXAMPLE}}},
-            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            200: {
+                "description": "LLM settings loaded.",
+                "content": {"application/json": {"example": LLM_SETTINGS_SUCCESS_EXAMPLE}},
+            },
+            401: {
+                "model": ErrorResponse,
+                "description": "Missing or invalid API key.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}},
+            },
             **RATE_LIMIT_ERROR_RESPONSE,
         },
     )
@@ -1922,9 +2219,20 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
         summary="Update LLM settings",
         description="Updates and persists evaluation LLM settings in SQLite.",
         responses={
-            200: {"description": "LLM settings updated.", "content": {"application/json": {"example": LLM_SETTINGS_SUCCESS_EXAMPLE}}},
-            400: {"model": ErrorResponse, "description": "Invalid settings payload.", "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}}},
-            401: {"model": ErrorResponse, "description": "Missing or invalid API key.", "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}}},
+            200: {
+                "description": "LLM settings updated.",
+                "content": {"application/json": {"example": LLM_SETTINGS_SUCCESS_EXAMPLE}},
+            },
+            400: {
+                "model": ErrorResponse,
+                "description": "Invalid settings payload.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}},
+            },
+            401: {
+                "model": ErrorResponse,
+                "description": "Missing or invalid API key.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}},
+            },
             **RATE_LIMIT_ERROR_RESPONSE,
         },
         openapi_extra={"requestBody": LLM_SETTINGS_PATCH_REQUEST_BODY},
@@ -2000,8 +2308,10 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
             try:
                 normalized["auto_escalate"] = _normalize_bool(payload["auto_escalate"], field_name="auto_escalate")
             except ValueError as exc:
-                return _error_response(status_code=400, code="validation_failed", message=str(exc), request_id=request_id)
-        for integer_field in ("escalate_threshold_gaps", "escalate_threshold_rationale_words"):
+                return _error_response(
+                    status_code=400, code="validation_failed", message=str(exc), request_id=request_id
+                )
+        for integer_field in ("escalate_threshold_gaps", "escalate_threshold_rationale_words", "max_jobs_per_run"):
             if integer_field in payload:
                 try:
                     parsed = int(payload[integer_field])
@@ -2011,17 +2321,38 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                         code="validation_failed",
                         message=f"{integer_field} must be an integer.",
                         request_id=request_id,
-                        details=[{"field": integer_field, "issue": "value must be an integer >= 0"}],
+                        details=[{"field": integer_field, "issue": "value must be an integer"}],
                     )
-                if parsed < 0:
+                minimum = 1 if integer_field == "max_jobs_per_run" else 0
+                if parsed < minimum:
                     return _error_response(
                         status_code=400,
                         code="validation_failed",
-                        message=f"{integer_field} must be >= 0.",
+                        message=f"{integer_field} must be >= {minimum}.",
                         request_id=request_id,
-                        details=[{"field": integer_field, "issue": "value must be an integer >= 0"}],
+                        details=[{"field": integer_field, "issue": f"value must be an integer >= {minimum}"}],
                     )
                 normalized[integer_field] = parsed
+        if "max_cloud_cost_usd" in payload:
+            try:
+                parsed_cost = float(payload["max_cloud_cost_usd"])
+            except (TypeError, ValueError):
+                return _error_response(
+                    status_code=400,
+                    code="validation_failed",
+                    message="max_cloud_cost_usd must be a number.",
+                    request_id=request_id,
+                    details=[{"field": "max_cloud_cost_usd", "issue": "value must be a number >= 0"}],
+                )
+            if parsed_cost < 0:
+                return _error_response(
+                    status_code=400,
+                    code="validation_failed",
+                    message="max_cloud_cost_usd must be >= 0.",
+                    request_id=request_id,
+                    details=[{"field": "max_cloud_cost_usd", "issue": "value must be a number >= 0"}],
+                )
+            normalized["max_cloud_cost_usd"] = parsed_cost
 
         conn = phase6_storage.connect_db()
         try:

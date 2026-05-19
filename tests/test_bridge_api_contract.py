@@ -1465,7 +1465,7 @@ class BridgeApiContractTests(unittest.TestCase):
 
         self.assertEqual(initial.status_code, 200)
         self.assertEqual(initial.json()["settings"]["evaluation_model"], "local")
-        self.assertEqual(initial.json()["settings"]["local_model"], "llama3.2:3b")
+        self.assertEqual(initial.json()["settings"]["local_model"], "gemma3:12b-it-qat")
         self.assertEqual(patched.status_code, 200)
         self.assertEqual(patched.json()["settings"]["evaluation_model"], "cloud")
         self.assertEqual(patched.json()["settings"]["cloud_provider"], "openai")
@@ -1485,15 +1485,16 @@ class BridgeApiContractTests(unittest.TestCase):
             with build_client(env) as client:
                 patched = client.patch(
                     "/v1/llm-settings",
-                    json={"evaluation_model": "local", "local_model": "llama3.2:3b"},
+                    json={"evaluation_model": "local", "local_model": "gemma3:12b-it-qat", "max_jobs_per_run": 3},
                 )
                 after = client.get("/v1/llm-settings")
 
         self.assertEqual(patched.status_code, 200)
         self.assertEqual(patched.json()["settings"]["evaluation_model"], "local")
-        self.assertEqual(patched.json()["settings"]["local_model"], "llama3.2:3b")
+        self.assertEqual(patched.json()["settings"]["local_model"], "gemma3:12b-it-qat")
+        self.assertEqual(patched.json()["settings"]["max_jobs_per_run"], 3)
         self.assertEqual(after.status_code, 200)
-        self.assertEqual(after.json()["settings"]["local_model"], "llama3.2:3b")
+        self.assertEqual(after.json()["settings"]["local_model"], "gemma3:12b-it-qat")
 
     def test_phase6_companies_create_endpoint_returns_created_profile(self) -> None:
         env = {
