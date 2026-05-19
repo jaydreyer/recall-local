@@ -350,6 +350,7 @@ class JobsCollectionResponse(BaseModel):
     total: int
     limit: int
     offset: int
+    sort: str = Field(default="relevance", description="Applied sort field.")
     items: list[dict[str, Any]]
 
 
@@ -810,6 +811,7 @@ JOBS_LIST_SUCCESS_EXAMPLE = {
     "total": 2,
     "limit": 50,
     "offset": 0,
+    "sort": "relevance",
     "items": [
         {
             "jobId": "job_001",
@@ -817,6 +819,14 @@ JOBS_LIST_SUCCESS_EXAMPLE = {
             "company": "Anthropic",
             "status": "evaluated",
             "fit_score": 84,
+            "relevance": {
+                "version": "phase3_title_relevance_v1",
+                "targetFamily": "solutions_engineer",
+                "targetLabel": "Solutions Engineer",
+                "category": "target",
+                "rankingScore": 118,
+                "archiveRecommended": False,
+            },
             "source": "career_page",
             "workflow": {
                 "stage": "focus",

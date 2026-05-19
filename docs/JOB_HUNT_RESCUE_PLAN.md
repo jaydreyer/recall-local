@@ -1,6 +1,6 @@
 # Job Hunt Rescue Plan
 
-Current phase: Phase 3 - Job Relevance And Ranking
+Current phase: Phase 4 - Dashboard And API Polish
 
 Last updated: 2026-05-19
 
@@ -14,7 +14,7 @@ Read `AGENTS.md` and `docs/JOB_HUNT_RESCUE_PLAN.md`; continue from the current p
 - Runtime host: `ai-lab`, server repo `/home/jaydreyer/recall-local`.
 - Qdrant is up, healthy, and populated. Recent observed collections/counts: `recall_resume=13`, `recall_docs=1839`, `newsletter_stories=1134`, `recall_jobs=2851`.
 - Resume ingestion is current as of 2026-05-19. Current resume version observed through `/v1/resumes/current`: version 4, 13 chunks, source inline markdown from `Jay-Dreyer-Resume.md`.
-- Dashboard/job system is live and fresh, but relevance and prioritization are too noisy. Recent observed stats: 2495 total jobs, 669 high-fit jobs, and 828 unscored jobs.
+- Dashboard/job system is live and fresh. Phase 3 relevance cleanup reduced active high-fit noise: recent observed stats after cleanup were 2497 total jobs, 1752 active jobs, 745 archived jobs, 273 active high-fit jobs, and 561 active unscored jobs.
 - `GET /v1/job-gaps` has timed out/hung during manual checks and needs caching or precomputation before relying on it in the dashboard.
 - `GET /v1/jobs?status=all` currently defaults to `min_score=0`, so API totals can exclude unscored jobs while stats include them.
 - Live ai-lab repo has previously shown local/server drift and a dirty worktree. Before runtime validation after code changes, sync Mac to ai-lab and spot-check file contents on ai-lab.
@@ -268,6 +268,8 @@ Validation:
 
 Goal: make the job corpus useful by prioritizing the right roles and archiving obvious noise.
 
+Status: complete enough to move the daily list onto target-title ranking; continue calibration in Phase 4 only as needed for dashboard clarity.
+
 Handoff prompt for the next chat:
 
 ```text
@@ -300,6 +302,35 @@ Acceptance criteria:
 - Top recommendations are dominated by the target title families.
 - False high-fit roles are reduced.
 - Archived jobs remain inspectable and recoverable.
+
+Results recorded 2026-05-19:
+
+- Added deterministic Phase 3 title relevance metadata with target families:
+  - `solutions_engineer`
+  - `ai_engineer`
+  - `technical_account_manager`
+  - `customer_engineer`
+  - `forward_deployed_engineer`
+- Changed `GET /v1/jobs` default sort to `relevance` while preserving explicit `sort=fit_score` for raw evaluator-score ordering.
+- Added `relevance` metadata on job items, including `category`, `targetFamily`, `rankingScore`, `signals`, `penalties`, and cleanup fields when archived.
+- Updated `config/job_search.json` so discovery starts with the five target title families while keeping adjacent discovery broad.
+- Added `scripts/phase6/apply_job_relevance_cleanup.py` for dry-run/apply cleanup.
+- Applied cleanup on ai-lab and archived 745 obvious off-target/noise jobs as `dismissed`; no jobs were deleted.
+- `GET /v1/jobs?status=evaluated&limit=10&view=summary` returned `sort=relevance`; the top 10 were all target-family roles across Solutions Engineer, Forward Deployed Engineer, and Technical Account Manager.
+- `GET /v1/jobs?status=dismissed&search=Software%20Engineer&limit=3&view=summary` confirmed archived jobs remain inspectable.
+- `GET /v1/job-stats` now reports score buckets for active jobs while preserving all-history `total_jobs`; observed active high-fit count dropped from the previous 669/670 range to 273.
+
+Validation:
+
+- Synced changed files from Mac to ai-lab and spot-checked synced contents before runtime validation.
+- Local tests passed: `67 passed` for `tests/test_phase6_job_repository.py` and `tests/test_bridge_api_contract.py`.
+- Server import checks passed for Phase 3 relevance and bridge API schema.
+- Ran `docker/validate-stack.sh` before and after restarting `recall-ingest-bridge`; both passed.
+- Restarted only `recall-ingest-bridge` with `docker compose -p recall --env-file .env -f docker-compose.yml restart recall-ingest-bridge`; no `docker run`, no project-name change, no volume changes.
+- Confirmed `recall-ingest-bridge` remained under Compose project `recall`, attached to `recall_backend`, with expected repo bind mounts.
+- `GET /v1/healthz` returned `{"status":"ok"}`.
+- Dashboard smoke with gaps disabled passed with status `ok`.
+- Ops observability artifact `/home/jaydreyer/recall-local/data/artifacts/observability/20260519T193924Z_ops_observability_check.json` returned `error` because `job_alert_workflow` and `rag_probe` timed out; bridge health, dashboard checks, and daily dashboard UI were `ok`. This matches the residual Phase 2/Phase 4 follow-up area, not a Phase 3 ranking blocker.
 
 ### Phase 4 - Dashboard And API Polish
 
@@ -412,3 +443,4 @@ When credentials are present, query provider model availability through the conf
 - 2026-05-19: Phase 1 completed. Pulled `deepseek-v2:16b`, `qwen3:14b`, and `qwen3:30b`; verified `ollama list`; ran stack validation; ran synthetic golden and real-job calibration. No new model beat the current best reliable fallback. Current phase set to Phase 2 - Evaluation pipeline cleanup.
 - 2026-05-19: Phase 2 plan updated to evaluate cloud-first scoring. Do not assume `gpt-5-mini`, `gpt-4.1-mini`, or any Claude model is available to the live account; discover callable models from ai-lab credentials, then bake off cloud candidates against the same golden and real-job calibration sets.
 - 2026-05-19: Phase 2 implemented a guarded cloud-first evaluator path. Discovered callable OpenAI/Anthropic models from live ai-lab credentials, added GPT-5-family Responses support, added cloud/local bakeoff scripts, added budget guardrails, set live evaluator to `openai:gpt-4.1-mini`, retained `gemma3:12b-it-qat` as local fallback, validated stack/dashboard smoke, and advanced current phase to Phase 3 - Job Relevance And Ranking. Ops observability still needs follow-up for `job_alert_workflow` and `rag_probe` timeouts.
+- 2026-05-19: Phase 3 implemented target-title relevance ranking, active-only high-fit stats, and archive-preserving cleanup. Applied cleanup archived 745 off-target/noise roles as dismissed, leaving history inspectable. Top evaluated recommendations are now dominated by target title families. Current phase advanced to Phase 4 - Dashboard And API Polish.

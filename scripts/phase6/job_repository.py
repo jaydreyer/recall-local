@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from scripts.phase1.ingestion_pipeline import qdrant_client_from_env
+from scripts.phase6.job_relevance import assess_job_relevance
 from scripts.shared_strings import slugify
 
 LOGGER = logging.getLogger(__name__)
@@ -432,6 +433,15 @@ def _normalize_job(record: Any) -> dict[str, Any]:
         "_vector": getattr(record, "vector", None),
         "_payload": payload,
     }
+    normalized["relevance"] = payload.get("relevance") if isinstance(payload.get("relevance"), dict) else {}
+    normalized["relevance"] = {
+        **assess_job_relevance(normalized),
+        **{
+            key: value
+            for key, value in normalized["relevance"].items()
+            if key in {"cleanupAppliedAt", "cleanupAction", "cleanupReason"}
+        },
+    }
     return normalized
 
 
@@ -499,7 +509,7 @@ def list_jobs(
     source: str | None = None,
     search: str | None = None,
     title_query: str | None = None,
-    sort: str = "fit_score",
+    sort: str = "relevance",
     order: str = "desc",
     limit: int = 50,
     offset: int = 0,
@@ -529,6 +539,8 @@ def list_jobs(
             continue
         if effective_search and not _matches_search(item, effective_search):
             continue
+        if not isinstance(item.get("relevance"), dict) or not item.get("relevance"):
+            item = {**item, "relevance": assess_job_relevance(item)}
         filtered.append(item)
 
     reverse = str(order or "desc").strip().lower() != "asc"
@@ -538,8 +550,17 @@ def list_jobs(
         filtered.sort(key=lambda item: _parse_datetime(item.get("discovered_at")) or datetime.min, reverse=reverse)
     elif sort_key == "company":
         filtered.sort(key=lambda item: str(item.get("company", "")).lower(), reverse=reverse)
-    else:
+    elif sort_key == "fit_score":
         filtered.sort(key=lambda item: _parse_float(item.get("fit_score"), 0.0), reverse=reverse)
+    else:
+        filtered.sort(
+            key=lambda item: (
+                _parse_float((item.get("relevance") or {}).get("rankingScore"), 0.0),
+                _parse_float(item.get("fit_score"), 0.0),
+                _parse_datetime(item.get("discovered_at")) or datetime.min,
+            ),
+            reverse=reverse,
+        )
 
     total = len(filtered)
     page = filtered[offset : offset + limit]
@@ -548,8 +569,100 @@ def list_jobs(
         "total": total,
         "limit": limit,
         "offset": offset,
+        "sort": sort_key if sort_key in {"relevance", "fit_score", "discovered_at", "company"} else "relevance",
         "items": [_sanitize_job(item, include_details=include_details) for item in page],
     }
+
+
+def apply_relevance_cleanup(*, dry_run: bool = True, limit: int | None = None) -> dict[str, Any]:
+    """Archive obvious Phase 3 off-target jobs while preserving inspectable history."""
+    rows = _scroll_jobs(with_vectors=True)
+    candidates: list[dict[str, Any]] = []
+    for item in rows:
+        status = str(item.get("status") or "").strip().lower()
+        if status in {"dismissed", "applied", "expired"} or bool(item.get("applied")):
+            continue
+        relevance = assess_job_relevance(item)
+        if not relevance.get("archiveRecommended"):
+            continue
+        candidates.append({"job": item, "relevance": relevance})
+
+    if limit is not None:
+        candidates = candidates[: max(0, int(limit))]
+
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    updated = 0
+    preview: list[dict[str, Any]] = []
+    points: list[Any] = []
+    if candidates and not dry_run:
+        from qdrant_client import models
+
+    for candidate in candidates:
+        item = candidate["job"]
+        relevance = candidate["relevance"]
+        preview.append(
+            {
+                "jobId": item.get("jobId"),
+                "title": item.get("title"),
+                "company": item.get("company"),
+                "fit_score": item.get("fit_score"),
+                "category": relevance.get("category"),
+                "rankingScore": relevance.get("rankingScore"),
+                "reason": relevance.get("archiveReason"),
+            }
+        )
+        if dry_run:
+            continue
+        payload = dict(item.get("_payload") or {})
+        payload["status"] = "dismissed"
+        payload["dismissed"] = True
+        payload["relevance"] = {
+            **relevance,
+            "cleanupAppliedAt": now,
+            "cleanupAction": "dismissed",
+            "cleanupReason": relevance.get("archiveReason"),
+        }
+        payload["notes"] = _append_cleanup_note(
+            payload.get("notes"),
+            f"{now}: Phase 3 relevance cleanup archived this role. {relevance.get('archiveReason')}",
+        )
+        workflow = _normalize_workflow(payload.get("workflow"))
+        workflow["stage"] = "closed"
+        workflow["updatedAt"] = now
+        payload["workflow"] = workflow
+        timeline = _normalize_workflow_timeline(payload.get("workflow_timeline"))
+        payload["workflow_timeline"] = _append_workflow_event(
+            timeline,
+            event_type="status_updated",
+            label="Role archived by relevance cleanup",
+            detail=str(relevance.get("archiveReason") or ""),
+            at=now,
+            category="application",
+        )
+        points.append(models.PointStruct(id=item.get("_qdrant_id"), vector=item.get("_vector"), payload=payload))
+        updated += 1
+
+    if points and not dry_run:
+        client = qdrant_client_from_env(os.getenv("QDRANT_HOST", DEFAULT_QDRANT_HOST))
+        for start in range(0, len(points), UPSERT_BATCH_SIZE):
+            client.upsert(collection_name=COLLECTION_JOBS, points=points[start : start + UPSERT_BATCH_SIZE])
+        invalidate_jobs_cache()
+
+    return {
+        "status": "dry_run" if dry_run else "completed",
+        "matched": len(candidates),
+        "updated": updated,
+        "items": preview,
+    }
+
+
+def _append_cleanup_note(existing: Any, note: str) -> str:
+    current = str(existing or "").strip()
+    if not current:
+        return note
+    if note in current:
+        return current
+    return f"{current}\n{note}"
 
 
 def get_job(job_id: str) -> dict[str, Any] | None:
@@ -1273,6 +1386,7 @@ def job_stats() -> dict[str, Any]:
     total_scored = 0
     score_sum = 0
     new_today = 0
+    archived_jobs = 0
     now = datetime.now(timezone.utc)
     lookback = now - timedelta(hours=24)
 
@@ -1290,6 +1404,12 @@ def job_stats() -> dict[str, Any]:
                 discovered_at = discovered_at.replace(tzinfo=timezone.utc)
             if discovered_at >= lookback:
                 new_today += 1
+
+        normalized_status = str(item.get("status") or "").strip().lower()
+        is_archived = bool(item.get("dismissed")) or normalized_status in {"dismissed", "expired"}
+        if is_archived:
+            archived_jobs += 1
+            continue
 
         score = _parse_int(item.get("fit_score"), default=-1)
         if score >= HIGH_FIT_THRESHOLD:
@@ -1313,6 +1433,8 @@ def job_stats() -> dict[str, Any]:
 
     return {
         "total_jobs": len(rows),
+        "active_jobs": len(rows) - archived_jobs,
+        "archived_jobs": archived_jobs,
         "new_today": new_today,
         "high_fit_count": score_buckets["high"],
         "average_fit_score": round(score_sum / total_scored, 1) if total_scored else 0.0,

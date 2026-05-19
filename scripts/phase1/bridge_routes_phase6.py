@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: F405
 """Phase 6 bridge route registration helpers."""
 
 from __future__ import annotations
@@ -74,7 +75,7 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
             ),
         ),
         title_query: Optional[str] = Query(None, description="Optional fuzzy title search."),
-        sort: str = Query("fit_score", description="Sort field: fit_score, discovered_at, company."),
+        sort: str = Query("relevance", description="Sort field: relevance, fit_score, discovered_at, company."),
         order: str = Query("desc", description="Sort order: asc, desc."),
         limit: int = Query(50, ge=1, le=200, description="Page size."),
         offset: int = Query(0, ge=0, description="Pagination offset."),
@@ -108,13 +109,13 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
             )
 
         normalized_sort = str(sort).strip().lower()
-        if normalized_sort not in {"fit_score", "discovered_at", "company"}:
+        if normalized_sort not in {"relevance", "fit_score", "discovered_at", "company"}:
             return _error_response(
                 status_code=400,
                 code="validation_failed",
                 message=f"Invalid sort: {sort}",
                 request_id=request_id,
-                details=[{"field": "sort", "issue": "allowed values: fit_score, discovered_at, company"}],
+                details=[{"field": "sort", "issue": "allowed values: relevance, fit_score, discovered_at, company"}],
             )
 
         normalized_order = str(order).strip().lower()

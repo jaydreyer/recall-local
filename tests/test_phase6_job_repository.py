@@ -182,6 +182,93 @@ class JobRepositoryTests(unittest.TestCase):
         self.assertEqual(payload["total"], 1)
         self.assertEqual(payload["items"][0]["jobId"], "job-1")
 
+    def test_list_jobs_relevance_sort_prioritizes_target_titles_over_false_high_fit(self) -> None:
+        jobs = [
+            {
+                "jobId": "job-noise",
+                "title": "Senior Java Spring Azure Backend Engineer",
+                "company": "CloudCo",
+                "company_tier": 2,
+                "location": "Remote",
+                "status": "evaluated",
+                "fit_score": 91,
+                "matching_skills": [],
+                "gaps": [],
+                "observation": {},
+                "discovered_at": "2026-03-12T10:00:00+00:00",
+            },
+            {
+                "jobId": "job-target",
+                "title": "Technical Account Manager",
+                "company": "OpenAI",
+                "company_tier": 2,
+                "location": "Remote",
+                "status": "evaluated",
+                "fit_score": 74,
+                "matching_skills": [],
+                "gaps": [],
+                "observation": {},
+                "discovered_at": "2026-03-11T10:00:00+00:00",
+            },
+        ]
+
+        with patch("scripts.phase6.job_repository._scroll_jobs", return_value=jobs):
+            relevance_sorted = job_repository.list_jobs(status="evaluated")
+            raw_score_sorted = job_repository.list_jobs(status="evaluated", sort="fit_score")
+
+        self.assertEqual(relevance_sorted["sort"], "relevance")
+        self.assertEqual(relevance_sorted["items"][0]["jobId"], "job-target")
+        self.assertEqual(relevance_sorted["items"][0]["relevance"]["targetFamily"], "technical_account_manager")
+        self.assertEqual(raw_score_sorted["items"][0]["jobId"], "job-noise")
+
+    def test_apply_relevance_cleanup_archives_obvious_noise_without_deleting(self) -> None:
+        current = {
+            "jobId": "job-intern",
+            "title": "Engineering Intern",
+            "company": "OpenAI",
+            "company_tier": 1,
+            "location": "Remote",
+            "status": "evaluated",
+            "fit_score": 78,
+            "applied": False,
+            "dismissed": False,
+            "notes": "",
+            "workflow": {},
+            "workflowTimeline": [],
+            "_payload": {
+                "job_id": "job-intern",
+                "title": "Engineering Intern",
+                "company": "OpenAI",
+                "company_tier": 1,
+                "location": "Remote",
+                "status": "evaluated",
+                "fit_score": 78,
+                "notes": "",
+            },
+            "_vector": [0.1, 0.2],
+            "_qdrant_id": "point-intern",
+        }
+
+        with (
+            patch("scripts.phase6.job_repository._scroll_jobs", return_value=[current]),
+            patch("scripts.phase6.job_repository.qdrant_client_from_env") as qdrant_client_mock,
+            patch.dict(
+                "sys.modules",
+                {"qdrant_client": SimpleNamespace(models=SimpleNamespace(PointStruct=lambda **kwargs: kwargs))},
+            ),
+        ):
+            qdrant_client_mock.return_value.upsert.return_value = None
+            result = job_repository.apply_relevance_cleanup(dry_run=False)
+
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["updated"], 1)
+        upserted_point = qdrant_client_mock.return_value.upsert.call_args.kwargs["points"][0]
+        payload = upserted_point["payload"]
+        self.assertEqual(payload["status"], "dismissed")
+        self.assertTrue(payload["dismissed"])
+        self.assertEqual(payload["relevance"]["cleanupAction"], "dismissed")
+        self.assertIn("Phase 3 relevance cleanup archived this role", payload["notes"])
+
     def test_normalize_workflow_timeline_infers_event_metadata_for_legacy_entries(self) -> None:
         normalized = job_repository._normalize_workflow_timeline(
             [
@@ -250,12 +337,17 @@ class JobRepositoryTests(unittest.TestCase):
             "_qdrant_id": "point-123",
         }
 
-        with patch("scripts.phase6.job_repository.get_job_raw", return_value=current), patch(
-            "scripts.phase6.job_repository.get_job",
-            side_effect=lambda _job_id: job_repository._sanitize_job(dict(current)),
-        ), patch("scripts.phase6.job_repository.qdrant_client_from_env") as qdrant_client_mock, patch.dict(
-            "sys.modules",
-            {"qdrant_client": SimpleNamespace(models=SimpleNamespace(PointStruct=lambda **kwargs: kwargs))},
+        with (
+            patch("scripts.phase6.job_repository.get_job_raw", return_value=current),
+            patch(
+                "scripts.phase6.job_repository.get_job",
+                side_effect=lambda _job_id: job_repository._sanitize_job(dict(current)),
+            ),
+            patch("scripts.phase6.job_repository.qdrant_client_from_env") as qdrant_client_mock,
+            patch.dict(
+                "sys.modules",
+                {"qdrant_client": SimpleNamespace(models=SimpleNamespace(PointStruct=lambda **kwargs: kwargs))},
+            ),
         ):
             qdrant_client_mock.return_value.upsert.return_value = None
             updated = job_repository.update_job(
@@ -362,12 +454,17 @@ class JobRepositoryTests(unittest.TestCase):
             "_qdrant_id": "point-234",
         }
 
-        with patch("scripts.phase6.job_repository.get_job_raw", return_value=current), patch(
-            "scripts.phase6.job_repository.get_job",
-            side_effect=lambda _job_id: job_repository._sanitize_job(dict(current)),
-        ), patch("scripts.phase6.job_repository.qdrant_client_from_env") as qdrant_client_mock, patch.dict(
-            "sys.modules",
-            {"qdrant_client": SimpleNamespace(models=SimpleNamespace(PointStruct=lambda **kwargs: kwargs))},
+        with (
+            patch("scripts.phase6.job_repository.get_job_raw", return_value=current),
+            patch(
+                "scripts.phase6.job_repository.get_job",
+                side_effect=lambda _job_id: job_repository._sanitize_job(dict(current)),
+            ),
+            patch("scripts.phase6.job_repository.qdrant_client_from_env") as qdrant_client_mock,
+            patch.dict(
+                "sys.modules",
+                {"qdrant_client": SimpleNamespace(models=SimpleNamespace(PointStruct=lambda **kwargs: kwargs))},
+            ),
         ):
             qdrant_client_mock.return_value.upsert.return_value = None
             updated = job_repository.update_job(
