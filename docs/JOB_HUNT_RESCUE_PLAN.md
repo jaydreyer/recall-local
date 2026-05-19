@@ -1,6 +1,6 @@
 # Job Hunt Rescue Plan
 
-Current phase: Phase 1 - Model bakeoff
+Current phase: Phase 2 - Evaluation pipeline cleanup
 
 Last updated: 2026-05-19
 
@@ -29,6 +29,7 @@ Read `AGENTS.md` and `docs/JOB_HUNT_RESCUE_PLAN.md`; continue from the current p
 - Model tradeoff: quality first, with latency still reasonable enough for daily use.
 - Model source policy: include the updated `llmfit` screenshot candidates, but require Ollama compatibility and objective bakeoff results before promotion.
 - Coding-tuned models may be tested but should not be favored for job-fit evaluation unless they win on job-fit quality.
+- Cloud model policy: do not assume any OpenAI or Anthropic model ID is available just because public docs list it. Query the live ai-lab API credentials first, then bake off only models that are actually callable from this deployment.
 - Skill install note: `bobmatnyc/claude-mpm-skills@local-llm-ops` was advertised by skills search, but its repository exposed only `mcp-protocol-builder` during install. Use installed fallback `local-llm-expert` for local model work unless `local-llm-ops` becomes available later.
 
 ## Target Job Titles
@@ -43,6 +44,9 @@ Read `AGENTS.md` and `docs/JOB_HUNT_RESCUE_PLAN.md`; continue from the current p
 
 Current live/installed Ollama models observed on ai-lab:
 
+- `qwen3:30b`
+- `qwen3:14b`
+- `deepseek-v2:16b`
 - `nomic-embed-text:latest`
 - `gemma4:e4b`
 - `gemma4:e2b`
@@ -58,7 +62,10 @@ Known dry-run findings:
 - `qwen2.5:7b-instruct` produced valid output but under-scored strong target roles in the golden set.
 - `qwen3.5:9b` returned an empty response in the golden run.
 - `gemma3:12b-it-qat` is the strongest installed baseline so far, but still missed some target cases.
-- `gemma4:e4b` returned invalid JSON in the golden run.
+- `gemma4:e4b` looked best on the synthetic golden set, but failed structured output on real postings.
+- `deepseek-v2:16b` failed with an out-of-range scorecard value.
+- `qwen3:14b` passed only 60% of synthetic cases and failed structured output on most real postings.
+- `qwen3:30b` is too slow/unreliable for the current app path: it ran for 494 seconds and returned an empty response.
 
 Updated `llmfit` screenshot candidates to investigate first:
 
@@ -104,6 +111,8 @@ Acceptance criteria:
 
 Goal: identify the best local model for job-fit scoring before changing ranking or dashboard behavior.
 
+Status: complete.
+
 Implementation notes:
 
 - Use the `local-llm-expert` skill when available.
@@ -120,21 +129,59 @@ Acceptance criteria:
 - A recommended local evaluator is chosen or the plan explicitly records why no local model is good enough yet.
 - Current app behavior is not changed until a winner is selected.
 
+Results recorded 2026-05-19:
+
+| Model | Install method | Synthetic golden result | Real-job calibration | Phase 1 call |
+| --- | --- | --- | --- | --- |
+| `llama3.2:3b` | already installed | malformed/non-JSON | not retested after golden failure | reject |
+| `llama3:8b` | already installed | 4/5, 80%, fast | failed JSON on 6/8 real postings | reject until prompt/parser repair |
+| `qwen2.5:7b-instruct` | already installed | 2/5, 40% | not retested after weak golden | reject |
+| `qwen3.5:9b` | already installed | empty response | not retested after empty response | reject |
+| `gemma3:12b-it-qat` | already installed | 3/5, 60% | valid JSON on 8/8 real postings, but over-scored some broad/non-target roles | best reliable local fallback |
+| `gemma4:e2b` | already installed | malformed scorecard value | not retested after malformed output | reject |
+| `gemma4:e4b` | already installed | 4/5, 80% | failed structured output on 8/8 real postings | reject until prompt/parser repair |
+| `deepseek-v2:16b` | `ollama pull deepseek-v2:16b` | malformed scorecard value | not retested after malformed output | reject |
+| `qwen3:14b` | `ollama pull qwen3:14b` | 3/5, 60%, median about 26s | valid JSON on only 2/8 real postings | reject |
+| `qwen3:30b` | `ollama pull qwen3:30b` | ran 494s then empty response | not retested after empty response | reject for current hardware/app path |
+
+Phase 1 recommendation:
+
+- Do not promote any newly pulled model.
+- Use `gemma3:12b-it-qat` as the best current local fallback for Phase 2 reliability work, not as a final quality winner.
+- Phase 2 should focus on prompt/parser/output validation improvements before more model shopping. The bakeoff suggests model size alone is not solving structured-output reliability.
+- Keep `qwen2.5:7b-instruct` pinned for the broader live Ollama stack until Phase 2 proves a better end-to-end setting and the Docker `.env` invariant is intentionally updated.
+- Real-job calibration used a quick sampled set from current Qdrant jobs. The negative-control selection was imperfect because current ranking has already over-scored broad solutions/architecture roles; Phase 3 should build a cleaner calibration fixture after relevance cleanup.
+
 ### Phase 2 - Evaluation Pipeline Cleanup
 
-Goal: make the chosen evaluator reliable and remove stale `llama3.2:3b` assumptions.
+Goal: make job evaluation reliable, even if the winning evaluator is cloud-first instead of local-first.
 
 Implementation notes:
 
+- First discover cloud model availability from the live ai-lab credentials. Record the exact callable OpenAI and Anthropic model IDs, endpoint support, and any auth/rate-limit failures.
+- Do not hardcode assumed OpenAI candidates. If available, include `gpt-5-mini`, `gpt-4.1-mini`, current flagship GPT models, and any other callable structured-output-capable OpenAI models in the bakeoff.
+- If Anthropic credentials are available, include the current configured Claude model and any callable lower-cost Claude model exposed to this account.
+- Run the same synthetic golden and real-job calibration against cloud candidates, using schema-enforced or tool-call structured output where the provider supports it.
+- Select a default evaluator using this priority: valid structured output on real jobs, correct target/negative ranking, latency, then cost.
+- Keep local Ollama as fallback only unless it beats the cloud candidates on the same evidence. Start fallback work from `gemma3:12b-it-qat`, because it was the only local candidate that returned valid JSON for all sampled real postings.
 - Replace hardcoded Phase 6 `llama3.2:3b` defaults with runtime settings or explicit environment defaults.
-- Tighten structured output validation and retry/fallback behavior.
-- Keep cloud escalation available for low-quality local outputs.
+- Tighten structured output validation and retry/fallback behavior using the real-job failure modes from `llama3:8b`, `gemma4:e4b`, and `qwen3:14b`.
 - Preserve the live Docker `.env` invariants unless intentionally changing them after validation.
+
+Recommended architecture direction:
+
+- Cloud-first for bulk job-fit scoring if an affordable structured-output model is available to Jay's account.
+- Local fallback for offline/privacy/cost-control cases, not the primary quality path.
+- Claude/Sonnet-style models reserved for deeper qualitative artifacts unless they win cost-adjusted scoring quality in the bakeoff.
+- Budget controls are required before enabling broad cloud scoring: max jobs per run, per-run estimated token/cost cap, and a dry-run/report-only mode.
 
 Acceptance criteria:
 
+- Live available cloud model IDs are recorded in this document before any promotion decision.
 - Job evaluation returns valid structured results for representative target and negative-control jobs.
-- The selected local model is visible through `GET /v1/llm-settings` or documented as the active runtime default.
+- The selected evaluator is visible through `GET /v1/llm-settings` or documented as the active runtime default.
+- Local fallback behavior is documented and tested.
+- Budget guardrails are documented before any broad cloud evaluation run.
 - Required validation passes after sync to ai-lab.
 
 ### Phase 3 - Job Relevance And Ranking
@@ -237,6 +284,14 @@ Golden job-fit runner:
 ssh ai-lab 'cd /home/jaydreyer/recall-local && scripts/eval/run_job_fit_golden.py --model local --local-model <model> --dry-run'
 ```
 
+Cloud model discovery:
+
+```bash
+ssh ai-lab 'cd /home/jaydreyer/recall-local && env | rg "OPENAI|ANTHROPIC|RECALL_PHASE6_EVAL|CLOUD_MODEL|CLOUD_PROVIDER"'
+```
+
+When credentials are present, query provider model availability through the configured SDK/API and record only callable model IDs in this plan.
+
 ## ai-lab Safety Reminders
 
 - After local code changes, sync to ai-lab before live curl, n8n, restart, or Docker validation.
@@ -254,3 +309,5 @@ ssh ai-lab 'cd /home/jaydreyer/recall-local && scripts/eval/run_job_fit_golden.p
 
 - 2026-05-19: Phase 0 created this durable plan and set the current phase to Phase 1 - Model bakeoff.
 - 2026-05-19: Installed `api-testing`, `reactive-dashboard-performance`, and `local-llm-expert`. Attempted `local-llm-ops`; skills search listed it, but the source installed only `mcp-protocol-builder`, so `local-llm-expert` is the active local-LLM helper skill.
+- 2026-05-19: Phase 1 completed. Pulled `deepseek-v2:16b`, `qwen3:14b`, and `qwen3:30b`; verified `ollama list`; ran stack validation; ran synthetic golden and real-job calibration. No new model beat the current best reliable fallback. Current phase set to Phase 2 - Evaluation pipeline cleanup.
+- 2026-05-19: Phase 2 plan updated to evaluate cloud-first scoring. Do not assume `gpt-5-mini`, `gpt-4.1-mini`, or any Claude model is available to the live account; discover callable models from ai-lab credentials, then bake off cloud candidates against the same golden and real-job calibration sets.
