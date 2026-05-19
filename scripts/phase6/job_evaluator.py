@@ -820,7 +820,7 @@ def _call_cloud(*, prompt: str, settings: dict[str, Any]) -> str:
             str(settings.get("response_format") or settings.get("output_format") or "").strip().lower() == "text"
         )
         if model.startswith("gpt-5"):
-            response = _post_openai_responses_json(
+            responses_text = _post_openai_responses_json(
                 api_key=api_key,
                 model=model,
                 prompt=prompt,
@@ -828,7 +828,7 @@ def _call_cloud(*, prompt: str, settings: dict[str, Any]) -> str:
                 timeout_seconds=120.0,
                 json_mode=not text_mode,
             )
-            return response
+            return responses_text
         payload = {
             "model": model,
             "messages": [{"role": "user", "content": prompt}],
@@ -837,8 +837,8 @@ def _call_cloud(*, prompt: str, settings: dict[str, Any]) -> str:
         }
         if not text_mode:
             payload["response_format"] = {"type": "json_object"}
-        response = _post_openai_chat_json(api_key=api_key, payload=payload, timeout_seconds=120.0)
-        choices = response.json().get("choices") or []
+        chat_response = _post_openai_chat_json(api_key=api_key, payload=payload, timeout_seconds=120.0)
+        choices = chat_response.json().get("choices") or []
         if not choices:
             raise RuntimeError("OpenAI response missing choices.")
         return str(choices[0].get("message", {}).get("content") or "").strip()
