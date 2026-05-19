@@ -35,6 +35,15 @@ const SCORE_OPTIONS = [
   { value: 'under-50', label: 'Under 50' },
 ]
 
+const FRESHNESS_OPTIONS = [
+  { value: '', label: 'All ages' },
+  { value: 'current', label: '0-7 days' },
+  { value: 'recent', label: '8-30 days' },
+  { value: 'aging', label: '31-59 days' },
+  { value: 'stale', label: '60+ days' },
+  { value: 'unknown', label: 'Unknown age' },
+]
+
 function effectiveStatus(job) {
   if (job.applied || job.status === 'applied') {
     return 'applied'
@@ -55,6 +64,9 @@ function laneForJob(job) {
   }
   if (status === 'new') {
     return 'fresh'
+  }
+  if (job.freshness?.status === 'stale') {
+    return 'archive'
   }
   if ((job.fit_score || 0) >= 75) {
     return 'focus'
@@ -85,6 +97,24 @@ function compactRelativeTime(value) {
     return `${diffHours}h ago`
   }
   return `${Math.round(diffHours / 24)}d ago`
+}
+
+function freshnessClass(job) {
+  const status = job.freshness?.status || 'unknown'
+  if (status === 'current' || status === 'recent') {
+    return 'freshness-badge current'
+  }
+  if (status === 'aging') {
+    return 'freshness-badge aging'
+  }
+  if (status === 'stale') {
+    return 'freshness-badge stale'
+  }
+  return 'freshness-badge'
+}
+
+function freshnessLabel(job) {
+  return job.freshness?.label || 'Posting date unknown'
 }
 
 function formatRefreshLabel(value) {
@@ -119,10 +149,6 @@ function queueHeadline(job) {
     return job.score_rationale || 'Last evaluation errored.'
   }
   return summarizeAngle(job)
-}
-
-function uniqueCompanies(jobs) {
-  return new Set(jobs.map((job) => job.company_id || job.company_normalized || displayCompanyName(job.company, '')).filter(Boolean)).size
 }
 
 function aggregateCompanies(jobs) {
@@ -225,6 +251,11 @@ function QueueCard({ job, selected, onSelect }) {
         <span>T{job.company_tier || 3}</span>
       </div>
 
+      <div className="freshness-row">
+        <span className={freshnessClass(job)}>{freshnessLabel(job)}</span>
+        {job.relevance?.targetLabel && <span className="freshness-badge target">{job.relevance.targetLabel}</span>}
+      </div>
+
       <p className="queue-snippet">{queueHeadline(job)}</p>
       <div className="queue-tags">
         <span className="queue-tag">Match: {summarizeTopMatch(job, { maxLength: 72 })}</span>
@@ -324,6 +355,8 @@ export default function JobsCommandCenter({ jobsState, settings, onOpenSettings,
 
   const companyPulse = useMemo(() => aggregateCompanies(jobs), [jobs])
   const appliedCount = jobs.filter((job) => effectiveStatus(job) === 'applied').length
+  const staleActiveCount = jobsState.stats?.freshness?.active_stale_jobs ?? jobs.filter((job) => job.freshness?.status === 'stale' && !['applied', 'dismissed', 'expired', 'error'].includes(effectiveStatus(job))).length
+  const actionableCount = jobsState.stats?.freshness?.active_actionable_jobs ?? jobs.filter((job) => ['current', 'recent'].includes(job.freshness?.status)).length
 
   function openDossier(jobId) {
     jobsState.setSelectedJobId(jobId)
@@ -399,14 +432,14 @@ export default function JobsCommandCenter({ jobsState, settings, onOpenSettings,
               <p>High-fit evaluated roles ready for outreach.</p>
             </div>
             <div className="operator-metric-card">
-              <span className="mini-label">Fresh arrivals</span>
-              <strong className="operator-metric-value">{laneCounts.fresh}</strong>
-              <p>New roles waiting for first evaluation.</p>
+              <span className="mini-label">Actionable age</span>
+              <strong className="operator-metric-value">{actionableCount}</strong>
+              <p>Active postings from the last 30 days.</p>
             </div>
             <div className="operator-metric-card">
-              <span className="mini-label">Companies in play</span>
-              <strong className="operator-metric-value">{uniqueCompanies(jobs)}</strong>
-              <p>Distinct companies across the loaded search set.</p>
+              <span className="mini-label">Stale active</span>
+              <strong className="operator-metric-value">{staleActiveCount}</strong>
+              <p>Active roles 60+ days old, kept visible but out of the top queue.</p>
             </div>
             <div className="operator-metric-card success">
               <span className="mini-label">Applied</span>
@@ -453,6 +486,16 @@ export default function JobsCommandCenter({ jobsState, settings, onOpenSettings,
             <span className="filter-label">Source</span>
             <select className="filter-select" value={jobsState.filters.source} onChange={(event) => jobsState.setFilter('source', event.target.value)}>
               {SOURCE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="filter-field compact">
+            <span className="filter-label">Age</span>
+            <select className="filter-select" value={jobsState.filters.freshness} onChange={(event) => jobsState.setFilter('freshness', event.target.value)}>
+              {FRESHNESS_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -525,7 +568,7 @@ export default function JobsCommandCenter({ jobsState, settings, onOpenSettings,
                     <span>{heroJob.location || 'Unknown location'}</span>
                     <span>{displaySourceLabel(heroJob.source)}</span>
                     <span>{heroWorkflow?.stateLabel || 'Queued'}</span>
-                    <span>{compactRelativeTime(heroJob.evaluated_at || heroJob.discovered_at || heroJob.date_posted)}</span>
+                    <span>{freshnessLabel(heroJob)}</span>
                   </div>
                 </div>
               </div>

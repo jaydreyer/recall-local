@@ -23,6 +23,10 @@ UPSERT_BATCH_SIZE = 128
 HIGH_FIT_THRESHOLD = 75
 MEDIUM_FIT_THRESHOLD = 50
 LOW_FIT_THRESHOLD = 25
+FRESH_POSTING_DAYS = 7
+RECENT_POSTING_DAYS = 30
+AGING_POSTING_DAYS = 59
+STALE_POSTING_DAYS = 60
 _JOBS_SCROLL_CACHE: dict[tuple[bool, str], tuple[float, list[dict[str, Any]]]] = {}
 DEFAULT_WORKFLOW_PACKET = {
     "tailoredSummary": False,
@@ -145,6 +149,95 @@ def _parse_datetime(value: Any) -> datetime | None:
         return datetime.fromisoformat(normalized)
     except ValueError:
         return None
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _ensure_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _is_active_job(item: dict[str, Any]) -> bool:
+    normalized_status = str(item.get("status") or "").strip().lower()
+    if bool(item.get("dismissed")) or bool(item.get("applied")):
+        return False
+    return normalized_status not in {"dismissed", "expired", "applied", "error"}
+
+
+def _posting_reference_datetime(item: dict[str, Any]) -> tuple[datetime | None, str | None]:
+    for field_name in ("date_posted", "discovered_at", "evaluated_at"):
+        parsed = _parse_datetime(item.get(field_name))
+        if parsed is not None:
+            return _ensure_utc(parsed), field_name
+    return None, None
+
+
+def assess_job_freshness(item: dict[str, Any], *, now: datetime | None = None) -> dict[str, Any]:
+    """Return dashboard-facing posting age and actionability metadata."""
+    reference, source_field = _posting_reference_datetime(item)
+    checked_at = _ensure_utc(now or _utc_now()).replace(microsecond=0)
+    if reference is None:
+        return {
+            "version": "phase4_freshness_v1",
+            "status": "unknown",
+            "label": "Posting date unknown",
+            "ageDays": None,
+            "sourceDate": None,
+            "sourceField": None,
+            "actionability": "review",
+            "actionabilityPenalty": -18,
+            "checkedAt": checked_at.isoformat().replace("+00:00", "Z"),
+            "signals": [],
+            "penalties": ["posting_date_unknown"],
+        }
+
+    age_seconds = max(0.0, (checked_at - reference).total_seconds())
+    age_days = int(age_seconds // 86400)
+    if age_days <= FRESH_POSTING_DAYS:
+        status = "current"
+        label = f"Posted {age_days}d ago" if age_days else "Posted today"
+        actionability = "actionable"
+        penalty = 8
+    elif age_days <= RECENT_POSTING_DAYS:
+        status = "recent"
+        label = f"Posted {age_days}d ago"
+        actionability = "actionable"
+        penalty = 0
+    elif age_days <= AGING_POSTING_DAYS:
+        status = "aging"
+        label = f"Posted {age_days}d ago"
+        actionability = "verify"
+        penalty = -16
+    else:
+        status = "stale"
+        label = f"Posted {age_days}d ago"
+        actionability = "stale"
+        penalty = -55
+
+    signals = [f"posting_age_days:{age_days}", f"posting_date_source:{source_field}"]
+    penalties: list[str] = []
+    if status == "aging":
+        penalties.append("verify_posting_before_action")
+    elif status == "stale":
+        penalties.append("stale_active_posting")
+
+    return {
+        "version": "phase4_freshness_v1",
+        "status": status,
+        "label": label,
+        "ageDays": age_days,
+        "sourceDate": reference.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "sourceField": source_field,
+        "actionability": actionability,
+        "actionabilityPenalty": penalty,
+        "checkedAt": checked_at.isoformat().replace("+00:00", "Z"),
+        "signals": signals,
+        "penalties": penalties,
+    }
 
 
 def _normalize_observation(value: Any) -> dict[str, Any]:
@@ -442,6 +535,7 @@ def _normalize_job(record: Any) -> dict[str, Any]:
             if key in {"cleanupAppliedAt", "cleanupAction", "cleanupReason"}
         },
     }
+    normalized["freshness"] = assess_job_freshness(normalized)
     return normalized
 
 
@@ -507,6 +601,7 @@ def list_jobs(
     max_score: int = 100,
     company_tier: int | None = None,
     source: str | None = None,
+    freshness: str | None = None,
     search: str | None = None,
     title_query: str | None = None,
     sort: str = "relevance",
@@ -522,6 +617,7 @@ def list_jobs(
     if normalized_status == "all":
         normalized_status = ""
     normalized_source = str(source or "").strip().lower()
+    normalized_freshness = str(freshness or "").strip().lower()
     normalized_search = str(search or "").strip().lower()
     normalized_title_query = str(title_query or "").strip().lower()
     effective_search = normalized_search or normalized_title_query
@@ -536,6 +632,13 @@ def list_jobs(
         if company_tier is not None and _parse_int(item.get("company_tier"), default=0) != company_tier:
             continue
         if normalized_source and str(item.get("source", "")).strip().lower() != normalized_source:
+            continue
+        if not isinstance(item.get("freshness"), dict) or not item.get("freshness"):
+            item = {**item, "freshness": assess_job_freshness(item)}
+        if (
+            normalized_freshness
+            and str((item.get("freshness") or {}).get("status") or "").lower() != normalized_freshness
+        ):
             continue
         if effective_search and not _matches_search(item, effective_search):
             continue
@@ -555,7 +658,7 @@ def list_jobs(
     else:
         filtered.sort(
             key=lambda item: (
-                _parse_float((item.get("relevance") or {}).get("rankingScore"), 0.0),
+                _actionability_score(item),
                 _parse_float(item.get("fit_score"), 0.0),
                 _parse_datetime(item.get("discovered_at")) or datetime.min,
             ),
@@ -572,6 +675,18 @@ def list_jobs(
         "sort": sort_key if sort_key in {"relevance", "fit_score", "discovered_at", "company"} else "relevance",
         "items": [_sanitize_job(item, include_details=include_details) for item in page],
     }
+
+
+def _actionability_score(item: dict[str, Any]) -> float:
+    relevance = item.get("relevance") or {}
+    freshness = item.get("freshness") or {}
+    score = _parse_float(relevance.get("rankingScore"), 0.0)
+    score += _parse_float(freshness.get("actionabilityPenalty"), 0.0)
+    if not _is_active_job(item):
+        return score
+    if str(freshness.get("status") or "") == "current":
+        score += 6
+    return max(0.0, score)
 
 
 def apply_relevance_cleanup(*, dry_run: bool = True, limit: int | None = None) -> dict[str, Any]:
@@ -1383,6 +1498,8 @@ def job_stats() -> dict[str, Any]:
     by_day: dict[str, int] = {}
     score_buckets = {"high": 0, "medium": 0, "low": 0, "unscored": 0}
     score_distribution = {"0-24": 0, "25-49": 0, "50-74": 0, "75-100": 0}
+    freshness_buckets = {"current": 0, "recent": 0, "aging": 0, "stale": 0, "unknown": 0}
+    active_freshness_buckets = {"current": 0, "recent": 0, "aging": 0, "stale": 0, "unknown": 0}
     total_scored = 0
     score_sum = 0
     new_today = 0
@@ -1407,9 +1524,16 @@ def job_stats() -> dict[str, Any]:
 
         normalized_status = str(item.get("status") or "").strip().lower()
         is_archived = bool(item.get("dismissed")) or normalized_status in {"dismissed", "expired"}
+        freshness = item.get("freshness") if isinstance(item.get("freshness"), dict) else assess_job_freshness(item)
+        freshness_status = str((freshness or {}).get("status") or "unknown")
+        if freshness_status not in freshness_buckets:
+            freshness_status = "unknown"
+        freshness_buckets[freshness_status] += 1
         if is_archived:
             archived_jobs += 1
             continue
+        if _is_active_job(item):
+            active_freshness_buckets[freshness_status] += 1
 
         score = _parse_int(item.get("fit_score"), default=-1)
         if score >= HIGH_FIT_THRESHOLD:
@@ -1440,6 +1564,19 @@ def job_stats() -> dict[str, Any]:
         "average_fit_score": round(score_sum / total_scored, 1) if total_scored else 0.0,
         "score_ranges": score_buckets,
         "score_distribution": [{"range": key, "count": value} for key, value in score_distribution.items()],
+        "freshness": {
+            "thresholds_days": {
+                "current": FRESH_POSTING_DAYS,
+                "recent": RECENT_POSTING_DAYS,
+                "aging": AGING_POSTING_DAYS,
+                "stale": STALE_POSTING_DAYS,
+            },
+            "active": active_freshness_buckets,
+            "all": freshness_buckets,
+            "active_stale_jobs": active_freshness_buckets["stale"],
+            "active_current_jobs": active_freshness_buckets["current"],
+            "active_actionable_jobs": active_freshness_buckets["current"] + active_freshness_buckets["recent"],
+        },
         "by_source": by_source,
         "by_day": by_day,
     }

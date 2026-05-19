@@ -1583,6 +1583,45 @@ body {
   text-transform: uppercase;
 }
 
+.freshness-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.freshness-badge {
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.62);
+  padding: 5px 8px;
+  color: var(--text-secondary);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.freshness-badge.current {
+  border-color: rgba(107, 143, 113, 0.28);
+  color: #516d54;
+}
+
+.freshness-badge.aging {
+  border-color: rgba(196, 132, 62, 0.32);
+  color: #8a5f28;
+}
+
+.freshness-badge.stale {
+  border-color: rgba(147, 118, 96, 0.32);
+  color: #7f6a59;
+}
+
+.freshness-badge.target {
+  border-color: rgba(232, 85, 58, 0.24);
+  color: var(--accent);
+}
+
 .queue-snippet {
   margin: 12px 0 0;
   color: #4a4540;
