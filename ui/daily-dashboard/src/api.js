@@ -129,6 +129,9 @@ function buildJobQuery(filters) {
   if (filters.source) {
     params.set('source', filters.source)
   }
+  if (filters.freshness) {
+    params.set('freshness', filters.freshness)
+  }
   if (filters.company_tier) {
     params.set('company_tier', String(filters.company_tier))
   }

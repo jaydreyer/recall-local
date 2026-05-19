@@ -21,9 +21,10 @@ const DEFAULT_FILTERS = {
   status: 'all',
   scoreRange: 'all',
   source: '',
+  freshness: '',
   companyTier: '',
   search: '',
-  sort: 'fit_score',
+  sort: 'relevance',
   order: 'desc',
   limit: 60,
 }
@@ -44,7 +45,7 @@ function resolveScoreRange(scoreRange) {
     case 'under-50':
       return { min_score: 0, max_score: 49 }
     default:
-      return { min_score: 0, max_score: 100 }
+      return { min_score: -1, max_score: 100 }
   }
 }
 
@@ -53,6 +54,7 @@ function buildFilters(filters) {
   return {
     status: filters.status,
     source: filters.source || undefined,
+    freshness: filters.freshness || undefined,
     company_tier: filters.companyTier ? Number(filters.companyTier) : undefined,
     search: filters.search || undefined,
     sort: filters.sort,

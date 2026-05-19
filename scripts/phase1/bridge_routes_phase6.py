@@ -59,14 +59,18 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
         request: Request,
         status: str = Query("evaluated", description="Filter by status."),
         min_score: int = Query(
-            0,
+            -1,
             ge=-1,
             le=100,
-            description="Minimum fit score. Use -1 to include unscored jobs in `status=new` views.",
+            description="Minimum fit score. Defaults to -1 so all/status views include unscored jobs.",
         ),
         max_score: int = Query(100, ge=0, le=100, description="Maximum fit score."),
         company_tier: Optional[int] = Query(None, ge=1, le=3, description="Optional company tier filter."),
         source: Optional[str] = Query(None, description="Optional source filter."),
+        freshness: Optional[str] = Query(
+            None,
+            description="Optional posting freshness filter: current, recent, aging, stale, unknown.",
+        ),
         search: Optional[str] = Query(
             None,
             description=(
@@ -108,6 +112,16 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                 details=[{"field": "source", "issue": f"allowed values: {', '.join(sorted(PHASE6_JOB_SOURCES))}"}],
             )
 
+        normalized_freshness = str(freshness or "").strip().lower() or None
+        if normalized_freshness and normalized_freshness not in {"current", "recent", "aging", "stale", "unknown"}:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message=f"Invalid freshness: {freshness}",
+                request_id=request_id,
+                details=[{"field": "freshness", "issue": "allowed values: current, recent, aging, stale, unknown"}],
+            )
+
         normalized_sort = str(sort).strip().lower()
         if normalized_sort not in {"relevance", "fit_score", "discovered_at", "company"}:
             return _error_response(
@@ -145,6 +159,7 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
                 max_score=max_score,
                 company_tier=company_tier,
                 source=normalized_source,
+                freshness=normalized_freshness,
                 search=search,
                 title_query=title_query,
                 sort=normalized_sort,

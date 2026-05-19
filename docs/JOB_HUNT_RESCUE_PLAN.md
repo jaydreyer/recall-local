@@ -336,6 +336,8 @@ Validation:
 
 Goal: make the daily dashboard fast, clear, and action-oriented.
 
+Status: in progress; freshness/validity polish is implemented and live. Gap caching/top-actions remain follow-up work.
+
 Implementation notes:
 
 - Use the `rest-api-design` skill for any endpoint design or schema changes.
@@ -351,6 +353,46 @@ Acceptance criteria:
 - Top 3 actions are visible and useful.
 - Job counts are understandable and consistent.
 - Dashboard smoke and ops observability checks pass.
+
+Results recorded 2026-05-19:
+
+- Added Phase 4 posting freshness metadata to every job returned by `GET /v1/jobs`:
+  - `current`: 0-7 days
+  - `recent`: 8-30 days
+  - `aging`: 31-59 days
+  - `stale`: 60+ days
+  - `unknown`: no usable posting/discovery/evaluation date
+- Changed `GET /v1/jobs` default `min_score` from `0` to `-1`, so `status=all` no longer silently drops unscored jobs.
+- Added optional `GET /v1/jobs?freshness=current|recent|aging|stale|unknown` filtering.
+- Updated relevance sorting to incorporate freshness/actionability, so stale active postings are preserved but pushed out of the top daily queue.
+- Updated `GET /v1/job-stats` with freshness buckets for active and all jobs. Live observed counts:
+  - total jobs: 2497
+  - active jobs: 1752
+  - active current jobs: 89
+  - active actionable jobs, current plus recent: 599
+  - active stale jobs: 1059
+- Updated the Daily Dashboard jobs deck:
+  - default board query now uses `sort=relevance` and `min_score=-1`
+  - queue cards show freshness labels and target-family labels
+  - stale evaluated roles move to the archive lane instead of the focus lane
+  - metrics now show actionable-age and stale-active counts
+  - added an Age filter for 0-7, 8-30, 31-59, 60+, and unknown posting age
+- Live `GET /v1/jobs?status=all&limit=5&view=summary&sort=relevance&order=desc` returned five current target-family roles at the top, all Solutions Engineer/Solutions Consultant style postings dated today to 6 days old.
+
+Validation:
+
+- Local focused tests passed: `70 passed` for `tests/test_phase6_job_repository.py` and `tests/test_bridge_api_contract.py`.
+- Local Daily Dashboard build passed with Vite.
+- Synced changed files from Mac to ai-lab and spot-checked synced contents before live validation.
+- ai-lab import check passed for Phase 4 freshness helpers.
+- ai-lab Python test run was skipped because `.venv` does not have `pytest` installed.
+- ai-lab source-tree `npm run build` was skipped because the host source tree does not have local `node_modules`; the Docker image build ran `npm ci` and `npm run build` successfully.
+- Ran `docker/validate-stack.sh` before and after Compose work; both passed.
+- Inspected and preserved Compose project labels, `recall_backend` attachment, Qdrant volume `docker_qdrant-storage`, and Ollama volume `docker_ollama-models`.
+- Restarted `recall-ingest-bridge` and rebuilt `daily-dashboard` under Compose project `recall`. Compose recreated dependencies during `up -d --build daily-dashboard`, but post-change validation confirmed project/network/volume invariants remained correct.
+- `GET /v1/healthz` returned `{"status":"ok"}`.
+- Dashboard smoke passed with status `ok`.
+- Ops observability artifact `/home/jaydreyer/recall-local/data/artifacts/observability/20260519T195714Z_ops_observability_check.json` returned `error` because `job_alert_workflow` and `rag_probe` timed out; bridge health, dashboard checks, daily dashboard UI, and chat UI were `ok`. This matches the known residual issue from Phase 2/3, not a freshness regression.
 
 ### Phase 5 - End-To-End ai-lab Validation
 

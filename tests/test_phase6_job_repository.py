@@ -221,6 +221,93 @@ class JobRepositoryTests(unittest.TestCase):
         self.assertEqual(relevance_sorted["items"][0]["relevance"]["targetFamily"], "technical_account_manager")
         self.assertEqual(raw_score_sorted["items"][0]["jobId"], "job-noise")
 
+    def test_list_jobs_relevance_sort_deprioritizes_stale_active_jobs(self) -> None:
+        jobs = [
+            {
+                "jobId": "job-stale",
+                "title": "Solutions Engineer",
+                "company": "LegacyCo",
+                "company_tier": 1,
+                "location": "Remote",
+                "status": "evaluated",
+                "fit_score": 96,
+                "matching_skills": [],
+                "gaps": [],
+                "observation": {},
+                "date_posted": "2026-01-01T10:00:00+00:00",
+                "discovered_at": "2026-01-01T10:00:00+00:00",
+            },
+            {
+                "jobId": "job-current",
+                "title": "Customer Engineer",
+                "company": "FreshCo",
+                "company_tier": 2,
+                "location": "Remote",
+                "status": "evaluated",
+                "fit_score": 78,
+                "matching_skills": [],
+                "gaps": [],
+                "observation": {},
+                "date_posted": "2026-05-18T10:00:00+00:00",
+                "discovered_at": "2026-05-18T10:00:00+00:00",
+            },
+        ]
+
+        normalized_jobs = [
+            {
+                **job,
+                "relevance": job_repository.assess_job_relevance(job),
+                "freshness": job_repository.assess_job_freshness(job),
+            }
+            for job in jobs
+        ]
+
+        with patch("scripts.phase6.job_repository._scroll_jobs", return_value=normalized_jobs):
+            payload = job_repository.list_jobs(status="evaluated")
+            stale_payload = job_repository.list_jobs(status="evaluated", freshness="stale")
+
+        self.assertEqual(payload["items"][0]["jobId"], "job-current")
+        self.assertEqual(payload["items"][0]["freshness"]["status"], "current")
+        self.assertEqual(stale_payload["total"], 1)
+        self.assertEqual(stale_payload["items"][0]["jobId"], "job-stale")
+
+    def test_job_stats_reports_active_freshness_buckets(self) -> None:
+        jobs = [
+            {
+                "jobId": "job-current",
+                "status": "evaluated",
+                "fit_score": 80,
+                "source": "career_page",
+                "discovered_at": "2026-05-18T10:00:00+00:00",
+                "freshness": {"status": "current"},
+            },
+            {
+                "jobId": "job-stale",
+                "status": "evaluated",
+                "fit_score": 82,
+                "source": "jobspy",
+                "discovered_at": "2026-01-01T10:00:00+00:00",
+                "freshness": {"status": "stale"},
+            },
+            {
+                "jobId": "job-dismissed",
+                "status": "dismissed",
+                "dismissed": True,
+                "fit_score": 90,
+                "source": "jobspy",
+                "discovered_at": "2026-01-01T10:00:00+00:00",
+                "freshness": {"status": "stale"},
+            },
+        ]
+
+        with patch("scripts.phase6.job_repository._scroll_jobs", return_value=jobs):
+            stats = job_repository.job_stats()
+
+        self.assertEqual(stats["freshness"]["active_current_jobs"], 1)
+        self.assertEqual(stats["freshness"]["active_stale_jobs"], 1)
+        self.assertEqual(stats["freshness"]["active"]["stale"], 1)
+        self.assertEqual(stats["freshness"]["all"]["stale"], 2)
+
     def test_apply_relevance_cleanup_archives_obvious_noise_without_deleting(self) -> None:
         current = {
             "jobId": "job-intern",
