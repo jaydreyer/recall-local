@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from scripts.phase6.draft_cleaning import unwrap_generated_text
 from scripts.phase6.job_evaluator import (  # noqa: PLC2701
     _call_cloud,
     _call_ollama,
@@ -60,6 +61,7 @@ def _resume_bullets_prompt(*, job: dict[str, Any], resume_text: str) -> str:
         "- Focus on resume phrasing that would strengthen this specific application.\n"
         "- Use only experience grounded in the resume context.\n"
         "- Do not invent metrics, employers, dates, or tools.\n"
+        "- Do not return JSON, object syntax, code fences, or metadata.\n"
         "- Emphasize customer-facing delivery, AI/platform work, and execution where supported.\n\n"
         f"Job title: {job.get('title')}\n"
         f"Company: {job.get('company')}\n"
@@ -76,7 +78,7 @@ def _resume_bullets_prompt(*, job: dict[str, Any], resume_text: str) -> str:
 
 
 def _clean_bullets(text: str) -> str:
-    lines = [line.strip() for line in str(text).strip().splitlines() if line.strip()]
+    lines = [line.strip() for line in unwrap_generated_text(text).splitlines() if line.strip()]
     bullets: list[str] = []
     for line in lines:
         normalized = re.sub(r"^[-*•\d.\)\s]+", "", line).strip()
@@ -140,13 +142,15 @@ def generate_resume_bullets(
     mode = str(runtime_settings.get("evaluation_model") or "local").strip().lower()
 
     if mode == "cloud":
-        bullets = _call_cloud(prompt=prompt, settings=runtime_settings)
+        bullets = _call_cloud(prompt=prompt, settings={**runtime_settings, "response_format": "text"})
         provider = str(runtime_settings.get("cloud_provider") or "anthropic").strip().lower()
         model = str(runtime_settings.get("cloud_model") or "").strip()
     else:
         bullets = _call_ollama(prompt=prompt, settings=runtime_settings)
         provider = "ollama"
-        model = str(runtime_settings.get("local_model") or os.getenv("RECALL_PHASE6_EVAL_LOCAL_MODEL") or "llama3.2:3b").strip()
+        model = str(
+            runtime_settings.get("local_model") or os.getenv("RECALL_PHASE6_EVAL_LOCAL_MODEL") or "llama3.2:3b"
+        ).strip()
 
     cleaned_bullets = _clean_bullets(bullets)
     vault_path = _save_to_vault(job=job, bullets_text=cleaned_bullets) if save_to_vault else None

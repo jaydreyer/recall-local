@@ -1,6 +1,6 @@
 # Job Hunt Rescue Plan
 
-Current phase: Phase 5 - End-To-End ai-lab Validation
+Current phase: Phase 6 - Daily Operating Loop And Calibration
 
 Last updated: 2026-05-19
 
@@ -419,7 +419,7 @@ Validation:
 
 Goal: prove the full system works on the live ai-lab stack.
 
-Status: ready to start from the Phase 4 green baseline.
+Status: complete; live ai-lab end-to-end validation passed from the Phase 4 green baseline.
 
 Implementation notes:
 
@@ -434,6 +434,58 @@ Acceptance criteria:
 - `scripts/phase6/run_ops_observability_check.sh` passes when applicable.
 - A sample job evaluation batch demonstrates improved fit quality.
 - The plan document is updated with completion notes and the next phase marker.
+
+Results recorded 2026-05-19:
+
+- Confirmed live ai-lab had Phase 4 dashboard/action/gap-cache code present before validation.
+- `docker/validate-stack.sh` passed before and after bridge-only restarts; Compose project `recall`, network `recall_backend`, Qdrant volume `docker_qdrant-storage`, and Ollama volume `docker_ollama-models` were preserved.
+- Dashboard smoke with gaps enabled passed:
+  - jobs board loaded 1669 jobs
+  - freshness was `ok`, latest job age about 2.8 hours
+  - companies loaded 300 tracked companies
+  - gap check returned `ok` with 442 aggregated gaps across 229 evaluated jobs
+  - cache warmer completed successfully with no error
+- Ops observability passed. Latest green artifact from this validation:
+  - `/home/jaydreyer/recall-local/data/artifacts/observability/20260519T204910Z_ops_observability_check.json`
+  - bridge health, dashboard checks, job alert workflow, RAG probe, daily dashboard UI, and chat UI were all `ok`.
+- Direct API validation confirmed:
+  - `GET /v1/healthz` returned `{"status":"ok"}`
+  - `GET /v1/llm-settings` kept the guarded default evaluator at `openai:gpt-4.1-mini` with local fallback `gemma3:12b-it-qat`
+  - `GET /v1/job-actions?limit=3` returned current target-family action cards
+  - `GET /v1/job-gaps` served the warmed cache in single-digit milliseconds during direct checks
+- Representative evaluation flow:
+  - Re-evaluated `job_e0c8551da6763d04` (`Senior Solution Engineer`, EPAM Systems) with live `openai:gpt-4.1-mini`
+  - the score dropped from the stale high-fit score of 83 to 46 because the cloud evaluator identified critical AWS/GCP, cloud networking, and cloud security gaps
+  - this is useful quality evidence: the live evaluator can demote broad Solutions Engineer roles that are less aligned with Jay's AI/API/customer-facing target lane
+- Representative application-prep flow:
+  - Generated a ready application packet for `job_9f94b15ae07b7347` (`Senior Solutions Consultant`, Apollo.io)
+  - `POST /v1/tailored-summaries`, `POST /v1/resume-bullets`, and `POST /v1/cover-letter-drafts` all returned HTTP 200 through OpenAI `gpt-4.1-mini`
+  - final outputs were clean prose, not JSON wrappers, with word counts 66, 95, and 340 respectively
+  - the job packet became ready for approval with tailored summary, resume bullets, and cover letter draft marked complete
+- During validation, prose artifact generation exposed that the shared OpenAI helper was forcing JSON mode for application-prep drafts. Fixed by allowing artifact generators to request `response_format=text` while preserving JSON mode for job evaluation.
+- Local focused regression tests passed after the fix:
+  - `34 passed` across job evaluator, tailored summary, resume bullets, cover letter draft, and cross-phase flow tests
+
+### Phase 6 - Daily Operating Loop And Calibration
+
+Goal: use the live dashboard as Jay's daily job-search cockpit while tightening recommendation quality from observed workflow outcomes.
+
+Status: ready to start.
+
+Implementation notes:
+
+- Do not rerun broad model shopping first.
+- Use the Top 3 moves panel as the daily queue.
+- When a top action is demoted by re-evaluation, preserve history and let the queue advance to the next useful role.
+- Continue archiving/deprioritizing stale or off-target jobs rather than deleting them.
+- Watch for repeated false positives in broad cloud/security-heavy Solutions Engineer roles and tune ranking/evaluation prompts only from concrete examples.
+
+Acceptance criteria:
+
+- Daily Top 3 actions remain current/recent and target-family dominated.
+- Application packets can be generated cleanly for selected roles.
+- Re-evaluation outcomes improve action quality by demoting stale or weak-fit recommendations.
+- Dashboard smoke and ops observability remain green during normal operation.
 
 ## Verification Commands
 
@@ -510,3 +562,4 @@ When credentials are present, query provider model availability through the conf
 - 2026-05-19: Phase 2 implemented a guarded cloud-first evaluator path. Discovered callable OpenAI/Anthropic models from live ai-lab credentials, added GPT-5-family Responses support, added cloud/local bakeoff scripts, added budget guardrails, set live evaluator to `openai:gpt-4.1-mini`, retained `gemma3:12b-it-qat` as local fallback, validated stack/dashboard smoke, and advanced current phase to Phase 3 - Job Relevance And Ranking. Ops observability still needs follow-up for `job_alert_workflow` and `rag_probe` timeouts.
 - 2026-05-19: Phase 3 implemented target-title relevance ranking, active-only high-fit stats, and archive-preserving cleanup. Applied cleanup archived 745 off-target/noise roles as dismissed, leaving history inspectable. Top evaluated recommendations are now dominated by target title families. Current phase advanced to Phase 4 - Dashboard And API Polish.
 - 2026-05-19: Phase 4 completed. Added `GET /v1/job-actions`, the dashboard Top 3 moves panel, bounded warmed `/v1/job-gaps` cache behavior, and green live validation for dashboard smoke with gaps plus ops observability. Current phase advanced to Phase 5 - End-To-End ai-lab Validation.
+- 2026-05-19: Phase 5 completed. Validated ai-lab end-to-end from the Phase 4 green baseline, including Docker invariants, dashboard smoke with gaps, ops observability, direct job API checks, a representative re-evaluation that demoted a weak-fit broad cloud role, and a clean Apollo.io application-prep packet. Fixed OpenAI prose artifact generation so application-prep drafts request text output while job evaluation keeps JSON mode. Current phase advanced to Phase 6 - Daily Operating Loop And Calibration.

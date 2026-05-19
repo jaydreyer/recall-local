@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from scripts.phase6.draft_cleaning import unwrap_generated_text
 from scripts.phase6.job_evaluator import (  # noqa: PLC2701
     _call_cloud,
     _call_ollama,
@@ -47,6 +48,7 @@ def _outreach_prompt(*, job: dict[str, Any], resume_text: str) -> str:
         "- Sound warm, direct, and professional.\n"
         "- Mention why this role is a fit using only resume-grounded evidence.\n"
         "- Do not invent metrics, employers, or relationships.\n"
+        "- Do not return JSON, object syntax, code fences, or metadata.\n"
         "- Avoid sounding generic or overly salesy.\n\n"
         f"Job title: {job.get('title')}\n"
         f"Company: {job.get('company')}\n"
@@ -62,7 +64,7 @@ def _outreach_prompt(*, job: dict[str, Any], resume_text: str) -> str:
 
 
 def _clean_note(text: str) -> str:
-    cleaned = str(text).strip()
+    cleaned = unwrap_generated_text(text).strip()
     cleaned = re.sub(r"\r\n?", "\n", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
@@ -123,13 +125,15 @@ def generate_outreach_note(
     mode = str(runtime_settings.get("evaluation_model") or "local").strip().lower()
 
     if mode == "cloud":
-        note = _call_cloud(prompt=prompt, settings=runtime_settings)
+        note = _call_cloud(prompt=prompt, settings={**runtime_settings, "response_format": "text"})
         provider = str(runtime_settings.get("cloud_provider") or "anthropic").strip().lower()
         model = str(runtime_settings.get("cloud_model") or "").strip()
     else:
         note = _call_ollama(prompt=prompt, settings=runtime_settings)
         provider = "ollama"
-        model = str(runtime_settings.get("local_model") or os.getenv("RECALL_PHASE6_EVAL_LOCAL_MODEL") or "llama3.2:3b").strip()
+        model = str(
+            runtime_settings.get("local_model") or os.getenv("RECALL_PHASE6_EVAL_LOCAL_MODEL") or "llama3.2:3b"
+        ).strip()
 
     cleaned_note = _clean_note(note)
     vault_path = _save_to_vault(job=job, note_text=cleaned_note) if save_to_vault else None

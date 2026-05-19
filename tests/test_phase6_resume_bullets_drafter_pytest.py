@@ -15,6 +15,18 @@ from scripts.phase6 import resume_bullets_drafter
     [
         ("Line one\n\n\nLine two\n", "- Line one\n- Line two"),
         ("  * One  \n2. Two", "- One\n- Two"),
+        (
+            '{"bullets":["Led customer AI adoption.","Built API governance systems."]}',
+            "- Led customer AI adoption.\n- Built API governance systems.",
+        ),
+        (
+            '{"content_type":"text","text":"- Led AI adoption.\\n- Built API systems."}',
+            "- Led AI adoption.\n- Built API systems.",
+        ),
+        (
+            '{\n  "- Led AI adoption.\\n- Built API systems."\n}',
+            "- Led AI adoption.\n- Built API systems.",
+        ),
     ],
 )
 def test_clean_bullets_normalizes_bullets(raw_text: str, expected: str) -> None:
@@ -45,7 +57,8 @@ def test_generate_resume_bullets_local_mode_returns_cleaned_text(monkeypatch: py
     monkeypatch.setattr(
         resume_bullets_drafter,
         "_call_ollama",
-        lambda prompt, settings: "* Built AI workflow systems.\n* Led API rollouts.\n* Partnered with customers closely.\n* Translated technical complexity into adoption plans.",
+        lambda prompt,
+        settings: "* Built AI workflow systems.\n* Led API rollouts.\n* Partnered with customers closely.\n* Translated technical complexity into adoption plans.",
     )
 
     result = resume_bullets_drafter.generate_resume_bullets(job_id="job-1")
@@ -84,7 +97,8 @@ def test_generate_resume_bullets_can_write_to_vault(
     monkeypatch.setattr(
         resume_bullets_drafter,
         "_call_cloud",
-        lambda prompt, settings: "- Operated complex AI systems.\n- Worked directly with customers.\n- Delivered production outcomes.\n- Built pragmatic rollout systems.",
+        lambda prompt,
+        settings: "- Operated complex AI systems.\n- Worked directly with customers.\n- Delivered production outcomes.\n- Built pragmatic rollout systems.",
     )
 
     result = resume_bullets_drafter.generate_resume_bullets(job_id="job-99", save_to_vault=True)

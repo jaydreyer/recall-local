@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from scripts.phase6.draft_cleaning import unwrap_generated_text
 from scripts.phase6.job_evaluator import (  # noqa: PLC2701
     _call_cloud,
     _call_ollama,
@@ -48,6 +49,7 @@ def _talking_points_prompt(*, job: dict[str, Any], resume_text: str) -> str:
         "- Focus on memorable points the candidate should emphasize in conversation for this role.\n"
         "- Use only resume-grounded evidence.\n"
         "- Do not invent metrics, employers, dates, or tools.\n"
+        "- Do not return JSON, object syntax, code fences, or metadata.\n"
         "- Blend role fit, customer impact, technical delivery, and collaboration where supported.\n\n"
         f"Job title: {job.get('title')}\n"
         f"Company: {job.get('company')}\n"
@@ -63,7 +65,7 @@ def _talking_points_prompt(*, job: dict[str, Any], resume_text: str) -> str:
 
 
 def _clean_talking_points(text: str) -> str:
-    lines = [line.strip() for line in str(text).strip().splitlines() if line.strip()]
+    lines = [line.strip() for line in unwrap_generated_text(text).splitlines() if line.strip()]
     bullets: list[str] = []
     for line in lines:
         normalized = re.sub(r"^[-*•\d.\)\s]+", "", line).strip()
@@ -127,13 +129,15 @@ def generate_talking_points(
     mode = str(runtime_settings.get("evaluation_model") or "local").strip().lower()
 
     if mode == "cloud":
-        points = _call_cloud(prompt=prompt, settings=runtime_settings)
+        points = _call_cloud(prompt=prompt, settings={**runtime_settings, "response_format": "text"})
         provider = str(runtime_settings.get("cloud_provider") or "anthropic").strip().lower()
         model = str(runtime_settings.get("cloud_model") or "").strip()
     else:
         points = _call_ollama(prompt=prompt, settings=runtime_settings)
         provider = "ollama"
-        model = str(runtime_settings.get("local_model") or os.getenv("RECALL_PHASE6_EVAL_LOCAL_MODEL") or "llama3.2:3b").strip()
+        model = str(
+            runtime_settings.get("local_model") or os.getenv("RECALL_PHASE6_EVAL_LOCAL_MODEL") or "llama3.2:3b"
+        ).strip()
 
     cleaned_points = _clean_talking_points(points)
     vault_path = _save_to_vault(job=job, points_text=cleaned_points) if save_to_vault else None

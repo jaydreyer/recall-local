@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from scripts.phase6.draft_cleaning import unwrap_generated_text
 from scripts.phase6.job_evaluator import (  # noqa: PLC2701
     _call_cloud,
     _call_ollama,
@@ -55,6 +56,7 @@ def _interview_brief_prompt(*, job: dict[str, Any], resume_text: str) -> str:
         "- Each bullet should be one sentence.\n"
         "- Use only evidence grounded in the resume and evaluated job context.\n"
         "- Do not invent metrics, employers, dates, tools, or interview process details.\n"
+        "- Do not return JSON, object syntax, code fences, or metadata.\n"
         "- Make the brief useful for live interview preparation, not generic job-search advice.\n\n"
         f"Job title: {job.get('title')}\n"
         f"Company: {job.get('company')}\n"
@@ -74,7 +76,7 @@ def _interview_brief_prompt(*, job: dict[str, Any], resume_text: str) -> str:
 def _clean_interview_brief(text: str) -> str:
     cleaned_lines: list[str] = []
     current_heading: str | None = None
-    for raw_line in str(text).strip().splitlines():
+    for raw_line in unwrap_generated_text(text).splitlines():
         line = raw_line.strip()
         if not line:
             if cleaned_lines and cleaned_lines[-1] != "":
@@ -150,13 +152,15 @@ def generate_interview_brief(
     mode = str(runtime_settings.get("evaluation_model") or "local").strip().lower()
 
     if mode == "cloud":
-        brief = _call_cloud(prompt=prompt, settings=runtime_settings)
+        brief = _call_cloud(prompt=prompt, settings={**runtime_settings, "response_format": "text"})
         provider = str(runtime_settings.get("cloud_provider") or "anthropic").strip().lower()
         model = str(runtime_settings.get("cloud_model") or "").strip()
     else:
         brief = _call_ollama(prompt=prompt, settings=runtime_settings)
         provider = "ollama"
-        model = str(runtime_settings.get("local_model") or os.getenv("RECALL_PHASE6_EVAL_LOCAL_MODEL") or "llama3.2:3b").strip()
+        model = str(
+            runtime_settings.get("local_model") or os.getenv("RECALL_PHASE6_EVAL_LOCAL_MODEL") or "llama3.2:3b"
+        ).strip()
 
     cleaned_brief = _clean_interview_brief(brief)
     vault_path = _save_to_vault(job=job, brief_text=cleaned_brief) if save_to_vault else None

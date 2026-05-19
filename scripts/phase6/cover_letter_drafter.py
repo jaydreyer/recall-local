@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from scripts.phase6.draft_cleaning import unwrap_generated_text
 from scripts.phase6.job_evaluator import (  # noqa: PLC2701
     _call_cloud,
     _call_ollama,
@@ -47,6 +48,7 @@ def _draft_prompt(*, job: dict[str, Any], resume_text: str) -> str:
         "- Reference only experience supported by the resume context.\n"
         "- Make the strongest case for this specific role.\n"
         "- Do not invent metrics, dates, or employers.\n"
+        "- Do not return JSON, object syntax, code fences, or metadata.\n"
         "- End with a short, direct closing.\n\n"
         f"Job title: {job.get('title')}\n"
         f"Company: {job.get('company')}\n"
@@ -62,7 +64,7 @@ def _draft_prompt(*, job: dict[str, Any], resume_text: str) -> str:
 
 
 def _clean_draft(text: str) -> str:
-    lines = [line.rstrip() for line in str(text).strip().splitlines()]
+    lines = [line.rstrip() for line in unwrap_generated_text(text).splitlines()]
     cleaned = "\n".join(lines).strip()
     return re.sub(r"\n{3,}", "\n\n", cleaned)
 
@@ -123,7 +125,7 @@ def generate_cover_letter_draft(
     mode = str(runtime_settings.get("evaluation_model") or "local").strip().lower()
 
     if mode == "cloud":
-        draft = _call_cloud(prompt=prompt, settings=runtime_settings)
+        draft = _call_cloud(prompt=prompt, settings={**runtime_settings, "response_format": "text"})
         provider = str(runtime_settings.get("cloud_provider") or "anthropic").strip().lower()
         model = str(runtime_settings.get("cloud_model") or "").strip()
     else:

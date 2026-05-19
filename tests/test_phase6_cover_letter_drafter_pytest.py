@@ -15,6 +15,14 @@ from scripts.phase6 import cover_letter_drafter
     [
         ("Line one\n\n\nLine two\n", "Line one\n\nLine two"),
         ("  Dear team  \nRegards  ", "Dear team\nRegards"),
+        (
+            '{"content_type":"text","text":"Dear team,\\n\\nI am excited to apply.\\n\\nRegards,"}',
+            "Dear team,\n\nI am excited to apply.\n\nRegards,",
+        ),
+        (
+            '```json\n{"text":"Dear team,\\n\\nThanks."}\n```',
+            "Dear team,\n\nThanks.",
+        ),
     ],
 )
 def test_clean_draft_normalizes_spacing(raw_text: str, expected: str) -> None:

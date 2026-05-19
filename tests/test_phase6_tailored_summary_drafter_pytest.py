@@ -15,6 +15,10 @@ from scripts.phase6 import tailored_summary_drafter
     [
         ("Line one\n\n\nLine two\n", "- Line one\n- Line two"),
         ("  * One  \n2. Two", "- One\n- Two"),
+        (
+            '{"summary":["Led customer AI adoption.","Built API governance systems."]}',
+            "- Led customer AI adoption.\n- Built API governance systems.",
+        ),
     ],
 )
 def test_clean_summary_normalizes_bullets(raw_text: str, expected: str) -> None:
@@ -45,7 +49,8 @@ def test_generate_tailored_summary_local_mode_returns_cleaned_text(monkeypatch: 
     monkeypatch.setattr(
         tailored_summary_drafter,
         "_call_ollama",
-        lambda prompt, settings: "* Built AI workflow systems.\n* Led API rollouts.\n* Partnered with customers closely.",
+        lambda prompt,
+        settings: "* Built AI workflow systems.\n* Led API rollouts.\n* Partnered with customers closely.",
     )
 
     result = tailored_summary_drafter.generate_tailored_summary(job_id="job-1")
@@ -83,7 +88,8 @@ def test_generate_tailored_summary_can_write_to_vault(
     monkeypatch.setattr(
         tailored_summary_drafter,
         "_call_cloud",
-        lambda prompt, settings: "- Operated complex AI systems.\n- Worked directly with customers.\n- Delivered production outcomes.",
+        lambda prompt,
+        settings: "- Operated complex AI systems.\n- Worked directly with customers.\n- Delivered production outcomes.",
     )
 
     result = tailored_summary_drafter.generate_tailored_summary(job_id="job-99", save_to_vault=True)

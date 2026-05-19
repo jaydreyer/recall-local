@@ -8,6 +8,14 @@ import pytest
 from scripts.phase6 import job_evaluator
 
 
+class _FakeResponse:
+    def __init__(self, payload: dict) -> None:
+        self._payload = payload
+
+    def json(self) -> dict:
+        return self._payload
+
+
 def test_normalize_matching_skills_deduplicates_equivalent_entries() -> None:
     normalized = job_evaluator._normalize_matching_skills(
         [
@@ -21,6 +29,46 @@ def test_normalize_matching_skills_deduplicates_equivalent_entries() -> None:
         {"skill": "API design", "evidence": ""},
         {"skill": "Customer partnership", "evidence": "Worked directly with enterprise stakeholders."},
     ]
+
+
+def test_call_cloud_openai_uses_json_mode_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    def fake_post(*, api_key: str, payload: dict, timeout_seconds: float) -> _FakeResponse:
+        captured["api_key"] = api_key
+        captured["payload"] = payload
+        return _FakeResponse({"choices": [{"message": {"content": '{"ok": true}'}}]})
+
+    monkeypatch.setattr(job_evaluator, "_post_openai_chat_json", fake_post)
+
+    result = job_evaluator._call_cloud(
+        prompt="Return JSON.",
+        settings={"cloud_provider": "openai", "cloud_model": "gpt-4.1-mini"},
+    )
+
+    assert result == '{"ok": true}'
+    assert captured["api_key"] == "test-key"
+    assert captured["payload"]["response_format"] == {"type": "json_object"}
+
+
+def test_call_cloud_openai_can_request_plain_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    def fake_post(*, api_key: str, payload: dict, timeout_seconds: float) -> _FakeResponse:
+        captured["payload"] = payload
+        return _FakeResponse({"choices": [{"message": {"content": "Plain artifact text."}}]})
+
+    monkeypatch.setattr(job_evaluator, "_post_openai_chat_json", fake_post)
+
+    result = job_evaluator._call_cloud(
+        prompt="Write prose.",
+        settings={"cloud_provider": "openai", "cloud_model": "gpt-4.1-mini", "response_format": "text"},
+    )
+
+    assert result == "Plain artifact text."
+    assert "response_format" not in captured["payload"]
 
 
 def test_normalize_gaps_coerces_invalid_recommendation_types_and_deduplicates() -> None:

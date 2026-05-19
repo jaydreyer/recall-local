@@ -816,6 +816,9 @@ def _call_cloud(*, prompt: str, settings: dict[str, Any]) -> str:
 
     if provider == "openai":
         api_key = _require_env("OPENAI_API_KEY")
+        text_mode = (
+            str(settings.get("response_format") or settings.get("output_format") or "").strip().lower() == "text"
+        )
         if model.startswith("gpt-5"):
             response = _post_openai_responses_json(
                 api_key=api_key,
@@ -823,6 +826,7 @@ def _call_cloud(*, prompt: str, settings: dict[str, Any]) -> str:
                 prompt=prompt,
                 max_tokens=max_tokens,
                 timeout_seconds=120.0,
+                json_mode=not text_mode,
             )
             return response
         payload = {
@@ -830,8 +834,9 @@ def _call_cloud(*, prompt: str, settings: dict[str, Any]) -> str:
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.2,
             "max_tokens": max_tokens,
-            "response_format": {"type": "json_object"},
         }
+        if not text_mode:
+            payload["response_format"] = {"type": "json_object"}
         response = _post_openai_chat_json(api_key=api_key, payload=payload, timeout_seconds=120.0)
         choices = response.json().get("choices") or []
         if not choices:
@@ -872,14 +877,16 @@ def _post_openai_responses_json(
     prompt: str,
     max_tokens: int,
     timeout_seconds: float,
+    json_mode: bool = True,
 ) -> str:
     payload: dict[str, Any] = {
         "model": model,
         "input": prompt,
-        "text": {"format": {"type": "json_object"}},
         "reasoning": {"effort": "low"},
         "max_output_tokens": max(max_tokens, 4096),
     }
+    if json_mode:
+        payload["text"] = {"format": {"type": "json_object"}}
     response = _post_json_with_retries(
         url="https://api.openai.com/v1/responses",
         headers={
