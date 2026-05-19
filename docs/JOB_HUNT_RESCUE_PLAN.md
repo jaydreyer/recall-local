@@ -1,6 +1,6 @@
 # Job Hunt Rescue Plan
 
-Current phase: Phase 4 - Dashboard And API Polish
+Current phase: Phase 5 - End-To-End ai-lab Validation
 
 Last updated: 2026-05-19
 
@@ -336,7 +336,7 @@ Validation:
 
 Goal: make the daily dashboard fast, clear, and action-oriented.
 
-Status: in progress; freshness/validity polish is implemented and live. Gap caching/top-actions remain follow-up work.
+Status: complete; action surface, gap precompute/cache, and ops observability cleanup are implemented and live.
 
 Implementation notes:
 
@@ -393,10 +393,33 @@ Validation:
 - `GET /v1/healthz` returned `{"status":"ok"}`.
 - Dashboard smoke passed with status `ok`.
 - Ops observability artifact `/home/jaydreyer/recall-local/data/artifacts/observability/20260519T195714Z_ops_observability_check.json` returned `error` because `job_alert_workflow` and `rag_probe` timed out; bridge health, dashboard checks, daily dashboard UI, and chat UI were `ok`. This matches the known residual issue from Phase 2/3, not a freshness regression.
+- Added collection-style `GET /v1/job-actions?limit=3` to surface the top daily job moves from existing job, relevance, freshness, and workflow metadata.
+- Added the Daily Dashboard "Top 3 moves" panel above the role filters. Live browser verification showed three current Solutions Engineer-family actions:
+  - Senior Solution Engineer at EPAM Systems
+  - Senior Solutions Consultant at Apollo.io
+  - Solutions Consultant at Avalara
+- Enabled the dashboard cache warmer by default and changed gap warming to precompute a bounded, action-oriented subset of evaluated current/recent target/adjacent jobs instead of blocking on the full historical corpus.
+- `GET /v1/job-gaps` now serves the warmed cache when available and returns a fast warming payload while the first warm is still running. Live observed cached response: `data_source=cache`, 435 aggregated gaps, about 36 ms.
+- Dashboard checks with gaps enabled now pass. Live observed `/v1/dashboard-checks?include_gaps=true`: `status=ok`, gaps `count=435`, gaps latency `0 ms`, warmer completed at `2026-05-19T20:18:51+00:00`.
+- Ops observability is now green. Artifact `/home/jaydreyer/recall-local/data/artifacts/observability/20260519T201908Z_ops_observability_check.json` returned `ok` for bridge health, dashboard checks, `job_alert_workflow`, `rag_probe`, daily dashboard UI, and chat UI.
+
+Validation:
+
+- Local focused tests passed: `72 passed` for `tests/test_phase6_job_repository.py` and `tests/test_bridge_api_contract.py`.
+- Local Daily Dashboard build passed with Vite.
+- Synced changed files from Mac to ai-lab and spot-checked synced contents before live validation.
+- Ran `docker/validate-stack.sh` before and after Compose work; both passed.
+- Inspected and preserved Compose project labels, `recall_backend` attachment, Qdrant volume `docker_qdrant-storage`, and Ollama volume `docker_ollama-models`.
+- Restarted `recall-ingest-bridge` and rebuilt/recreated `daily-dashboard` under Compose project `recall`; no `docker run`, no project-name change, and post-change validation confirmed project/network/volume invariants.
+- `GET /v1/healthz` returned `{"status":"ok"}`.
+- Dashboard smoke with gaps enabled passed with status `ok`.
+- Browser verification against `http://ai-lab:3001` confirmed the Top 3 moves panel renders action cards and no console errors were present.
 
 ### Phase 5 - End-To-End ai-lab Validation
 
 Goal: prove the full system works on the live ai-lab stack.
+
+Status: ready to start from the Phase 4 green baseline.
 
 Implementation notes:
 
@@ -486,3 +509,4 @@ When credentials are present, query provider model availability through the conf
 - 2026-05-19: Phase 2 plan updated to evaluate cloud-first scoring. Do not assume `gpt-5-mini`, `gpt-4.1-mini`, or any Claude model is available to the live account; discover callable models from ai-lab credentials, then bake off cloud candidates against the same golden and real-job calibration sets.
 - 2026-05-19: Phase 2 implemented a guarded cloud-first evaluator path. Discovered callable OpenAI/Anthropic models from live ai-lab credentials, added GPT-5-family Responses support, added cloud/local bakeoff scripts, added budget guardrails, set live evaluator to `openai:gpt-4.1-mini`, retained `gemma3:12b-it-qat` as local fallback, validated stack/dashboard smoke, and advanced current phase to Phase 3 - Job Relevance And Ranking. Ops observability still needs follow-up for `job_alert_workflow` and `rag_probe` timeouts.
 - 2026-05-19: Phase 3 implemented target-title relevance ranking, active-only high-fit stats, and archive-preserving cleanup. Applied cleanup archived 745 off-target/noise roles as dismissed, leaving history inspectable. Top evaluated recommendations are now dominated by target title families. Current phase advanced to Phase 4 - Dashboard And API Polish.
+- 2026-05-19: Phase 4 completed. Added `GET /v1/job-actions`, the dashboard Top 3 moves panel, bounded warmed `/v1/job-gaps` cache behavior, and green live validation for dashboard smoke with gaps plus ops observability. Current phase advanced to Phase 5 - End-To-End ai-lab Validation.

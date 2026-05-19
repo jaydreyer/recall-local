@@ -156,6 +156,15 @@ function buildCompaniesQuery(options = {}) {
   return query ? `/v1/companies?${query}` : '/v1/companies'
 }
 
+function buildJobActionsQuery(options = {}) {
+  const params = new URLSearchParams()
+  if (typeof options.limit === 'number' && Number.isFinite(options.limit) && options.limit > 0) {
+    params.set('limit', String(options.limit))
+  }
+  const query = params.toString()
+  return query ? `/v1/job-actions?${query}` : '/v1/job-actions'
+}
+
 export function getBridgeConfig() {
   return {
     baseUrl: apiBaseUrl || 'same-origin /v1',
@@ -165,6 +174,10 @@ export function getBridgeConfig() {
 
 export function fetchJobStats() {
   return getJson('/v1/job-stats')
+}
+
+export function fetchJobActions(options = {}) {
+  return getJson(buildJobActionsQuery(options))
 }
 
 export function fetchJobs(filters) {

@@ -38,6 +38,10 @@ def phase6_job_stats(*args: Any, **kwargs: Any) -> Any:
     return _bridge_api.phase6_job_stats(*args, **kwargs)
 
 
+def phase6_list_job_actions(*args: Any, **kwargs: Any) -> Any:
+    return _bridge_api.phase6_list_job_actions(*args, **kwargs)
+
+
 def phase6_all_jobs(*args: Any, **kwargs: Any) -> Any:
     return _bridge_api.phase6_all_jobs(*args, **kwargs)
 
@@ -108,6 +112,7 @@ def phase6_generate_interview_brief(*args: Any, **kwargs: Any) -> Any:
 def phase6_generate_talking_points(*args: Any, **kwargs: Any) -> Any:
     return _bridge_api.phase6_generate_talking_points(*args, **kwargs)
 
+
 JOB_PATCH_REQUEST_BODY = _bridge_api.JOB_PATCH_REQUEST_BODY
 JOB_EVALUATION_RUN_REQUEST_BODY = _bridge_api.JOB_EVALUATION_RUN_REQUEST_BODY
 FOLLOW_UP_REMINDER_RUN_REQUEST_BODY = _bridge_api.FOLLOW_UP_REMINDER_RUN_REQUEST_BODY
@@ -141,6 +146,7 @@ __all__ = [
     "FOLLOW_UP_REMINDER_RUN_COMPLETED_EXAMPLE",
     "JOB_STATS_SUCCESS_EXAMPLE",
     "phase6_job_stats",
+    "phase6_list_job_actions",
     "JOB_GAPS_SUCCESS_EXAMPLE",
     "phase6_all_jobs",
     "phase6_aggregate_gaps",

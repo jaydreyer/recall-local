@@ -28,7 +28,12 @@ def _normalize_optional_iso8601(value: Any, *, field_name: str) -> str | None:
     return text
 
 
-def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -> None:
+def register_phase6_routes(
+    app: FastAPI,
+    *,
+    rate_limiter: InMemoryRateLimiter,
+    dashboard_cache_warmer: DashboardCacheWarmer | None = None,
+) -> None:
     @app.get(
         f"{API_PREFIX}/jobs",
         tags=["Jobs"],
@@ -1025,6 +1030,37 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
         return _json_response(200, payload)
 
     @app.get(
+        f"{API_PREFIX}/job-actions",
+        tags=["Jobs"],
+        summary="List daily job actions",
+        description=(
+            "Lists the highest-priority daily job actions from existing job, relevance, freshness, "
+            "and workflow metadata."
+        ),
+        responses={
+            200: {"description": "Job actions loaded."},
+            401: {
+                "model": ErrorResponse,
+                "description": "Missing or invalid API key.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}},
+            },
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+    )
+    async def get_job_actions(
+        request: Request,
+        limit: int = Query(3, ge=1, le=12, description="Maximum number of daily actions to return."),
+    ) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        payload = phase6_list_job_actions(limit=limit)
+        payload["workflow"] = "workflow_06a_job_actions"
+        return _json_response(200, payload)
+
+    @app.get(
         f"{API_PREFIX}/job-gaps",
         tags=["Jobs"],
         summary="Get job gap analysis",
@@ -1042,14 +1078,38 @@ def register_phase6_routes(app: FastAPI, *, rate_limiter: InMemoryRateLimiter) -
             **RATE_LIMIT_ERROR_RESPONSE,
         },
     )
-    async def get_job_gaps(request: Request) -> JSONResponse:
+    async def get_job_gaps(
+        request: Request,
+        refresh: bool = Query(False, description="Bypass the warmed dashboard cache and rebuild the gap payload."),
+    ) -> JSONResponse:
         request_id = _request_id()
         control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
         if control_error is not None:
             return control_error
 
-        jobs = phase6_all_jobs()
-        payload = phase6_aggregate_gaps(jobs)
+        payload = None
+        if not refresh and dashboard_cache_warmer is not None:
+            payload = dashboard_cache_warmer.warmed_gap_payload()
+        if payload is None:
+            if not refresh and dashboard_cache_warmer is not None:
+                payload = {
+                    "total_jobs": 0,
+                    "evaluated_jobs": 0,
+                    "total_jobs_analyzed": 0,
+                    "aggregated_gaps": [],
+                    "generated_at": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+                    "top_gaps": [],
+                    "top_matching_skills": [],
+                    "recommended_focus": [],
+                    "data_source": "warming",
+                    "message": "Gap summary is warming in the background.",
+                }
+            else:
+                jobs = phase6_all_jobs()
+                payload = phase6_aggregate_gaps(jobs)
+                payload["data_source"] = "live"
+        else:
+            payload["data_source"] = "cache"
         payload["workflow"] = "workflow_06a_job_gaps"
         return _json_response(200, payload)
 

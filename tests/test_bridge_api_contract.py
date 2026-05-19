@@ -1173,6 +1173,7 @@ class BridgeApiContractTests(unittest.TestCase):
             "/v1/job-evaluation-runs",
             "/v1/follow-up-reminder-runs",
             "/v1/job-stats",
+            "/v1/job-actions",
             "/v1/job-gaps",
             "/v1/job-deduplications",
             "/v1/job-discovery-runs",
@@ -1352,6 +1353,37 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(response.json()["workflow"], "workflow_06a_jobs")
         self.assertIsNone(mocked.call_args.kwargs["status"])
         self.assertEqual(mocked.call_args.kwargs["min_score"], -1)
+
+    def test_phase6_job_actions_endpoint_returns_collection(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        actions_payload = {
+            "total": 1,
+            "limit": 3,
+            "items": [
+                {
+                    "actionId": "job_action_job-1_draft_cover_letter",
+                    "jobId": "job-1",
+                    "action": "draft_cover_letter",
+                    "actionLabel": "Draft cover letter",
+                    "priorityScore": 156.0,
+                    "title": "Solutions Engineer",
+                    "company": "OpenAI",
+                }
+            ],
+            "generated_at": "2026-05-19T20:00:00Z",
+        }
+        with patch("scripts.phase1.ingest_bridge_api.phase6_list_job_actions", return_value=actions_payload) as mocked:
+            with build_client(env) as client:
+                response = client.get("/v1/job-actions?limit=3")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["workflow"], "workflow_06a_job_actions")
+        self.assertEqual(response.json()["items"][0]["action"], "draft_cover_letter")
+        self.assertEqual(mocked.call_args.kwargs["limit"], 3)
 
     def test_phase6_jobs_endpoint_accepts_freshness_filter(self) -> None:
         env = {

@@ -10,6 +10,7 @@ import {
   createTailoredSummary,
   createTalkingPoints,
   fetchJob,
+  fetchJobActions,
   fetchJobGaps,
   fetchJobStats,
   fetchJobs,
@@ -69,10 +70,11 @@ function patchJobs(list, updated) {
   return list.map((job) => (job.jobId === updated.jobId ? { ...job, ...updated } : job))
 }
 
-function persistJobsSnapshot({ jobs, stats, lastLoadedAt, selectedJobId }) {
+function persistJobsSnapshot({ jobs, stats, dailyActions, lastLoadedAt, selectedJobId }) {
   writeCachedJson(JOBS_CACHE_KEY, {
     jobs,
     stats,
+    dailyActions,
     lastLoadedAt,
     selectedJobId,
   })
@@ -93,6 +95,7 @@ export function useJobs({ loadGaps = false } = {}) {
   const [filters, setFilters] = useState(DEFAULT_FILTERS)
   const [jobs, setJobs] = useState(hasCachedJobs ? cachedJobsState.jobs : [])
   const [stats, setStats] = useState(cachedJobsState.stats || null)
+  const [dailyActions, setDailyActions] = useState(Array.isArray(cachedJobsState.dailyActions) ? cachedJobsState.dailyActions : [])
   const [gaps, setGaps] = useState(cachedGapsState.gaps || null)
   const [selectedJobId, setSelectedJobId] = useState(cachedJobsState.selectedJobId || null)
   const [selectedJob, setSelectedJob] = useState(null)
@@ -199,6 +202,7 @@ export function useJobs({ loadGaps = false } = {}) {
       persistJobsSnapshot({
         jobs: items,
         stats,
+        dailyActions,
         lastLoadedAt: refreshedAt,
         selectedJobId: nextSelectedJobId,
       })
@@ -210,12 +214,28 @@ export function useJobs({ loadGaps = false } = {}) {
           persistJobsSnapshot({
             jobs: items,
             stats: statsPayload,
+            dailyActions,
             lastLoadedAt: refreshedAt,
             selectedJobId: nextSelectedJobId,
           })
         })
         .catch(() => {
           // Keep the board usable even if stats lag or fail.
+        })
+      fetchJobActions({ limit: 3 })
+        .then((actionsPayload) => {
+          const actionItems = Array.isArray(actionsPayload.items) ? actionsPayload.items : []
+          setDailyActions(actionItems)
+          persistJobsSnapshot({
+            jobs: items,
+            stats,
+            dailyActions: actionItems,
+            lastLoadedAt: refreshedAt,
+            selectedJobId: nextSelectedJobId,
+          })
+        })
+        .catch(() => {
+          // The action deck can fall back to the current job list.
         })
     } catch (loadError) {
       const message = loadError.message || 'Unable to load jobs.'
@@ -551,6 +571,7 @@ export function useJobs({ loadGaps = false } = {}) {
     filters,
     jobs,
     stats,
+    dailyActions,
     gaps,
     loading,
     error,

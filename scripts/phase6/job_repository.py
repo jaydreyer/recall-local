@@ -124,6 +124,15 @@ WORKFLOW_PACKET_ARTIFACT_STATUSES = {"draft", "ready"}
 WORKFLOW_PACKET_ARTIFACT_SOURCES = {"manual", "generated", "imported"}
 WORKFLOW_EVENT_CATEGORIES = {"application", "workflow", "approval", "packet", "follow_up", "artifact", "system"}
 WORKFLOW_EVENT_ORIGINS = {"persisted", "derived"}
+JOB_ACTION_TYPES = {
+    "review_role",
+    "evaluate_role",
+    "tailor_resume",
+    "draft_cover_letter",
+    "build_packet",
+    "send_follow_up",
+    "open_posting",
+}
 
 
 def _parse_int(value: Any, default: int = 0) -> int:
@@ -687,6 +696,125 @@ def _actionability_score(item: dict[str, Any]) -> float:
     if str(freshness.get("status") or "") == "current":
         score += 6
     return max(0.0, score)
+
+
+def list_job_actions(*, limit: int = 3) -> dict[str, Any]:
+    """Return the highest-value daily job actions from existing job/workflow data."""
+    rows = _scroll_jobs(with_vectors=False)
+    actions: list[dict[str, Any]] = []
+    for item in rows:
+        action = _daily_action_for_job(item)
+        if action is not None:
+            actions.append(action)
+
+    actions.sort(
+        key=lambda item: (
+            _parse_float(item.get("priorityScore"), 0.0),
+            _parse_float(item.get("fit_score"), 0.0),
+            _parse_datetime(item.get("dueAt")) or datetime.min.replace(tzinfo=timezone.utc),
+        ),
+        reverse=True,
+    )
+    page = actions[: max(0, int(limit))]
+    return {
+        "total": len(actions),
+        "limit": max(0, int(limit)),
+        "items": page,
+        "generated_at": _utc_now().replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+    }
+
+
+def _daily_action_for_job(item: dict[str, Any]) -> dict[str, Any] | None:
+    if not _is_active_job(item):
+        return None
+
+    status = str(item.get("status") or "").strip().lower()
+    fit_score = _parse_int(item.get("fit_score"), default=-1)
+    freshness = item.get("freshness") if isinstance(item.get("freshness"), dict) else assess_job_freshness(item)
+    freshness_status = str((freshness or {}).get("status") or "unknown").lower()
+    if freshness_status == "stale":
+        return None
+
+    relevance = item.get("relevance") if isinstance(item.get("relevance"), dict) else assess_job_relevance(item)
+    if str(relevance.get("category") or "").lower() not in {"target", "adjacent"} and fit_score < HIGH_FIT_THRESHOLD:
+        return None
+
+    workflow = _normalize_workflow(item.get("workflow"))
+    packet_readiness = workflow.get("packetReadiness") or _workflow_packet_readiness(workflow)
+    follow_up = workflow.get("followUp") if isinstance(workflow.get("followUp"), dict) else {}
+    due_at = str(follow_up.get("dueAt") or "").strip() or None
+    follow_up_status = str(follow_up.get("status") or "").strip().lower()
+    now = _utc_now()
+    due_date = _parse_datetime(due_at)
+    due_or_ready = due_date is not None and _ensure_utc(due_date) <= now + timedelta(days=1)
+
+    if follow_up_status == "scheduled" and due_or_ready:
+        action_type = "send_follow_up"
+        action_label = "Send follow-up"
+        rationale = "Follow-up is due or nearly due for an already-moved role."
+        base_boost = 45
+    elif status == "new" or fit_score < 0:
+        action_type = "evaluate_role"
+        action_label = "Evaluate fit"
+        rationale = "Fresh role has not been scored yet."
+        base_boost = 22
+    elif fit_score >= HIGH_FIT_THRESHOLD and "coverLetterDraft" in (packet_readiness.get("missingItems") or []):
+        action_type = "draft_cover_letter"
+        action_label = "Draft cover letter"
+        rationale = "High-fit role is missing the cover letter artifact."
+        base_boost = 36
+    elif fit_score >= HIGH_FIT_THRESHOLD and packet_readiness.get("readyForApproval") is not True:
+        action_type = "build_packet"
+        action_label = "Build packet"
+        rationale = "High-fit role still needs packet artifacts before application."
+        base_boost = 30
+    elif fit_score >= MEDIUM_FIT_THRESHOLD:
+        action_type = "review_role"
+        action_label = "Review role"
+        rationale = "Target-family role is fresh enough to inspect today."
+        base_boost = 18
+    else:
+        action_type = "open_posting"
+        action_label = "Open posting"
+        rationale = "Role is worth a quick manual inspection before archiving or monitoring."
+        base_boost = 8
+
+    if action_type not in JOB_ACTION_TYPES:
+        return None
+
+    priority_score = _actionability_score({**item, "relevance": relevance, "freshness": freshness}) + base_boost
+    if freshness_status == "current":
+        priority_score += 8
+    elif freshness_status == "recent":
+        priority_score += 3
+    if _parse_int(item.get("company_tier"), default=0) == 1:
+        priority_score += 4
+
+    action_id = f"job_action_{item.get('jobId')}_{action_type}"
+    return {
+        "actionId": action_id,
+        "jobId": item.get("jobId"),
+        "action": action_type,
+        "actionLabel": action_label,
+        "priorityScore": round(priority_score, 1),
+        "rationale": rationale,
+        "dueAt": due_at,
+        "title": item.get("title"),
+        "company": item.get("company"),
+        "company_id": item.get("company_id"),
+        "company_tier": item.get("company_tier"),
+        "location": item.get("location"),
+        "url": item.get("url"),
+        "status": item.get("status"),
+        "fit_score": fit_score,
+        "freshness": freshness,
+        "relevance": relevance,
+        "workflow": {
+            "stage": workflow.get("stage"),
+            "packetReadiness": packet_readiness,
+            "followUp": follow_up,
+        },
+    }
 
 
 def apply_relevance_cleanup(*, dry_run: bool = True, limit: int | None = None) -> dict[str, Any]:

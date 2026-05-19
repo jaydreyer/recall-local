@@ -66,6 +66,7 @@ from scripts.phase6.job_metadata_extractor import looks_like_job_url as phase6_l
 from scripts.phase6.job_repository import all_jobs as phase6_all_jobs  # noqa: E402
 from scripts.phase6.job_repository import get_job as phase6_get_job  # noqa: F401,E402
 from scripts.phase6.job_repository import job_stats as phase6_job_stats  # noqa: E402
+from scripts.phase6.job_repository import list_job_actions as phase6_list_job_actions  # noqa: F401,E402
 from scripts.phase6.job_repository import list_jobs as phase6_list_jobs  # noqa: E402
 from scripts.phase6.job_repository import update_company_tier as phase6_update_company_tier  # noqa: F401,E402
 from scripts.phase6.job_repository import update_job as phase6_update_job  # noqa: F401,E402
@@ -98,6 +99,7 @@ PHASE6_JOB_STATUSES = {"new", "evaluated", "applied", "dismissed", "expired", "e
 PHASE6_JOB_SOURCES = {"jobspy", "adzuna", "serpapi", "career_page", "chrome_extension"}
 DEFAULT_OLLAMA_PULL_TIMEOUT_SECONDS = 900.0
 DEFAULT_DASHBOARD_WARM_INTERVAL_SECONDS = 300
+DEFAULT_DASHBOARD_GAP_WARM_JOB_LIMIT = 240
 
 
 class InMemoryRateLimiter:
@@ -137,6 +139,7 @@ class DashboardCacheWarmer:
         self.last_completed_at: str | None = None
         self.last_error: str | None = None
         self.last_gap_section: dict[str, Any] | None = None
+        self.last_gap_payload: dict[str, Any] | None = None
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -165,6 +168,12 @@ class DashboardCacheWarmer:
                 return None
             return dict(self.last_gap_section)
 
+    def warmed_gap_payload(self) -> dict[str, Any] | None:
+        with self._lock:
+            if self.last_gap_payload is None:
+                return None
+            return dict(self.last_gap_payload)
+
     def warm_once(self) -> None:
         started_at = now_iso()
         with self._lock:
@@ -175,7 +184,17 @@ class DashboardCacheWarmer:
             phase6_job_stats()
             phase6_list_jobs(status="all", limit=60, include_details=False)
             phase6_list_company_profiles(jobs, include_jobs=False, limit=300)
-            gaps_payload = phase6_aggregate_gaps(jobs)
+            gap_jobs = _dashboard_gap_jobs_subset(jobs)
+            gaps_payload = phase6_aggregate_gaps(gap_jobs)
+            gaps_payload["scope"] = {
+                "mode": "dashboard_actionable_subset",
+                "source_jobs": len(jobs),
+                "included_jobs": len(gap_jobs),
+                "limit": _read_positive_int_env(
+                    "RECALL_DASHBOARD_GAP_WARM_JOB_LIMIT",
+                    DEFAULT_DASHBOARD_GAP_WARM_JOB_LIMIT,
+                ),
+            }
         except Exception as exc:  # noqa: BLE001
             with self._lock:
                 self.last_error = str(exc)
@@ -183,6 +202,7 @@ class DashboardCacheWarmer:
         with self._lock:
             self.last_completed_at = now_iso()
             self.last_gap_section = _gap_section_from_payload(gaps_payload)
+            self.last_gap_payload = dict(gaps_payload)
 
     def _run(self) -> None:
         self.warm_once()
@@ -1992,7 +2012,7 @@ def create_app() -> FastAPI:
                 DEFAULT_DASHBOARD_WARM_INTERVAL_SECONDS,
             )
         )
-        if _env_flag("RECALL_DASHBOARD_CACHE_WARMER", default=False)
+        if _env_flag("RECALL_DASHBOARD_CACHE_WARMER", default=True)
         else None
     )
     observability = init_observability()
@@ -2116,7 +2136,7 @@ def create_app() -> FastAPI:
     from scripts.phase1.bridge_routes_phase6 import register_phase6_routes  # noqa: E402
 
     register_core_routes(app, rate_limiter=rate_limiter, dashboard_cache_warmer=dashboard_cache_warmer)
-    register_phase6_routes(app, rate_limiter=rate_limiter)
+    register_phase6_routes(app, rate_limiter=rate_limiter, dashboard_cache_warmer=dashboard_cache_warmer)
 
     @app.get("/{_path:path}", include_in_schema=False)
     async def not_found_get(_path: str) -> JSONResponse:
@@ -2410,9 +2430,38 @@ def _dashboard_companies_section() -> dict[str, Any]:
 
 
 def _dashboard_gaps_section() -> dict[str, Any]:
-    jobs = phase6_all_jobs()
+    jobs = _dashboard_gap_jobs_subset(phase6_all_jobs())
     payload = phase6_aggregate_gaps(jobs)
     return _gap_section_from_payload(payload)
+
+
+def _dashboard_gap_jobs_subset(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    limit = _read_positive_int_env("RECALL_DASHBOARD_GAP_WARM_JOB_LIMIT", DEFAULT_DASHBOARD_GAP_WARM_JOB_LIMIT)
+    candidates: list[dict[str, Any]] = []
+    fallback: list[dict[str, Any]] = []
+    for job in jobs:
+        if str(job.get("status") or "").strip().lower() != "evaluated":
+            continue
+        if int(job.get("fit_score") or -1) <= 0:
+            continue
+        relevance = job.get("relevance") if isinstance(job.get("relevance"), dict) else {}
+        freshness = job.get("freshness") if isinstance(job.get("freshness"), dict) else {}
+        freshness_status = str(freshness.get("status") or "").strip().lower()
+        category = str(relevance.get("category") or "").strip().lower()
+        row = {
+            **job,
+            "_dashboard_gap_rank": (
+                int(job.get("fit_score") or 0),
+                int(relevance.get("rankingScore") or 0),
+            ),
+        }
+        fallback.append(row)
+        if freshness_status in {"current", "recent"} and category in {"target", "adjacent"}:
+            candidates.append(row)
+
+    selected = candidates or fallback
+    selected.sort(key=lambda item: item.get("_dashboard_gap_rank", (0, 0)), reverse=True)
+    return [{key: value for key, value in item.items() if key != "_dashboard_gap_rank"} for item in selected[:limit]]
 
 
 def _gap_section_from_payload(payload: dict[str, Any]) -> dict[str, Any]:

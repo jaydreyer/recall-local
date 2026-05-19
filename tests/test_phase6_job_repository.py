@@ -308,6 +308,64 @@ class JobRepositoryTests(unittest.TestCase):
         self.assertEqual(stats["freshness"]["active"]["stale"], 1)
         self.assertEqual(stats["freshness"]["all"]["stale"], 2)
 
+    def test_list_job_actions_prioritizes_current_high_fit_packet_work(self) -> None:
+        jobs = [
+            {
+                "jobId": "job-stale",
+                "title": "Solutions Engineer",
+                "company": "LegacyCo",
+                "company_tier": 1,
+                "location": "Remote",
+                "status": "evaluated",
+                "fit_score": 99,
+                "date_posted": "2026-01-01T10:00:00+00:00",
+                "discovered_at": "2026-01-01T10:00:00+00:00",
+                "workflow": {},
+                "matching_skills": [],
+                "gaps": [],
+            },
+            {
+                "jobId": "job-current",
+                "title": "Senior Solutions Engineer",
+                "company": "OpenAI",
+                "company_tier": 1,
+                "location": "Remote",
+                "status": "evaluated",
+                "fit_score": 88,
+                "date_posted": "2026-05-18T10:00:00+00:00",
+                "discovered_at": "2026-05-18T10:00:00+00:00",
+                "workflow": {
+                    "packet": {
+                        "tailoredSummary": True,
+                        "resumeBullets": True,
+                        "coverLetterDraft": False,
+                    },
+                    "artifacts": {
+                        "tailoredSummary": {"status": "ready", "updatedAt": "2026-05-18T10:00:00Z"},
+                        "resumeBullets": {"status": "ready", "updatedAt": "2026-05-18T10:00:00Z"},
+                    },
+                },
+                "matching_skills": [],
+                "gaps": [],
+            },
+        ]
+        normalized_jobs = [
+            {
+                **job,
+                "relevance": job_repository.assess_job_relevance(job),
+                "freshness": job_repository.assess_job_freshness(job),
+            }
+            for job in jobs
+        ]
+
+        with patch("scripts.phase6.job_repository._scroll_jobs", return_value=normalized_jobs):
+            payload = job_repository.list_job_actions(limit=3)
+
+        self.assertEqual(payload["total"], 1)
+        self.assertEqual(payload["items"][0]["jobId"], "job-current")
+        self.assertEqual(payload["items"][0]["action"], "draft_cover_letter")
+        self.assertEqual(payload["items"][0]["freshness"]["status"], "current")
+
     def test_apply_relevance_cleanup_archives_obvious_noise_without_deleting(self) -> None:
         current = {
             "jobId": "job-intern",

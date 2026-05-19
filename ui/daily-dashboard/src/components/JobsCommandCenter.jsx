@@ -151,6 +151,33 @@ function queueHeadline(job) {
   return summarizeAngle(job)
 }
 
+function actionLabelForJob(job) {
+  if (job?.freshness?.status === 'current' && (job?.fit_score ?? -1) >= 75) {
+    return 'Draft cover letter'
+  }
+  if ((job?.fit_score ?? -1) < 0 || effectiveStatus(job) === 'new') {
+    return 'Evaluate fit'
+  }
+  return 'Review role'
+}
+
+function fallbackDailyActions(jobs) {
+  return jobs
+    .filter((job) => laneForJob(job) === 'focus' || laneForJob(job) === 'fresh')
+    .slice(0, 3)
+    .map((job) => ({
+      actionId: `fallback-${job.jobId}`,
+      jobId: job.jobId,
+      actionLabel: actionLabelForJob(job),
+      title: job.title,
+      company: job.company,
+      fit_score: job.fit_score,
+      freshness: job.freshness,
+      relevance: job.relevance,
+      rationale: queueHeadline(job),
+    }))
+}
+
 function aggregateCompanies(jobs) {
   const grouped = new Map()
   jobs.forEach((job) => {
@@ -265,6 +292,34 @@ function QueueCard({ job, selected, onSelect }) {
   )
 }
 
+function DailyActionCard({ action, index, onOpen, onOps }) {
+  return (
+    <article className="daily-action-card">
+      <div className="daily-action-index">{index + 1}</div>
+      <div className="daily-action-body">
+        <div className="daily-action-topline">
+          <span className="mini-label">{action.actionLabel || 'Review role'}</span>
+          <span className={freshnessClass(action)}>{freshnessLabel(action)}</span>
+        </div>
+        <h3 className="daily-action-title">{action.title || 'Untitled role'}</h3>
+        <p className="daily-action-meta">
+          {displayCompanyName(action.company)} · Fit {action.fit_score ?? 'new'}
+          {action.relevance?.targetLabel ? ` · ${action.relevance.targetLabel}` : ''}
+        </p>
+        <p className="daily-action-rationale">{action.rationale || 'Actionable role for today.'}</p>
+        <div className="daily-action-controls">
+          <button type="button" className="ghost-button compact" onClick={() => onOpen(action.jobId)}>
+            Dossier
+          </button>
+          <button type="button" className="text-button accent" onClick={() => onOps(action.jobId)}>
+            Ops
+          </button>
+        </div>
+      </div>
+    </article>
+  )
+}
+
 function DetailDrawer({ open, job, jobsState, loading, onClose, onOpenOps }) {
   if (!open) {
     return null
@@ -344,6 +399,10 @@ export default function JobsCommandCenter({ jobsState, settings, onOpenSettings,
   )
 
   const visibleJobs = useMemo(() => laneJobs(jobs, activeLane).slice(0, 24), [activeLane, jobs])
+  const dailyActions = useMemo(() => {
+    const apiActions = Array.isArray(jobsState.dailyActions) ? jobsState.dailyActions : []
+    return apiActions.length > 0 ? apiActions.slice(0, 3) : fallbackDailyActions(jobs)
+  }, [jobs, jobsState.dailyActions])
 
   const selectedJob = jobsState.selectedJob
   const isInitialLoad = jobsState.loading && jobs.length === 0 && !jobsState.lastLoadedAt
@@ -451,6 +510,47 @@ export default function JobsCommandCenter({ jobsState, settings, onOpenSettings,
       </div>
 
       <div className="section-rule" />
+
+      <section className="daily-actions-panel">
+        <div className="panel-heading compact">
+          <div>
+            <p className="section-label">Today</p>
+            <h3 className="card-title">Top 3 moves</h3>
+          </div>
+          <span className="meta-text">Ranked by fit, freshness, and packet readiness</span>
+        </div>
+        <div className="daily-actions-grid">
+          {isInitialLoad
+            ? Array.from({ length: 3 }, (_, index) => (
+                <div key={`daily-action-skeleton-${index}`} className="daily-action-card skeleton-card" aria-hidden="true">
+                  <span className="daily-action-index skeleton-line square" />
+                  <div className="skeleton-stack">
+                    <span className="skeleton-line short" />
+                    <span className="skeleton-line long" />
+                    <span className="skeleton-line medium" />
+                  </div>
+                </div>
+              ))
+            : dailyActions.map((action, index) => (
+                <DailyActionCard
+                  key={action.actionId || action.jobId}
+                  action={action}
+                  index={index}
+                  onOpen={openDossier}
+                  onOps={onOpenOps}
+                />
+              ))}
+          {!isInitialLoad && dailyActions.length === 0 && (
+            <StateNotice
+              compact
+              title="No daily moves are ready"
+              body="Refresh the board or broaden filters once new evaluated target roles arrive."
+              actionLabel="Refresh data"
+              onAction={jobsState.refresh}
+            />
+          )}
+        </div>
+      </section>
 
       <div className="operator-toolbar">
         <label className="operator-search">

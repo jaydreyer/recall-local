@@ -1299,6 +1299,85 @@ body {
   min-width: 140px;
 }
 
+.daily-actions-panel {
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(248, 243, 236, 0.72));
+  padding: 20px;
+}
+
+.daily-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.daily-action-card {
+  min-width: 0;
+  min-height: 218px;
+  border: 1px solid rgba(216, 207, 191, 0.85);
+  background: rgba(255, 255, 255, 0.74);
+  padding: 16px;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 14px;
+}
+
+.daily-action-index {
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(232, 85, 58, 0.28);
+  background: rgba(255, 247, 243, 0.96);
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.daily-action-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.daily-action-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.daily-action-title {
+  margin: 0;
+  color: #1a1815;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.daily-action-meta,
+.daily-action-rationale {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.daily-action-rationale {
+  color: #4a4540;
+}
+
+.daily-action-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: auto;
+  flex-wrap: wrap;
+}
+
 .operator-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(340px, 0.9fr);
@@ -2946,7 +3025,8 @@ body {
   }
 
   .operator-metric-grid,
-  .spotlight-insights {
+  .spotlight-insights,
+  .daily-actions-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -3013,7 +3093,8 @@ body {
   .spotlight-insights,
   .operator-subgrid,
   .company-watch-grid,
-  .gap-summary-grid {
+  .gap-summary-grid,
+  .daily-actions-grid {
     grid-template-columns: 1fr;
   }
 
@@ -3053,7 +3134,8 @@ body {
   .spotlight-card,
   .queue-panel,
   .company-pulse-panel,
-  .operator-detail-panel {
+  .operator-detail-panel,
+  .daily-actions-panel {
     padding: 18px;
   }
 
