@@ -513,6 +513,33 @@ Calibration examples collected:
 - Domain-specific Solutions Consultant false positive: Avalara-style tax compliance overlay roles should be downweighted unless the candidate evidence or packet strategy directly covers tax compliance product/domain expertise and sales-cycle ownership.
 - Strong target example with manageable gaps: Integry-style API Integration and AI Automation Solution Engineer roles are valuable even at mid/high 60s when the gaps are specific and learnable, such as OAuth/SAML/JWT depth and broader iPaaS exposure.
 
+Results recorded 2026-05-20:
+
+- Ran a targeted recalibration pass against current/recent high-priority roles using the live cloud evaluator `openai:gpt-4.1-mini`.
+- Re-evaluated 10 jobs with stale or high-risk persisted observations; the run completed with 10 evaluated, 0 failed, 0 skipped, and estimated cloud cost about `$0.0632`.
+- Strong roles that remained useful:
+  - `job_1e0c8b9501db6c79` - `Enterprise Senior Solutions Engineer`, Smartsheet, score 82.
+  - `job_11c89decdcb43684` - `Enterprise Solutions Engineer`, Smartsheet, score 80.
+  - `job_334b34f8ed5cbe6f` - `Enterprise AI Solutions Architect`, monday.com, score 85.
+  - `job_5a3d876997a2925d` - `Solutions Engineer Architect, AI/API/Platform`, Box, score 75.
+- Roles demoted by the updated resume/evaluator evidence:
+  - `job_9f94b15ae07b7347` - `Senior Solutions Consultant`, Apollo.io, dropped to 57 because presales SaaS GTM and enterprise sales-cycle ownership are critical gaps.
+  - `job_f8ecddd575319d41` - `Senior Solution Consultant`, Anaplan, dropped to 59 because EPM/planning domain and presales demo ownership are material gaps.
+  - `job_f0f0e0c605585967` - `Sales/Solution Engineer`, FlowFuse, dropped to 50 because industrial automation/IIoT domain depth is missing.
+  - `job_11a9e8f660da1660` - `Senior Solutions Architect`, Platform.sh, dropped to 69 because cloud infrastructure/containerization and zero-to-one launch depth are weaker.
+- Archived 8 active current/recent explicit non-US roles as `dismissed` with Phase 6 calibration notes:
+  - Smartsheet UK roles: `job_2ceff4818b63437c`, `job_a81be544c7826ed7`.
+  - Workato UK/India roles: `job_5e7af3b0589f6d98`, `job_e3c0eb606dd598e1`.
+  - Anthropic India role: `job_c4a682c2de5d0a3c`.
+  - Smartsheet Bangalore role: `job_345bbef5c6641b7e`.
+  - Datadog EMEA role: `job_3252915f5150a49d`.
+  - Postman Bengaluru role: `job_3221baa95039a781`.
+- Confirmed `active_current_recent_non_us=0`.
+- Confirmed `GET /v1/job-actions?limit=12` remains useful and US/remote-US dominated after the pass. Top actions were Smartsheet, Smartsheet, monday.com, First Due, ABACODE, Optum, Otairo.ai, Pax8, Glean, Endeavor Air, smartbridge, and NinjaOne.
+- Job stats after the pass: 2499 total jobs, 686 active jobs, 1813 archived jobs, 90 active high-fit jobs, 592 active actionable jobs, and `active_stale_jobs=0`.
+- Residual follow-up: 71 active current/recent score-70+ jobs still carry the exact old `Pre-sales demo delivery` gap. The top action queue is healthy, but the remaining stale-gap corpus should be recalibrated in future capped batches rather than all at once.
+- Dashboard smoke with gaps enabled passed: `status=ok`, 90 high-fit jobs, 454 aggregated gaps across 226 evaluated jobs, cache warmer healthy.
+
 ## Verification Commands
 
 Local repo status:
