@@ -1060,6 +1060,94 @@ def register_phase6_routes(
         payload["workflow"] = "workflow_06a_job_actions"
         return _json_response(200, payload)
 
+    @app.post(
+        f"{API_PREFIX}/job-archivals",
+        tags=["Jobs"],
+        summary="Create job archival",
+        description=(
+            "Applies an archival policy to active jobs while preserving job history. "
+            "The stale policy marks old active jobs as dismissed."
+        ),
+        responses={
+            200: {
+                "description": "Job archival completed.",
+                "content": {"application/json": {"example": JOB_ARCHIVAL_SUCCESS_EXAMPLE}},
+            },
+            400: {
+                "model": ErrorResponse,
+                "description": "Invalid archival payload.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_VALIDATION}},
+            },
+            401: {
+                "model": ErrorResponse,
+                "description": "Missing or invalid API key.",
+                "content": {"application/json": {"example": ERROR_EXAMPLE_UNAUTHORIZED}},
+            },
+            **RATE_LIMIT_ERROR_RESPONSE,
+        },
+        openapi_extra={"requestBody": JOB_ARCHIVAL_REQUEST_BODY},
+    )
+    async def create_job_archival(request: Request) -> JSONResponse:
+        request_id = _request_id()
+        control_error = _enforce_api_and_rate_limit(request, request_id=request_id, rate_limiter=rate_limiter)
+        if control_error is not None:
+            return control_error
+
+        try:
+            payload = await _read_json_body(request)
+        except ValueError as exc:
+            return _error_response(status_code=400, code="invalid_json", message=str(exc), request_id=request_id)
+
+        unknown_fields = [key for key in payload if key not in {"reason", "max_age_days"}]
+        if unknown_fields:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message="Invalid job archival payload.",
+                request_id=request_id,
+                details=[{"field": key, "issue": "field is not supported"} for key in unknown_fields],
+            )
+
+        reason = str(payload.get("reason") or "stale").strip().lower()
+        if reason != "stale":
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message=f"Invalid archival reason: {reason}",
+                request_id=request_id,
+                details=[{"field": "reason", "issue": "allowed values: stale"}],
+            )
+
+        try:
+            max_age_days = int(payload.get("max_age_days", 60))
+        except (TypeError, ValueError):
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message="max_age_days must be an integer.",
+                request_id=request_id,
+                details=[{"field": "max_age_days", "issue": "value must be an integer"}],
+            )
+        if max_age_days < 1 or max_age_days > 365:
+            return _error_response(
+                status_code=400,
+                code="validation_failed",
+                message="max_age_days must be between 1 and 365.",
+                request_id=request_id,
+                details=[{"field": "max_age_days", "issue": "allowed range: 1-365"}],
+            )
+
+        archived_count = phase6_archive_stale_jobs(max_age_days=max_age_days)
+        return _json_response(
+            200,
+            {
+                "workflow": "workflow_06a_job_archivals",
+                "reason": reason,
+                "max_age_days": max_age_days,
+                "archived_count": archived_count,
+            },
+        )
+
     @app.get(
         f"{API_PREFIX}/job-gaps",
         tags=["Jobs"],

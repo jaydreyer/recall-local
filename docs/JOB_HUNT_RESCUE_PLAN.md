@@ -13,7 +13,7 @@ Read `AGENTS.md` and `docs/JOB_HUNT_RESCUE_PLAN.md`; continue from the current p
 - Local repo: `/Users/jaydreyer/projects/recall-local`.
 - Runtime host: `ai-lab`, server repo `/home/jaydreyer/recall-local`.
 - Qdrant is up, healthy, and populated. Recent observed collections/counts: `recall_resume=13`, `recall_docs=1839`, `newsletter_stories=1134`, `recall_jobs=2851`.
-- Resume ingestion is current as of 2026-05-19. Current resume version observed through `/v1/resumes/current`: version 4, 13 chunks, source inline markdown from `Jay-Dreyer-Resume.md`.
+- Resume ingestion is current as of 2026-05-19. Current resume version observed through `/v1/resumes/current`: version 5, 13 chunks, source inline markdown from latest `Jay-Dreyer-Resume.md`; verified live resume text includes LaunchLab, Recall.local, myrsdlist.com, and updated Gap AI enablement content.
 - Dashboard/job system is live and fresh. Phase 3 relevance cleanup reduced active high-fit noise: recent observed stats after cleanup were 2497 total jobs, 1752 active jobs, 745 archived jobs, 273 active high-fit jobs, and 561 active unscored jobs.
 - `GET /v1/job-gaps` has timed out/hung during manual checks and needs caching or precomputation before relying on it in the dashboard.
 - `GET /v1/jobs?status=all` currently defaults to `min_score=0`, so API totals can exclude unscored jobs while stats include them.

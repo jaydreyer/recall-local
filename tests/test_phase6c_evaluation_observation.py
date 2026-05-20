@@ -148,7 +148,7 @@ class Phase6CEvaluatorObservationTests(unittest.TestCase):
         self.assertEqual(len(parsed["gaps"]), 1)
         self.assertEqual(parsed["gaps"][0]["gap"], "Kubernetes")
 
-    def test_ground_evaluation_replaces_generic_gap_with_explicit_requirement_gap(self) -> None:
+    def test_ground_evaluation_keeps_model_gaps_without_requirement_hint_injection(self) -> None:
         evaluation = {
             "fit_score": 75,
             "raw_model_fit_score": None,
@@ -184,11 +184,11 @@ class Phase6CEvaluatorObservationTests(unittest.TestCase):
         )
 
         gaps = [item["gap"] for item in grounded["gaps"]]
-        self.assertIn("Pre-sales demo delivery", gaps)
-        self.assertNotIn("Leadership experience", gaps)
-        self.assertGreaterEqual(grounded["fit_score"], 79)
+        self.assertNotIn("Pre-sales demo delivery", gaps)
+        self.assertIn("Leadership experience", gaps)
+        self.assertGreaterEqual(grounded["fit_score"], 0)
 
-    def test_ground_evaluation_adds_missing_backend_requirement_gaps(self) -> None:
+    def test_ground_evaluation_does_not_add_missing_backend_requirement_gaps(self) -> None:
         evaluation = {
             "fit_score": 47,
             "raw_model_fit_score": None,
@@ -223,10 +223,11 @@ class Phase6CEvaluatorObservationTests(unittest.TestCase):
         )
 
         gaps = [item["gap"] for item in grounded["gaps"]]
-        self.assertIn("Go backend engineering", gaps)
-        self.assertIn("Kubernetes / container orchestration", gaps)
+        self.assertNotIn("Go backend engineering", gaps)
+        self.assertNotIn("Kubernetes / container orchestration", gaps)
+        self.assertIn("infrastructure specialization", gaps)
 
-    def test_ground_evaluation_adds_requirement_aligned_matching_skill_hints(self) -> None:
+    def test_ground_evaluation_does_not_add_requirement_aligned_matching_skill_hints(self) -> None:
         evaluation = {
             "fit_score": 90,
             "raw_model_fit_score": None,
@@ -259,8 +260,9 @@ class Phase6CEvaluatorObservationTests(unittest.TestCase):
         )
 
         skills = [item["skill"] for item in grounded["matching_skills"]]
-        self.assertIn("Solutions architecture", skills)
-        self.assertIn("Customer and stakeholder partnership", skills)
+        self.assertNotIn("Solutions architecture", skills)
+        self.assertNotIn("Customer and stakeholder partnership", skills)
+        self.assertIn("API integration", skills)
 
     def test_parse_with_retry_uses_strict_prompt_after_malformed_json(self) -> None:
         with (

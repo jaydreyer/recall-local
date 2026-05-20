@@ -9,17 +9,27 @@ const TIER_LANES = [
   { tier: 2, label: 'Tier 2', title: 'Active watch' },
   { tier: 3, label: 'Tier 3', title: 'Longer-range monitor' },
 ]
+const UNTRACKED_LANE = { tier: 0, label: 'Untracked', title: 'Discovery backlog' }
 
 const DEFAULT_PREVIEW_COUNT = 4
 
 function tierClass(tier) {
-  if (tier === 1) {
+  const normalizedTier = Number(tier || 0)
+  if (normalizedTier === 1) {
     return 'tier-one'
   }
-  if (tier === 2) {
+  if (normalizedTier === 2) {
     return 'tier-two'
   }
-  return 'tier-three'
+  if (normalizedTier === 3) {
+    return 'tier-three'
+  }
+  return 'tier-untracked'
+}
+
+function tierLabel(tier) {
+  const normalizedTier = Number(tier || 0)
+  return [1, 2, 3].includes(normalizedTier) ? `Tier ${normalizedTier}` : 'Untracked'
 }
 
 function sortCompanies(a, b) {
@@ -48,7 +58,13 @@ function openRoleLabel(count) {
 
 function laneCompanies(companies, tier) {
   return companies
-    .filter((company) => Number(company.tier || 3) === tier)
+    .filter((company) => Number(company.tier || 0) === tier)
+    .sort(sortCompanies)
+}
+
+function untrackedCompanies(companies) {
+  return companies
+    .filter((company) => ![1, 2, 3].includes(Number(company.tier || 0)))
     .sort(sortCompanies)
 }
 
@@ -96,6 +112,62 @@ export default function CompanyList({
     )
   }
 
+  function renderCompany(company) {
+    const isMoving = movingCompanyId === company.company_id
+    const normalizedTier = Number(company.tier || 0)
+
+    return (
+      <article key={company.company_id} className="company-tier-shell">
+        <button
+          type="button"
+          className={company.company_id === selectedCompanyId ? 'company-card active' : 'company-card'}
+          onClick={() => onSelect(company.company_id)}
+        >
+          <CompanyLogo company={company} className="company-logo" />
+          <div className="company-card-copy">
+            <h3 className="job-title">{displayCompanyName(company.company_name)}</h3>
+            <span className={`tier-badge ${tierClass(company.tier)}`}>
+              <span className="tier-dot" />
+              {tierLabel(company.tier)}
+            </span>
+            <p className="company-card-meta">{openRoleLabel(Number(company.job_count || 0))}</p>
+            <p className="company-card-meta">{bestFitLabel(company)}</p>
+          </div>
+        </button>
+
+        <div className="company-card-footer">
+          <span className="company-footer-label">Move tier</span>
+          <div className="company-quick-tier-row">
+            {TIER_LANES.map((target) => {
+              const isCurrent = normalizedTier === target.tier
+              const className = isCurrent
+                ? 'tier-jump-button active'
+                : isMoving
+                  ? 'tier-jump-button pending'
+                  : 'tier-jump-button'
+
+              return (
+                <button
+                  key={`${company.company_id}-${target.tier}`}
+                  type="button"
+                  className={className}
+                  disabled={isCurrent || isMoving}
+                  onClick={() => onMoveTier(company.company_id, target.tier)}
+                >
+                  {isMoving && !isCurrent ? '...' : `T${target.tier}`}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </article>
+    )
+  }
+
+  const untrackedItems = untrackedCompanies(companies)
+  const untrackedExpanded = Boolean(expandedTiers[UNTRACKED_LANE.tier])
+  const visibleUntrackedItems = untrackedExpanded ? untrackedItems : []
+
   return (
     <div className="company-tier-board">
       {TIER_LANES.map((lane) => {
@@ -125,56 +197,7 @@ export default function CompanyList({
                 />
               )}
 
-              {visibleItems.map((company) => {
-                const isMoving = movingCompanyId === company.company_id
-
-                return (
-                  <article key={company.company_id} className="company-tier-shell">
-                    <button
-                      type="button"
-                      className={company.company_id === selectedCompanyId ? 'company-card active' : 'company-card'}
-                      onClick={() => onSelect(company.company_id)}
-                    >
-                      <CompanyLogo company={company} className="company-logo" />
-                      <div className="company-card-copy">
-                        <h3 className="job-title">{displayCompanyName(company.company_name)}</h3>
-                        <span className={`tier-badge ${tierClass(company.tier)}`}>
-                          <span className="tier-dot" />
-                          Tier {company.tier || 3}
-                        </span>
-                        <p className="company-card-meta">{openRoleLabel(Number(company.job_count || 0))}</p>
-                        <p className="company-card-meta">{bestFitLabel(company)}</p>
-                      </div>
-                    </button>
-
-                    <div className="company-card-footer">
-                      <span className="company-footer-label">Move tier</span>
-                      <div className="company-quick-tier-row">
-                        {TIER_LANES.map((target) => {
-                          const isCurrent = Number(company.tier || 3) === target.tier
-                          const className = isCurrent
-                            ? 'tier-jump-button active'
-                            : isMoving
-                              ? 'tier-jump-button pending'
-                              : 'tier-jump-button'
-
-                          return (
-                            <button
-                              key={`${company.company_id}-${target.tier}`}
-                              type="button"
-                              className={className}
-                              disabled={isCurrent || isMoving}
-                              onClick={() => onMoveTier(company.company_id, target.tier)}
-                            >
-                              {isMoving && !isCurrent ? '...' : `T${target.tier}`}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  </article>
-                )
-              })}
+              {visibleItems.map((company) => renderCompany(company))}
 
               {(hiddenCount > 0 || expanded) && (
                 <div className="tier-lane-footer">
@@ -196,6 +219,33 @@ export default function CompanyList({
           </section>
         )
       })}
+      <section className="tier-lane untracked-lane">
+        <div className="tier-lane-header">
+          <div>
+            <p className="section-label">{UNTRACKED_LANE.label}</p>
+            <h3 className="card-title">{UNTRACKED_LANE.title}</h3>
+          </div>
+          <span className="meta-text">{untrackedItems.length} companies</span>
+        </div>
+
+        <div className="tier-lane-list">
+          {visibleUntrackedItems.map((company) => renderCompany(company))}
+          <div className="tier-lane-footer">
+            <button
+              type="button"
+              className="text-button accent tier-lane-toggle"
+              onClick={() =>
+                setExpandedTiers((current) => ({
+                  ...current,
+                  [UNTRACKED_LANE.tier]: !current[UNTRACKED_LANE.tier],
+                }))
+              }
+            >
+              {untrackedExpanded ? 'Collapse untracked' : `Show ${untrackedItems.length} untracked`}
+            </button>
+          </div>
+        </div>
+      </section>
     </div>
   )
 }

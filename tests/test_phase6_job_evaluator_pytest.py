@@ -126,7 +126,7 @@ def test_compute_fit_score_applies_weighting_bonus_and_gap_penalty() -> None:
     assert score == 80
 
 
-def test_ground_evaluation_to_context_adds_explicit_gap_and_removes_conflicting_gap() -> None:
+def test_ground_evaluation_to_context_resolves_conflicting_gap_without_hint_injection() -> None:
     grounded = job_evaluator._ground_evaluation_to_context(
         job={
             "description": "Need quota carrying ownership, demos, and technical recommendations for customers.",
@@ -154,7 +154,9 @@ def test_ground_evaluation_to_context_adds_explicit_gap_and_removes_conflicting_
     gap_names = [item["gap"] for item in grounded["gaps"]]
     match_names = [item["skill"] for item in grounded["matching_skills"]]
 
-    assert "Quota-carrying ownership" in gap_names
+    assert not hasattr(job_evaluator, "REQUIREMENT_GAP_HINTS")
+    assert not hasattr(job_evaluator, "REQUIREMENT_MATCH_HINTS")
+    assert "Quota-carrying ownership" not in gap_names
     assert "Technical problem solving" in match_names
     assert "Technical problem solving" not in gap_names
     assert grounded["fit_score"] >= 0

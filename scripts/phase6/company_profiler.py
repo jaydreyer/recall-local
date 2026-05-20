@@ -33,6 +33,18 @@ def slugify_company(name: str) -> str:
     return slugify(name, fallback="unknown-company")
 
 
+def _normalize_company_lookup_name(name: Any) -> str:
+    lowered = str(name or "").strip().lower()
+    lowered = lowered.replace("&", " and ")
+    lowered = lowered.replace(".", " ")
+    lowered = slugify(lowered, fallback="").replace("-", " ")
+    return " ".join(
+        token
+        for token in lowered.split()
+        if token not in {"inc", "incorporated", "llc", "ltd", "limited", "corp", "corporation", "co", "company", "pbc"}
+    )
+
+
 def _load_career_pages() -> list[dict[str, Any]]:
     if not CAREER_PAGES_PATH.exists():
         return []
@@ -108,6 +120,34 @@ def list_tracked_company_configs() -> list[dict[str, Any]]:
         merged[company_id] = current
 
     return sorted(merged.values(), key=lambda item: str(item.get("name") or "").lower())
+
+
+def configured_company_tier_lookup() -> dict[str, int]:
+    """Return normalized configured company names mapped to their configured tier."""
+    lookup: dict[str, int] = {}
+    for item in list_tracked_company_configs():
+        normalized = _normalize_company_lookup_name(item.get("name"))
+        if not normalized:
+            continue
+        lookup[normalized] = int(item.get("tier") or 0)
+    return lookup
+
+
+def get_company_tier(company_name: str, *, lookup: dict[str, int] | None = None) -> int | None:
+    """Resolve a configured company tier by exact normalized match, then contains match."""
+    normalized_name = _normalize_company_lookup_name(company_name)
+    if not normalized_name:
+        return None
+
+    tier_lookup = lookup if lookup is not None else configured_company_tier_lookup()
+    exact = tier_lookup.get(normalized_name)
+    if exact is not None:
+        return exact
+
+    for configured_name, tier in sorted(tier_lookup.items(), key=lambda item: len(item[0]), reverse=True):
+        if configured_name and (configured_name in normalized_name or normalized_name in configured_name):
+            return tier
+    return None
 
 
 def upsert_tracked_company_config(*, company_id: str | None = None, patch: dict[str, Any]) -> dict[str, Any]:

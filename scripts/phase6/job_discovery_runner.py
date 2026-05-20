@@ -20,7 +20,11 @@ import httpx
 from scripts.llm_client import embed
 from scripts.phase1.ingestion_pipeline import qdrant_client_from_env
 from scripts.phase6 import storage
-from scripts.phase6.company_profiler import list_tracked_company_configs
+from scripts.phase6.company_profiler import (
+    configured_company_tier_lookup,
+    get_company_tier,
+    list_tracked_company_configs,
+)
 from scripts.phase6.job_dedup import check_job_duplicate
 from scripts.phase6.setup_collections import COLLECTION_JOBS
 from scripts.shared_strings import slugify
@@ -44,6 +48,124 @@ JOBSPY_COUNTRY = "usa"
 SUPPORTED_DISCOVERY_SOURCES = {"jobspy", "adzuna", "serpapi", "career_page"}
 DEFAULT_CAREER_PAGE_SOURCE_LIMIT = 3
 JOBSPY_SITES = ["indeed", "glassdoor", "zip_recruiter"]
+LOCATION_ALLOWLIST = (
+    "remote - us",
+    "remote us",
+    "remote, us",
+    "remote - usa",
+    "remote usa",
+    "remote, usa",
+    "remote - united states",
+    "remote united states",
+    "remote, united states",
+    "united states",
+    "usa",
+    "u.s.",
+    "u.s.a.",
+    "us",
+    "minneapolis",
+    "twin cities",
+    "minnesota",
+    "mn",
+    "alabama",
+    "alaska",
+    "arizona",
+    "arkansas",
+    "california",
+    "colorado",
+    "connecticut",
+    "delaware",
+    "florida",
+    "georgia",
+    "hawaii",
+    "idaho",
+    "illinois",
+    "indiana",
+    "iowa",
+    "kansas",
+    "kentucky",
+    "louisiana",
+    "maine",
+    "maryland",
+    "massachusetts",
+    "michigan",
+    "mississippi",
+    "missouri",
+    "montana",
+    "nebraska",
+    "nevada",
+    "new hampshire",
+    "new jersey",
+    "new mexico",
+    "new york",
+    "north carolina",
+    "north dakota",
+    "ohio",
+    "oklahoma",
+    "oregon",
+    "pennsylvania",
+    "rhode island",
+    "south carolina",
+    "south dakota",
+    "tennessee",
+    "texas",
+    "utah",
+    "vermont",
+    "virginia",
+    "washington",
+    "west virginia",
+    "wisconsin",
+    "wyoming",
+    "al",
+    "ak",
+    "az",
+    "ar",
+    "ca",
+    "co",
+    "ct",
+    "de",
+    "fl",
+    "ga",
+    "hi",
+    "id",
+    "il",
+    "in",
+    "ia",
+    "ks",
+    "ky",
+    "la",
+    "me",
+    "md",
+    "ma",
+    "mi",
+    "ms",
+    "mo",
+    "mt",
+    "ne",
+    "nv",
+    "nh",
+    "nj",
+    "nm",
+    "ny",
+    "nc",
+    "nd",
+    "oh",
+    "ok",
+    "or",
+    "pa",
+    "ri",
+    "sc",
+    "sd",
+    "tn",
+    "tx",
+    "ut",
+    "vt",
+    "va",
+    "wa",
+    "wv",
+    "wi",
+    "wy",
+)
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -137,6 +259,26 @@ def _location_type(location: str) -> str | None:
     if "onsite" in lowered or "on-site" in lowered or "on site" in lowered:
         return "onsite"
     return None
+
+
+def _location_passes_filter(location: str) -> bool:
+    text = _norm(location)
+    if not text:
+        return True
+
+    lowered = re.sub(r"\s+", " ", text.lower()).strip()
+    if lowered == "remote":
+        return True
+
+    for token in LOCATION_ALLOWLIST:
+        normalized_token = token.lower()
+        if len(normalized_token) <= 3:
+            if re.search(rf"(?<![a-z0-9]){re.escape(normalized_token)}(?![a-z0-9])", lowered):
+                return True
+            continue
+        if normalized_token in lowered:
+            return True
+    return False
 
 
 def _load_search_config() -> dict[str, Any]:
@@ -285,19 +427,11 @@ def _normalize_job_payload(
 
 
 def _tier_lookup() -> dict[str, int]:
-    config = _load_career_config()
-    companies = config.get("companies") if isinstance(config, dict) else []
-    lookup: dict[str, int] = {}
-    if not isinstance(companies, list):
-        return lookup
-    for item in companies:
-        if not isinstance(item, dict):
-            continue
-        name = _normalize_company_name(item.get("name"))
-        if not name:
-            continue
-        lookup[name] = int(item.get("tier") or 0)
-    return lookup
+    return configured_company_tier_lookup()
+
+
+def _resolve_company_tier(company_name: str, tier_lookup: dict[str, int]) -> int:
+    return int(get_company_tier(company_name, lookup=tier_lookup) or 0)
 
 
 def _normalize_manual_jobs(*, jobs: list[dict[str, Any]], tier_lookup: dict[str, int]) -> list[dict[str, Any]]:
@@ -312,7 +446,7 @@ def _normalize_manual_jobs(*, jobs: list[dict[str, Any]], tier_lookup: dict[str,
         source = _norm_lower(item.get("source") or "career_page")
         tier = _coerce_int(item.get("company_tier"), default=None)
         if tier is None:
-            tier = tier_lookup.get(_normalize_company_name(company), 0)
+            tier = _resolve_company_tier(company, tier_lookup)
         normalized.append(
             _normalize_job_payload(
                 title=title,
@@ -390,7 +524,7 @@ def _discover_jobspy(
 
             for item in _extract_jobspy_rows(raw_jobs):
                 company_name = _norm(item.get("company") or item.get("company_name"))
-                tier = tier_lookup.get(_normalize_company_name(company_name), 0)
+                tier = _resolve_company_tier(company_name, tier_lookup)
                 discovered.append(
                     _normalize_job_payload(
                         title=_norm(item.get("title")),
@@ -466,7 +600,7 @@ def _discover_adzuna(
             company_name = _norm(company_obj.get("display_name"))
             location_obj = item.get("location") if isinstance(item.get("location"), dict) else {}
             location = _norm(location_obj.get("display_name") or query["location"])
-            tier = tier_lookup.get(_normalize_company_name(company_name), 0)
+            tier = _resolve_company_tier(company_name, tier_lookup)
             discovered.append(
                 _normalize_job_payload(
                     title=_norm(item.get("title")),
@@ -531,7 +665,7 @@ def _discover_serpapi(
             if not isinstance(item, dict):
                 continue
             company_name = _norm(item.get("company_name"))
-            tier = tier_lookup.get(_normalize_company_name(company_name), 0)
+            tier = _resolve_company_tier(company_name, tier_lookup)
             discovered.append(
                 _normalize_job_payload(
                     title=_norm(item.get("title")),
@@ -616,11 +750,15 @@ def _discover_career_pages(
                     if not _title_matches_filters(title, title_filter):
                         continue
                     location_obj = job.get("location") if isinstance(job.get("location"), dict) else {}
+                    location = _norm(location_obj.get("name"))
+                    if not _location_passes_filter(location):
+                        LOGGER.debug("Skipping non-US role: %s at %s (%s)", title, name, location)
+                        continue
                     discovered.append(
                         _normalize_job_payload(
                             title=title,
                             company=name,
-                            location=_norm(location_obj.get("name")),
+                            location=location,
                             url=_norm(job.get("absolute_url")),
                             description="",
                             source="career_page",
@@ -645,11 +783,15 @@ def _discover_career_pages(
                     title = _norm(job.get("title"))
                     if not _title_matches_filters(title, title_filter):
                         continue
+                    location = _norm(job.get("location"))
+                    if not _location_passes_filter(location):
+                        LOGGER.debug("Skipping non-US role: %s at %s (%s)", title, name, location)
+                        continue
                     discovered.append(
                         _normalize_job_payload(
                             title=title,
                             company=name,
-                            location=_norm(job.get("location")),
+                            location=location,
                             url=_norm(job.get("jobUrl") or job.get("applyUrl")),
                             description=_norm(job.get("descriptionPlain")) or _clean_html(job.get("descriptionHtml")),
                             source="career_page",
@@ -672,11 +814,15 @@ def _discover_career_pages(
                     if not _title_matches_filters(title, title_filter):
                         continue
                     categories = job.get("categories") if isinstance(job.get("categories"), dict) else {}
+                    location = _norm(categories.get("location"))
+                    if not _location_passes_filter(location):
+                        LOGGER.debug("Skipping non-US role: %s at %s (%s)", title, name, location)
+                        continue
                     discovered.append(
                         _normalize_job_payload(
                             title=title,
                             company=name,
-                            location=_norm(categories.get("location")),
+                            location=location,
                             url=_norm(job.get("hostedUrl")),
                             description=_norm(job.get("descriptionPlain") or job.get("description")),
                             source="career_page",

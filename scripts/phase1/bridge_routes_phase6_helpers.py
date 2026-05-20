@@ -42,6 +42,10 @@ def phase6_list_job_actions(*args: Any, **kwargs: Any) -> Any:
     return _bridge_api.phase6_list_job_actions(*args, **kwargs)
 
 
+def phase6_archive_stale_jobs(*args: Any, **kwargs: Any) -> Any:
+    return _bridge_api.phase6_archive_stale_jobs(*args, **kwargs)
+
+
 def phase6_all_jobs(*args: Any, **kwargs: Any) -> Any:
     return _bridge_api.phase6_all_jobs(*args, **kwargs)
 
@@ -117,10 +121,12 @@ JOB_PATCH_REQUEST_BODY = _bridge_api.JOB_PATCH_REQUEST_BODY
 JOB_EVALUATION_RUN_REQUEST_BODY = _bridge_api.JOB_EVALUATION_RUN_REQUEST_BODY
 FOLLOW_UP_REMINDER_RUN_REQUEST_BODY = _bridge_api.FOLLOW_UP_REMINDER_RUN_REQUEST_BODY
 JOB_STATS_SUCCESS_EXAMPLE = _bridge_api.JOB_STATS_SUCCESS_EXAMPLE
+JOB_ARCHIVAL_SUCCESS_EXAMPLE = _bridge_api.JOB_ARCHIVAL_SUCCESS_EXAMPLE
 FOLLOW_UP_REMINDER_RUN_COMPLETED_EXAMPLE = _bridge_api.FOLLOW_UP_REMINDER_RUN_COMPLETED_EXAMPLE
 JOB_GAPS_SUCCESS_EXAMPLE = _bridge_api.JOB_GAPS_SUCCESS_EXAMPLE
 JOB_DEDUP_REQUEST_BODY = _bridge_api.JOB_DEDUP_REQUEST_BODY
 JOB_DISCOVERY_RUN_REQUEST_BODY = _bridge_api.JOB_DISCOVERY_RUN_REQUEST_BODY
+JOB_ARCHIVAL_REQUEST_BODY = _bridge_api.JOB_ARCHIVAL_REQUEST_BODY
 RESUME_REQUEST_BODY = _bridge_api.RESUME_REQUEST_BODY
 COMPANY_CREATE_REQUEST_BODY = _bridge_api.COMPANY_CREATE_REQUEST_BODY
 COMPANY_PATCH_REQUEST_BODY = _bridge_api.COMPANY_PATCH_REQUEST_BODY
@@ -147,12 +153,15 @@ __all__ = [
     "JOB_STATS_SUCCESS_EXAMPLE",
     "phase6_job_stats",
     "phase6_list_job_actions",
+    "phase6_archive_stale_jobs",
+    "JOB_ARCHIVAL_SUCCESS_EXAMPLE",
     "JOB_GAPS_SUCCESS_EXAMPLE",
     "phase6_all_jobs",
     "phase6_aggregate_gaps",
     "JOB_DEDUP_REQUEST_BODY",
     "phase6_check_job_duplicate",
     "JOB_DISCOVERY_RUN_REQUEST_BODY",
+    "JOB_ARCHIVAL_REQUEST_BODY",
     "phase6_ensure_collections",
     "phase6_run_discovery",
     "RESUME_REQUEST_BODY",

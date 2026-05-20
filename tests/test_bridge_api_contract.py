@@ -1174,6 +1174,7 @@ class BridgeApiContractTests(unittest.TestCase):
             "/v1/follow-up-reminder-runs",
             "/v1/job-stats",
             "/v1/job-actions",
+            "/v1/job-archivals",
             "/v1/job-gaps",
             "/v1/job-deduplications",
             "/v1/job-discovery-runs",
@@ -2118,6 +2119,44 @@ class BridgeApiContractTests(unittest.TestCase):
         self.assertEqual(body["workflow"], "workflow_06a_job_discovery")
         self.assertEqual(body["new_job_ids"], ["job_1", "job_2"])
         self.assertEqual(body["collections"][0]["name"], "recall_jobs")
+
+    def test_phase6_job_archivals_endpoint_archives_stale_jobs(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        fake_collections = [
+            SimpleNamespace(name="recall_jobs", created=False),
+            SimpleNamespace(name="recall_resume", created=False),
+        ]
+        with patch("scripts.phase1.ingest_bridge_api.phase6_ensure_collections", return_value=fake_collections):
+            with patch("scripts.phase1.ingest_bridge_api.phase6_archive_stale_jobs", return_value=12) as archive_mock:
+                with build_client(env) as client:
+                    response = client.post(
+                        "/v1/job-archivals",
+                        json={"reason": "stale", "max_age_days": 60},
+                    )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["workflow"], "workflow_06a_job_archivals")
+        self.assertEqual(body["reason"], "stale")
+        self.assertEqual(body["max_age_days"], 60)
+        self.assertEqual(body["archived_count"], 12)
+        archive_mock.assert_called_once_with(max_age_days=60)
+
+    def test_phase6_job_archivals_endpoint_rejects_unknown_reason(self) -> None:
+        env = {
+            "RECALL_API_KEY": "",
+            "RECALL_API_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RECALL_API_RATE_LIMIT_MAX_REQUESTS": "20",
+        }
+        with build_client(env) as client:
+            response = client.post("/v1/job-archivals", json={"reason": "delete"})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"]["code"], "validation_failed")
 
     def test_phase6_job_evaluation_endpoint_returns_accepted_for_async_runs(self) -> None:
         env = {

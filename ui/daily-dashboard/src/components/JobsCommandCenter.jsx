@@ -84,6 +84,16 @@ function scoreTone(score) {
   return 'low'
 }
 
+function tierValue(job) {
+  const tier = Number(job?.company_tier ?? 0)
+  return [1, 2, 3].includes(tier) ? tier : 0
+}
+
+function tierLabel(job) {
+  const tier = tierValue(job)
+  return tier ? `T${tier}` : 'Untracked'
+}
+
 function compactRelativeTime(value) {
   if (!value) {
     return 'Just now'
@@ -188,7 +198,7 @@ function aggregateCompanies(jobs) {
     const current = grouped.get(key) || {
       company_id: job.company_id || job.company_normalized || key,
       company_name: displayCompanyName(job.company),
-      company_tier: job.company_tier || 3,
+      company_tier: tierValue(job),
       job_count: 0,
       high_fit: 0,
       best_score: -1,
@@ -258,37 +268,53 @@ function QueueSkeletonCard() {
   )
 }
 
-function QueueCard({ job, selected, onSelect }) {
+function QueueCard({ job, selected, onSelect, onDismiss, dismissible }) {
   return (
-    <button type="button" className={selected ? 'queue-card selected' : 'queue-card'} onClick={() => onSelect(job.jobId)}>
-      <div className="queue-card-topline">
-        <div className="queue-card-brand">
-          <CompanyLogo company={{ company_name: displayCompanyName(job.company), company_id: job.company_id || job.company_normalized }} className="company-logo small" />
-          <div>
-            <p className="queue-company">{displayCompanyName(job.company)}</p>
-            <p className="queue-title">{job.title}</p>
+    <article className={selected ? 'queue-card selected' : 'queue-card'}>
+      {dismissible && (
+        <button
+          type="button"
+          className="queue-dismiss-button"
+          aria-label={`Dismiss ${job.title}`}
+          title="Dismiss role"
+          onClick={(event) => {
+            event.stopPropagation()
+            onDismiss(job.jobId)
+          }}
+        >
+          X
+        </button>
+      )}
+      <button type="button" className="queue-card-main" onClick={() => onSelect(job.jobId)}>
+        <div className="queue-card-topline">
+          <div className="queue-card-brand">
+            <CompanyLogo company={{ company_name: displayCompanyName(job.company), company_id: job.company_id || job.company_normalized }} className="company-logo small" />
+            <div>
+              <p className="queue-company">{displayCompanyName(job.company)}</p>
+              <p className="queue-title">{job.title}</p>
+            </div>
           </div>
+          <span className={`queue-score ${scoreTone(job.fit_score || 0)}`}>{scoreLabel(job)}</span>
         </div>
-        <span className={`queue-score ${scoreTone(job.fit_score || 0)}`}>{scoreLabel(job)}</span>
-      </div>
 
-      <div className="queue-meta-row">
-        <span>{job.location || 'Unknown location'}</span>
-        <span>{compactRelativeTime(job.evaluated_at || job.discovered_at || job.date_posted)}</span>
-        <span>T{job.company_tier || 3}</span>
-      </div>
+        <div className="queue-meta-row">
+          <span>{job.location || 'Unknown location'}</span>
+          <span>{compactRelativeTime(job.evaluated_at || job.discovered_at || job.date_posted)}</span>
+          <span>{tierLabel(job)}</span>
+        </div>
 
-      <div className="freshness-row">
-        <span className={freshnessClass(job)}>{freshnessLabel(job)}</span>
-        {job.relevance?.targetLabel && <span className="freshness-badge target">{job.relevance.targetLabel}</span>}
-      </div>
+        <div className="freshness-row">
+          <span className={freshnessClass(job)}>{freshnessLabel(job)}</span>
+          {job.relevance?.targetLabel && <span className="freshness-badge target">{job.relevance.targetLabel}</span>}
+        </div>
 
-      <p className="queue-snippet">{queueHeadline(job)}</p>
-      <div className="queue-tags">
-        <span className="queue-tag">Match: {summarizeTopMatch(job, { maxLength: 72 })}</span>
-        <span className="queue-tag">Gap: {summarizeTopGap(job, { maxLength: 72 })}</span>
-      </div>
-    </button>
+        <p className="queue-snippet">{queueHeadline(job)}</p>
+        <div className="queue-tags">
+          <span className="queue-tag">Match: {summarizeTopMatch(job, { maxLength: 72 })}</span>
+          <span className="queue-tag">Gap: {summarizeTopGap(job, { maxLength: 72 })}</span>
+        </div>
+      </button>
+    </article>
   )
 }
 
@@ -778,6 +804,8 @@ export default function JobsCommandCenter({ jobsState, settings, onOpenSettings,
                       job={job}
                       selected={heroJob?.jobId === job.jobId}
                       onSelect={openDossier}
+                      onDismiss={jobsState.dismissJob}
+                      dismissible={activeLane === 'focus'}
                     />
                   ))}
             </div>

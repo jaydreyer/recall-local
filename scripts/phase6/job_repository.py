@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from scripts.phase1.ingestion_pipeline import qdrant_client_from_env
+from scripts.phase6.company_profiler import configured_company_tier_lookup, get_company_tier
 from scripts.phase6.job_relevance import assess_job_relevance
 from scripts.shared_strings import slugify
 
@@ -527,6 +528,7 @@ def _normalize_job(record: Any) -> dict[str, Any]:
         "observation": _normalize_observation(payload.get("observation")),
         "applied": bool(payload.get("applied", False)),
         "applied_at": payload.get("applied_at"),
+        "archived_at": payload.get("archived_at"),
         "notes": payload.get("notes") or "",
         "dismissed": bool(payload.get("dismissed", False)),
         "workflow": workflow,
@@ -1617,6 +1619,128 @@ def update_company_tier(*, company_id: str, tier: int) -> int:
 
     invalidate_jobs_cache()
     return updated
+
+
+def backfill_configured_company_tiers() -> int:
+    """Apply configured career-page tiers to existing jobs; untracked companies become tier 0."""
+    rows = _scroll_jobs(with_vectors=True)
+    if not rows:
+        return 0
+
+    tier_lookup = configured_company_tier_lookup()
+    if not tier_lookup:
+        return 0
+
+    from qdrant_client import models
+
+    client = qdrant_client_from_env(os.getenv("QDRANT_HOST", DEFAULT_QDRANT_HOST))
+    points: list[Any] = []
+    updated = 0
+
+    for item in rows:
+        resolved_tier = int(get_company_tier(str(item.get("company") or ""), lookup=tier_lookup) or 0)
+        current_tier = _parse_int(item.get("company_tier"), default=0)
+        if current_tier == resolved_tier:
+            continue
+
+        payload = dict(item.get("_payload") or {})
+        payload["company_tier"] = resolved_tier
+        points.append(
+            models.PointStruct(
+                id=item.get("_qdrant_id"),
+                vector=item.get("_vector"),
+                payload=payload,
+            )
+        )
+        updated += 1
+
+    for start in range(0, len(points), UPSERT_BATCH_SIZE):
+        client.upsert(
+            collection_name=COLLECTION_JOBS,
+            points=points[start : start + UPSERT_BATCH_SIZE],
+        )
+
+    if updated:
+        invalidate_jobs_cache()
+    return updated
+
+
+def archive_stale_jobs(*, max_age_days: int = STALE_POSTING_DAYS) -> int:
+    """Dismiss active jobs older than max_age_days while preserving job history."""
+    rows = _scroll_jobs(with_vectors=True)
+    if not rows:
+        return 0
+
+    safe_age_days = max(1, int(max_age_days))
+    now = _utc_now()
+    now_text = now.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    cutoff = now - timedelta(days=safe_age_days)
+
+    from qdrant_client import models
+
+    client = qdrant_client_from_env(os.getenv("QDRANT_HOST", DEFAULT_QDRANT_HOST))
+    points: list[Any] = []
+    archived = 0
+
+    for item in rows:
+        if not _is_active_job(item):
+            continue
+        reference_datetime, source_field = _posting_reference_datetime(item)
+        if reference_datetime is None or reference_datetime > cutoff:
+            continue
+
+        payload = dict(item.get("_payload") or {})
+        payload["status"] = "dismissed"
+        payload["dismissed"] = True
+        payload["archived_at"] = now_text
+        payload["notes"] = "\n".join(
+            part
+            for part in [
+                str(payload.get("notes") or "").strip(),
+                f"{now_text}: Archived stale posting after {safe_age_days} days based on {source_field or 'posting age'}.",
+            ]
+            if part
+        )
+        relevance = payload.get("relevance") if isinstance(payload.get("relevance"), dict) else {}
+        payload["relevance"] = {
+            **relevance,
+            "cleanupAction": "dismissed",
+            "cleanupReason": "stale_posting",
+            "cleanupAppliedAt": now_text,
+        }
+        workflow = _normalize_workflow(payload.get("workflow"))
+        workflow["stage"] = "closed"
+        workflow["updatedAt"] = now_text
+        payload["workflow"] = workflow
+        payload["workflow_timeline"] = _append_workflow_event(
+            _normalize_workflow_timeline(payload.get("workflow_timeline")),
+            event_type="stale_archived",
+            label="Role archived as stale",
+            detail=f"Older than {safe_age_days} days.",
+            at=now_text,
+            category="application",
+        )
+        points.append(
+            models.PointStruct(
+                id=item.get("_qdrant_id"),
+                vector=item.get("_vector"),
+                payload=payload,
+            )
+        )
+        archived += 1
+
+    for start in range(0, len(points), UPSERT_BATCH_SIZE):
+        client.upsert(
+            collection_name=COLLECTION_JOBS,
+            points=points[start : start + UPSERT_BATCH_SIZE],
+        )
+
+    if archived:
+        invalidate_jobs_cache()
+        from scripts.phase6.gap_aggregator import invalidate_gap_cache
+
+        invalidate_gap_cache()
+    return archived
 
 
 def job_stats() -> dict[str, Any]:

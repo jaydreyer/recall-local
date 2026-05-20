@@ -35,15 +35,19 @@ class CompanyProfilerCacheTests(unittest.TestCase):
             }
         ]
 
-        with mock.patch.object(company_profiler, "list_tracked_company_configs", return_value=[]), mock.patch.object(
-            company_profiler,
-            "_load_persisted_profiles",
-            return_value={},
-        ), mock.patch.object(
-            company_profiler,
-            "_hydrate_profile",
-            wraps=company_profiler._hydrate_profile,
-        ) as hydrate_mock:
+        with (
+            mock.patch.object(company_profiler, "list_tracked_company_configs", return_value=[]),
+            mock.patch.object(
+                company_profiler,
+                "_load_persisted_profiles",
+                return_value={},
+            ),
+            mock.patch.object(
+                company_profiler,
+                "_hydrate_profile",
+                wraps=company_profiler._hydrate_profile,
+            ) as hydrate_mock,
+        ):
             first = company_profiler.list_company_profiles(jobs, include_jobs=False, limit=50)
             second = company_profiler.list_company_profiles(jobs, include_jobs=False, limit=50)
 
@@ -63,19 +67,35 @@ class CompanyProfilerCacheTests(unittest.TestCase):
         ]
         changed_jobs = [{**base_jobs[0], "fit_score": 72}]
 
-        with mock.patch.object(company_profiler, "list_tracked_company_configs", return_value=[]), mock.patch.object(
-            company_profiler,
-            "_load_persisted_profiles",
-            return_value={},
-        ), mock.patch.object(
-            company_profiler,
-            "_hydrate_profile",
-            wraps=company_profiler._hydrate_profile,
-        ) as hydrate_mock:
+        with (
+            mock.patch.object(company_profiler, "list_tracked_company_configs", return_value=[]),
+            mock.patch.object(
+                company_profiler,
+                "_load_persisted_profiles",
+                return_value={},
+            ),
+            mock.patch.object(
+                company_profiler,
+                "_hydrate_profile",
+                wraps=company_profiler._hydrate_profile,
+            ) as hydrate_mock,
+        ):
             company_profiler.list_company_profiles(base_jobs, include_jobs=False, limit=50)
             company_profiler.list_company_profiles(changed_jobs, include_jobs=False, limit=50)
 
         self.assertEqual(hydrate_mock.call_count, 2)
+
+    def test_get_company_tier_matches_configured_companies_and_leaves_untracked_none(self) -> None:
+        lookup = {
+            "smartsheet": 1,
+            "workato": 2,
+            "postman": 1,
+        }
+
+        self.assertEqual(company_profiler.get_company_tier("Smartsheet, Inc.", lookup=lookup), 1)
+        self.assertEqual(company_profiler.get_company_tier("Workato US", lookup=lookup), 2)
+        self.assertEqual(company_profiler.get_company_tier("Postman API Platform", lookup=lookup), 1)
+        self.assertIsNone(company_profiler.get_company_tier("Paperless Parts", lookup=lookup))
 
 
 if __name__ == "__main__":

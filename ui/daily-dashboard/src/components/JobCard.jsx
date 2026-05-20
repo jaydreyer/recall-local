@@ -12,13 +12,22 @@ function scoreClass(score) {
 }
 
 function tierClass(tier) {
-  if (tier === 1) {
+  const normalizedTier = Number(tier || 0)
+  if (normalizedTier === 1) {
     return 'tier-one'
   }
-  if (tier === 2) {
+  if (normalizedTier === 2) {
     return 'tier-two'
   }
-  return 'tier-three'
+  if (normalizedTier === 3) {
+    return 'tier-three'
+  }
+  return 'tier-untracked'
+}
+
+function tierLabel(tier) {
+  const normalizedTier = Number(tier || 0)
+  return [1, 2, 3].includes(normalizedTier) ? `T${normalizedTier}` : 'Untracked'
 }
 
 function relativeTime(value) {
@@ -71,7 +80,7 @@ export default function JobCard({
           <div className="job-card-side">
             <span className={`tier-badge ${tierClass(job.company_tier)}`}>
               <span className="tier-dot" />
-              T{job.company_tier || 3}
+              {tierLabel(job.company_tier)}
             </span>
           </div>
         </div>

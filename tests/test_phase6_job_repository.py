@@ -414,6 +414,112 @@ class JobRepositoryTests(unittest.TestCase):
         self.assertEqual(payload["relevance"]["cleanupAction"], "dismissed")
         self.assertIn("Phase 3 relevance cleanup archived this role", payload["notes"])
 
+    def test_archive_stale_jobs_dismisses_old_active_jobs_and_invalidates_caches(self) -> None:
+        stale_job = {
+            "jobId": "job-stale",
+            "title": "Solutions Engineer",
+            "company": "Workato",
+            "company_tier": 2,
+            "location": "Remote - US",
+            "status": "evaluated",
+            "fit_score": 82,
+            "applied": False,
+            "dismissed": False,
+            "date_posted": "2026-01-01T00:00:00Z",
+            "notes": "",
+            "workflow": {},
+            "workflowTimeline": [],
+            "_payload": {
+                "job_id": "job-stale",
+                "title": "Solutions Engineer",
+                "company": "Workato",
+                "company_tier": 2,
+                "location": "Remote - US",
+                "status": "evaluated",
+                "fit_score": 82,
+                "date_posted": "2026-01-01T00:00:00Z",
+                "notes": "",
+            },
+            "_vector": [0.1, 0.2],
+            "_qdrant_id": "point-stale",
+        }
+        current_job = {
+            **stale_job,
+            "jobId": "job-current",
+            "date_posted": "2026-05-18T00:00:00Z",
+            "_qdrant_id": "point-current",
+            "_payload": {
+                **stale_job["_payload"],
+                "job_id": "job-current",
+                "date_posted": "2026-05-18T00:00:00Z",
+            },
+        }
+
+        with (
+            patch("scripts.phase6.job_repository._scroll_jobs", return_value=[stale_job, current_job]),
+            patch(
+                "scripts.phase6.job_repository._utc_now",
+                return_value=job_repository.datetime(2026, 5, 19, tzinfo=job_repository.timezone.utc),
+            ),
+            patch("scripts.phase6.job_repository.qdrant_client_from_env") as qdrant_client_mock,
+            patch("scripts.phase6.gap_aggregator.invalidate_gap_cache") as gap_cache_mock,
+            patch.dict(
+                "sys.modules",
+                {"qdrant_client": SimpleNamespace(models=SimpleNamespace(PointStruct=lambda **kwargs: kwargs))},
+            ),
+        ):
+            qdrant_client_mock.return_value.upsert.return_value = None
+            archived = job_repository.archive_stale_jobs(max_age_days=60)
+
+        self.assertEqual(archived, 1)
+        qdrant_client_mock.return_value.upsert.assert_called_once()
+        gap_cache_mock.assert_called_once()
+        upserted_point = qdrant_client_mock.return_value.upsert.call_args.kwargs["points"][0]
+        payload = upserted_point["payload"]
+        self.assertEqual(payload["status"], "dismissed")
+        self.assertTrue(payload["dismissed"])
+        self.assertEqual(payload["archived_at"], "2026-05-19T00:00:00Z")
+        self.assertEqual(payload["relevance"]["cleanupReason"], "stale_posting")
+        self.assertIn("Archived stale posting after 60 days", payload["notes"])
+
+    def test_backfill_configured_company_tiers_uses_fuzzy_configured_match_and_untracks_unknowns(self) -> None:
+        jobs = [
+            {
+                "jobId": "job-servicenow",
+                "company": "ServiceNow, Inc.",
+                "company_tier": 0,
+                "_payload": {"job_id": "job-servicenow", "company": "ServiceNow, Inc.", "company_tier": 0},
+                "_vector": [0.1],
+                "_qdrant_id": "point-servicenow",
+            },
+            {
+                "jobId": "job-paperless",
+                "company": "Paperless Parts",
+                "company_tier": 3,
+                "_payload": {"job_id": "job-paperless", "company": "Paperless Parts", "company_tier": 3},
+                "_vector": [0.2],
+                "_qdrant_id": "point-paperless",
+            },
+        ]
+
+        with (
+            patch("scripts.phase6.job_repository._scroll_jobs", return_value=jobs),
+            patch("scripts.phase6.job_repository.configured_company_tier_lookup", return_value={"servicenow": 2}),
+            patch("scripts.phase6.job_repository.qdrant_client_from_env") as qdrant_client_mock,
+            patch.dict(
+                "sys.modules",
+                {"qdrant_client": SimpleNamespace(models=SimpleNamespace(PointStruct=lambda **kwargs: kwargs))},
+            ),
+        ):
+            qdrant_client_mock.return_value.upsert.return_value = None
+            updated = job_repository.backfill_configured_company_tiers()
+
+        self.assertEqual(updated, 2)
+        points = qdrant_client_mock.return_value.upsert.call_args.kwargs["points"]
+        payloads_by_id = {point["payload"]["job_id"]: point["payload"] for point in points}
+        self.assertEqual(payloads_by_id["job-servicenow"]["company_tier"], 2)
+        self.assertEqual(payloads_by_id["job-paperless"]["company_tier"], 0)
+
     def test_normalize_workflow_timeline_infers_event_metadata_for_legacy_entries(self) -> None:
         normalized = job_repository._normalize_workflow_timeline(
             [

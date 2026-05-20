@@ -29,6 +29,16 @@ function topSkillData(skillData) {
     .slice(0, 6)
 }
 
+function tierLabel(tier) {
+  const normalizedTier = Number(tier || 0)
+  return [1, 2, 3].includes(normalizedTier) ? `Tier ${normalizedTier}` : 'Untracked'
+}
+
+function editableTierValue(tier) {
+  const normalizedTier = Number(tier || 0)
+  return [1, 2, 3].includes(normalizedTier) ? String(normalizedTier) : '3'
+}
+
 export default function CompanyProfile({ company, loading, error, onRefresh, refreshing, onSaveSettings, saving }) {
   const [form, setForm] = useState({
     tier: '3',
@@ -43,7 +53,7 @@ export default function CompanyProfile({ company, loading, error, onRefresh, ref
   useEffect(() => {
     if (company) {
       setForm({
-        tier: String(company.tier || 3),
+        tier: editableTierValue(company.tier),
         ats: company.ats || 'greenhouse',
         board_id: company.board_id || '',
         url: company.careers_url || company.url || '',
@@ -99,7 +109,7 @@ export default function CompanyProfile({ company, loading, error, onRefresh, ref
                   {chip}
                 </span>
               ))}
-              <span className="meta-chip">Tier {company.tier || 3}</span>
+              <span className="meta-chip">{tierLabel(company.tier)}</span>
             </div>
           </div>
         </div>

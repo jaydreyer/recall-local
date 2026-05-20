@@ -64,6 +64,8 @@ from scripts.phase6.job_evaluator import queue_job_evaluations as phase6_queue_j
 from scripts.phase6.job_metadata_extractor import extract_job_metadata as phase6_extract_job_metadata  # noqa: E402
 from scripts.phase6.job_metadata_extractor import looks_like_job_url as phase6_looks_like_job_url  # noqa: E402
 from scripts.phase6.job_repository import all_jobs as phase6_all_jobs  # noqa: E402
+from scripts.phase6.job_repository import archive_stale_jobs as phase6_archive_stale_jobs  # noqa: F401,E402
+from scripts.phase6.job_repository import backfill_configured_company_tiers as phase6_backfill_configured_company_tiers  # noqa: F401,E402
 from scripts.phase6.job_repository import get_job as phase6_get_job  # noqa: F401,E402
 from scripts.phase6.job_repository import job_stats as phase6_job_stats  # noqa: E402
 from scripts.phase6.job_repository import list_job_actions as phase6_list_job_actions  # noqa: F401,E402
@@ -939,6 +941,13 @@ JOB_STATS_SUCCESS_EXAMPLE = {
     "by_day": {"2026-03-04": 6, "2026-03-03": 6},
 }
 
+JOB_ARCHIVAL_SUCCESS_EXAMPLE = {
+    "workflow": "workflow_06a_job_archivals",
+    "reason": "stale",
+    "max_age_days": 60,
+    "archived_count": 24,
+}
+
 JOB_EVALUATION_RUN_ACCEPTED_EXAMPLE = {
     "workflow": "workflow_06a_job_evaluations",
     "queued": 3,
@@ -1527,6 +1536,33 @@ JOB_DISCOVERY_RUN_REQUEST_BODY = {
                             "required": ["title", "company"],
                             "additionalProperties": False,
                         },
+                    },
+                },
+                "additionalProperties": False,
+            }
+        }
+    },
+}
+
+JOB_ARCHIVAL_REQUEST_BODY = {
+    "required": False,
+    "content": {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "reason": {
+                        "type": "string",
+                        "enum": ["stale"],
+                        "default": "stale",
+                        "description": "Archival policy to apply.",
+                    },
+                    "max_age_days": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 365,
+                        "default": 60,
+                        "description": "Archive active jobs older than this posting/discovery age.",
                     },
                 },
                 "additionalProperties": False,
